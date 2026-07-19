@@ -10,7 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.wardrobeai.l0r5ay"
+      "bundleIdentifier": "com.emergent.wardrobeai.l0r5ay",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take photos of your clothes to catalogue them",
+        "NSPhotoLibraryUsageDescription": "Add clothing photos from your library",
+        "NSLocationWhenInUseUsageDescription": "Suggest weather-appropriate outfits for today"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +23,13 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.wardrobeai.l0r5ay"
+      "package": "com.emergent.wardrobeai.l0r5ay",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
