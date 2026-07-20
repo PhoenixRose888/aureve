@@ -23,6 +23,9 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
+## Implemented (2026-07-20b)
+- ✅ **Laundry-aware availability** — every item has a status (Ready / Dirty / Washing / Drying), set from item detail. Anything not "Ready" is automatically excluded from Stylist, Packing and Compatibility suggestions. Wardrobe shows laundry badges + a "N in the laundry" filter banner; new `GET /api/laundry` endpoint. Verified end-to-end.
+
 ## Implemented (2026-07-20)
 - ✅ **Outfit Confidence Score** — Stylist now returns a 0-100 score (colour harmony, style cohesion, occasion + weather fit, proportion, wardrobe use) with 3-5 justifying reasons, shown as a prominent dark score card.
 - ✅ **Wardrobe Intelligence / Compatibility Engine** — per-item versatility score (0-100) + star-rated (1-5) "pairs best with" list and stylist explanations, on-demand from item detail.
@@ -42,7 +45,6 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 
 ## Prioritized Backlog
 - **P1**
-  - Laundry tracking (dirty/washing/drying/ready) — hide unavailable items from outfit suggestions.
   - Outfit Planner / Calendar (plan work week, events, weddings) + save favourites & outfit history.
   - Seasonal Capsule Builder (Autumn/Winter/Work/Travel capsules from owned items — reuse packing engine).
   - "Looks" gallery to browse saved outfits + saved packing capsules.

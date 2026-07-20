@@ -10,6 +10,13 @@ import { api } from "@/src/api/client";
 
 const { width } = Dimensions.get("window");
 
+const LAUNDRY = [
+  { key: "Ready", icon: "check-circle" },
+  { key: "Dirty", icon: "alert-circle" },
+  { key: "Washing", icon: "droplet" },
+  { key: "Drying", icon: "wind" },
+];
+
 export default function ItemDetail() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -22,6 +29,7 @@ export default function ItemDetail() {
   const [compat, setCompat] = useState<any>(null);
   const [compatLoading, setCompatLoading] = useState(false);
   const [compatError, setCompatError] = useState("");
+  const [savingStatus, setSavingStatus] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +71,15 @@ export default function ItemDetail() {
       setCompatError(e.message || "Couldn't analyze pairings");
     }
     setCompatLoading(false);
+  };
+
+  const setStatus = async (availability: string) => {
+    setSavingStatus(true);
+    setItem((prev: any) => ({ ...prev, availability }));
+    try {
+      await api(`/items/${id}`, { method: "PUT", body: { availability } });
+    } catch {}
+    setSavingStatus(false);
   };
 
   if (loading) {
@@ -156,6 +173,31 @@ export default function ItemDetail() {
               </Txt>
             </View>
           )}
+
+          {/* Laundry availability */}
+          <View style={styles.laundry}>
+            <Txt style={styles.notesLabel}>AVAILABILITY</Txt>
+            <View style={styles.laundryRow}>
+              {LAUNDRY.map((s) => {
+                const active = (item.availability || "Ready") === s.key;
+                return (
+                  <Pressable
+                    key={s.key}
+                    testID={`status-${s.key}`}
+                    style={[styles.statusBtn, active && styles.statusActive]}
+                    onPress={() => setStatus(s.key)}
+                    disabled={savingStatus}
+                  >
+                    <Feather name={s.icon as any} size={14} color={active ? colors.onBrandPrimary : colors.onSurfaceSecondary} />
+                    <Txt style={[styles.statusTxt, active && { color: colors.onBrandPrimary }]}>{s.key}</Txt>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {(item.availability || "Ready") !== "Ready" && (
+              <Txt style={styles.laundryHint}>In the laundry — hidden from outfit suggestions until marked Ready.</Txt>
+            )}
+          </View>
 
           {/* Attributes */}
           <View style={styles.attrs}>
@@ -294,6 +336,22 @@ const styles = StyleSheet.create({
   flatterTag: { flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill, marginTop: spacing.lg },
   flatterTagTxt: { fontSize: 13 },
   attrs: { marginTop: spacing.xl },
+  laundry: { marginTop: spacing.xl },
+  laundryRow: { flexDirection: "row", gap: spacing.sm },
+  statusBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    height: 40,
+    borderRadius: radius.sm,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+  },
+  statusActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  statusTxt: { fontSize: 11, color: colors.onSurfaceSecondary },
+  laundryHint: { fontSize: 12, color: colors.warning, marginTop: spacing.sm, lineHeight: 17 },
   attrRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: spacing.md, borderBottomWidth: 0.5, borderColor: colors.divider },
   attrLabel: { fontSize: 13, color: colors.onSurfaceTertiary },
   attrValue: { fontSize: 14, color: colors.onSurface, textTransform: "capitalize" },

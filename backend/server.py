@@ -167,6 +167,7 @@ class ItemCreate(BaseModel):
     size: Optional[str] = ""
     price: Optional[float] = None
     condition: Optional[str] = ""
+    availability: Optional[str] = "Ready"  # Ready | Dirty | Washing | Drying
     photo: Optional[str] = None        # base64 (hanging)
     worn_photo: Optional[str] = None   # base64 (worn)
     flatters: Optional[bool] = None
@@ -188,6 +189,7 @@ class ItemUpdate(BaseModel):
     size: Optional[str] = None
     price: Optional[float] = None
     condition: Optional[str] = None
+    availability: Optional[str] = None
     photo: Optional[str] = None
     worn_photo: Optional[str] = None
     flatters: Optional[bool] = None
@@ -248,6 +250,14 @@ async def list_items(category: Optional[str] = None, user: dict = Depends(get_cu
     if category and category.lower() != "all":
         query["category"] = category
     items = await db.items.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return items
+
+
+@api_router.get("/laundry")
+async def laundry(user: dict = Depends(get_current_user)):
+    items = await db.items.find(
+        {"user_id": user["user_id"], "availability": {"$in": ["Dirty", "Washing", "Drying"]}}, {"_id": 0}
+    ).sort("name", 1).to_list(1000)
     return items
 
 
@@ -324,10 +334,16 @@ def summarize_items_for_ai(items: List[dict]) -> str:
         lines.append(
             f"- id:{it['id']} | {it.get('category','')} | name:{it.get('name','')} | "
             f"colour:{it.get('colour','')} | fabric:{it.get('fabric','')} | "
-            f"season:{it.get('season','All')} | fit:{it.get('fit_notes','')} | "
+            f"season:{it.get('season','All')} | formality:{it.get('formality','')} | "
+            f"tone:{it.get('tone','')} | fit:{it.get('fit_notes','')} | "
             f"flatters:{it.get('flatters')}"
         )
     return "\n".join(lines)
+
+
+def available_items(items: List[dict]) -> List[dict]:
+    """Items ready to wear — excludes anything in the laundry cycle."""
+    return [it for it in items if (it.get("availability") or "Ready") == "Ready"]
 
 
 async def learned_prefs(user_id: str) -> str:
@@ -370,8 +386,9 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_curr
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = available_items(items)
     if len(items) < 2:
-        raise HTTPException(status_code=400, detail="Add at least 2 wardrobe items to get suggestions")
+        raise HTTPException(status_code=400, detail="Not enough ready-to-wear items. Add more, or mark laundry as clean.")
     prefs = await learned_prefs(user["user_id"])
     wardrobe = summarize_items_for_ai(items)
     weather_line = ""
@@ -426,6 +443,7 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_current_user
     others = await db.items.find(
         {"user_id": user["user_id"], "id": {"$ne": item_id}}, {"_id": 0}
     ).to_list(1000)
+    others = available_items(others)
     if len(others) < 1:
         raise HTTPException(status_code=400, detail="Add more items to see what pairs together")
     focus_desc = (
@@ -706,8 +724,9 @@ async def packing_plan(payload: PackingRequest, user: dict = Depends(get_current
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = available_items(items)
     if len(items) < 3:
-        raise HTTPException(status_code=400, detail="Add at least 3 wardrobe items to build a capsule")
+        raise HTTPException(status_code=400, detail="Need at least 3 ready-to-wear items to build a capsule")
 
     geo = await geocode_place(payload.destination)
     weather = None

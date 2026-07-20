@@ -23,6 +23,7 @@ export default function Wardrobe() {
   const [items, setItems] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
+  const [laundryMode, setLaundryMode] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,9 +40,13 @@ export default function Wardrobe() {
     }, [load])
   );
 
-  const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
+  const notReady = items.filter((i) => (i.availability || "Ready") !== "Ready");
+  const base = laundryMode ? notReady : items;
+  const filtered = filter === "All" ? base : base.filter((i) => i.category === filter);
 
-  const renderItem = ({ item, index }: { item: any; index: number }) => (
+  const renderItem = ({ item, index }: { item: any; index: number }) => {
+    const status = item.availability || "Ready";
+    return (
     <Pressable
       testID={`wardrobe-item-${item.id}`}
       style={[styles.card, { marginRight: index % 2 === 0 ? GUTTER : 0 }]}
@@ -54,12 +59,19 @@ export default function Wardrobe() {
           <Feather name="image" size={24} color={colors.onSurfaceTertiary} />
         </View>
       )}
+      {status !== "Ready" && (
+        <View style={styles.laundryBadge}>
+          <Feather name="droplet" size={11} color={colors.onSurfaceInverse} />
+          <Txt style={styles.laundryBadgeTxt}>{status}</Txt>
+        </View>
+      )}
       <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
       <Txt style={styles.cardMeta} numberOfLines={1}>
         {item.brand ? `${item.brand} · ` : ""}{item.category}
       </Txt>
     </Pressable>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -95,6 +107,20 @@ export default function Wardrobe() {
           })}
         </ScrollView>
       </View>
+
+      {notReady.length > 0 && (
+        <Pressable
+          style={[styles.laundryBanner, laundryMode && styles.laundryBannerActive]}
+          testID="laundry-banner"
+          onPress={() => setLaundryMode((m) => !m)}
+        >
+          <Feather name="droplet" size={15} color={laundryMode ? colors.onBrandPrimary : colors.brand} />
+          <Txt style={[styles.laundryBannerTxt, laundryMode && { color: colors.onBrandPrimary }]}>
+            {laundryMode ? "Showing laundry only" : `${notReady.length} in the laundry`}
+          </Txt>
+          <Feather name={laundryMode ? "x" : "chevron-right"} size={16} color={laundryMode ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
+        </Pressable>
+      )}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.onSurface} /></View>
@@ -163,6 +189,34 @@ const styles = StyleSheet.create({
   card: { width: COL_W, marginBottom: spacing.xl },
   cardImg: { width: COL_W, height: COL_W * 1.3, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   placeholder: { alignItems: "center", justifyContent: "center" },
+  laundryBadge: {
+    position: "absolute",
+    top: spacing.sm,
+    left: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(26,26,26,0.65)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+  },
+  laundryBadgeTxt: { color: colors.onSurfaceInverse, fontSize: 10 },
+  laundryBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.brandTertiary,
+  },
+  laundryBannerActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  laundryBannerTxt: { flex: 1, fontSize: 13, color: colors.onBrandTertiary },
   cardName: { fontSize: 14, color: colors.onSurface, marginTop: spacing.sm },
   cardMeta: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
