@@ -19,6 +19,9 @@ export default function ItemDetail() {
   const [page, setPage] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [logged, setLogged] = useState(false);
+  const [compat, setCompat] = useState<any>(null);
+  const [compatLoading, setCompatLoading] = useState(false);
+  const [compatError, setCompatError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +52,17 @@ export default function ItemDetail() {
       await api(`/items/${id}`, { method: "DELETE" });
       router.back();
     } catch {}
+  };
+
+  const loadCompat = async () => {
+    setCompatLoading(true);
+    setCompatError("");
+    try {
+      setCompat(await api<any>(`/items/${id}/compatibility`, { method: "POST" }));
+    } catch (e: any) {
+      setCompatError(e.message || "Couldn't analyze pairings");
+    }
+    setCompatLoading(false);
   };
 
   if (loading) {
@@ -150,6 +164,9 @@ export default function ItemDetail() {
             <Attr label="Pattern" value={item.pattern} />
             <Attr label="Season" value={item.season} />
             <Attr label="Size" value={item.size} />
+            <Attr label="Formality" value={item.formality} />
+            <Attr label="Tone" value={item.tone} />
+            <Attr label="Style" value={item.style} />
             <Attr label="Condition" value={item.condition} />
           </View>
 
@@ -159,6 +176,55 @@ export default function ItemDetail() {
               <Txt style={styles.notesTxt}>{item.fit_notes}</Txt>
             </View>
           ) : null}
+
+          {/* Wardrobe Intelligence */}
+          <View style={styles.intel}>
+            <Txt style={styles.notesLabel}>WARDROBE INTELLIGENCE</Txt>
+            {!compat && !compatLoading && (
+              <Pressable style={styles.intelBtn} testID="compatibility-button" onPress={loadCompat}>
+                <Feather name="git-merge" size={16} color={colors.onSurface} />
+                <Txt style={styles.intelBtnTxt}>See what this styles with</Txt>
+              </Pressable>
+            )}
+            {compatLoading && (
+              <View style={styles.intelLoading}>
+                <ActivityIndicator color={colors.onSurface} />
+                <Txt style={styles.intelLoadingTxt}>Scoring pairings across your wardrobe…</Txt>
+              </View>
+            )}
+            {compatError ? <Txt style={styles.compatError}>{compatError}</Txt> : null}
+            {compat && (
+              <View testID="compatibility-result">
+                <View style={styles.versRow}>
+                  <View style={{ flex: 1 }}>
+                    <Txt style={styles.versLabel}>Versatility</Txt>
+                    <View style={styles.versBarTrack}>
+                      <View style={[styles.versBarFill, { width: `${Math.max(0, Math.min(100, compat.versatility_score || 0))}%` }]} />
+                    </View>
+                  </View>
+                  <Display weight="medium" style={styles.versNum}>{compat.versatility_score ?? "—"}%</Display>
+                </View>
+                {compat.summary ? <Txt style={styles.versSummary}>{compat.summary}</Txt> : null}
+                <Txt style={styles.pairsLabel}>PAIRS BEST WITH</Txt>
+                {compat.resolved_matches?.slice(0, 8).map((m: any) => (
+                  <Pressable key={m.item.id} style={styles.pairRow} onPress={() => router.push(`/item/${m.item.id}`)}>
+                    {m.item.photo ? (
+                      <Image source={{ uri: `data:image/jpeg;base64,${m.item.photo}` }} style={styles.pairImg} contentFit="cover" />
+                    ) : (
+                      <View style={[styles.pairImg, styles.placeholder]}><Feather name="image" size={14} color={colors.onSurfaceTertiary} /></View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.pairTop}>
+                        <Txt style={styles.pairName} numberOfLines={1}>{m.item.name}</Txt>
+                        <Stars n={m.stars} />
+                      </View>
+                      {m.reason ? <Txt style={styles.pairReason} numberOfLines={2}>{m.reason}</Txt> : null}
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
 
           <Pressable style={styles.wearBtn} testID="log-wear-item" onPress={logWear} disabled={logged}>
             <Feather name={logged ? "check" : "plus"} size={17} color={colors.onBrandPrimary} />
@@ -196,6 +262,16 @@ function Attr({ label, value }: { label: string; value?: string }) {
   );
 }
 
+function Stars({ n }: { n: number }) {
+  return (
+    <View style={{ flexDirection: "row", gap: 2 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Feather key={i} name="star" size={12} color={i <= n ? colors.brand : colors.border} />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
@@ -224,6 +300,24 @@ const styles = StyleSheet.create({
   notes: { marginTop: spacing.xl },
   notesLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginBottom: spacing.sm },
   notesTxt: { fontSize: 15, color: colors.onSurfaceSecondary, lineHeight: 22 },
+  intel: { marginTop: spacing.xl, borderTopWidth: 0.5, borderColor: colors.divider, paddingTop: spacing.xl },
+  intelBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 48, borderWidth: 0.5, borderColor: colors.borderStrong, borderRadius: radius.sm },
+  intelBtnTxt: { fontSize: 15, color: colors.onSurface },
+  intelLoading: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.lg },
+  intelLoadingTxt: { fontSize: 13, color: colors.onSurfaceTertiary, fontStyle: "italic" },
+  compatError: { fontSize: 13, color: colors.error },
+  versRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  versLabel: { fontSize: 12, color: colors.onSurfaceTertiary, marginBottom: 6 },
+  versBarTrack: { height: 5, backgroundColor: colors.surfaceTertiary, borderRadius: radius.pill, overflow: "hidden" },
+  versBarFill: { height: 5, backgroundColor: colors.brand },
+  versNum: { fontSize: 26, color: colors.onSurface },
+  versSummary: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: spacing.md },
+  pairsLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginTop: spacing.xl, marginBottom: spacing.md },
+  pairRow: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginBottom: spacing.lg },
+  pairImg: { width: 44, height: 56, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
+  pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  pairName: { flex: 1, fontSize: 14, color: colors.onSurface },
+  pairReason: { fontSize: 12, color: colors.onSurfaceTertiary, lineHeight: 17, marginTop: 2 },
   wearBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, height: 54, borderRadius: radius.sm, marginTop: spacing["2xl"] },
   wearTxt: { color: colors.onBrandPrimary, fontSize: 16 },
   backdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },

@@ -172,6 +172,37 @@ export default function Stylist() {
 
         {result && (
           <View style={styles.result} testID="stylist-result">
+            {typeof result.confidence_score === "number" && (
+              <View style={styles.scoreCard} testID="confidence-score">
+                <View style={styles.scoreTop}>
+                  <View>
+                    <Txt style={styles.scoreKicker}>OUTFIT CONFIDENCE</Txt>
+                    <View style={styles.scoreNumRow}>
+                      <Display weight="bold" style={styles.scoreNum}>{result.confidence_score}</Display>
+                      <Txt style={styles.scoreOutOf}>/100</Txt>
+                    </View>
+                  </View>
+                  <View style={styles.scoreRing}>
+                    <Feather
+                      name={result.confidence_score >= 85 ? "award" : result.confidence_score >= 70 ? "thumbs-up" : "check"}
+                      size={22}
+                      color={colors.onBrandPrimary}
+                    />
+                  </View>
+                </View>
+                {result.score_reasons?.length > 0 && (
+                  <View style={styles.scoreReasons}>
+                    {result.score_reasons.map((r: string, i: number) => (
+                      <View key={i} style={styles.scoreReasonRow}>
+                        <Feather name="check" size={13} color={colors.brandTertiary} />
+                        <Txt style={styles.scoreReasonTxt}>{r}</Txt>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
             {result.summary ? (
               <Display weight="regular" style={styles.resultSummary}>{result.summary}</Display>
             ) : null}
@@ -309,6 +340,16 @@ const styles = StyleSheet.create({
   generateTxt: { color: colors.onBrandPrimary, fontSize: 16 },
   loadingTxt: { textAlign: "center", color: colors.onSurfaceTertiary, fontSize: 13, marginTop: spacing.lg, fontStyle: "italic" },
   result: { marginTop: spacing["2xl"] },
+  scoreCard: { backgroundColor: colors.surfaceInverse, borderRadius: radius.md, padding: spacing.xl, marginBottom: spacing.xl },
+  scoreTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  scoreKicker: { fontSize: 11, letterSpacing: 2, color: colors.brandTertiary, marginBottom: spacing.xs },
+  scoreNumRow: { flexDirection: "row", alignItems: "flex-end" },
+  scoreNum: { fontSize: 56, lineHeight: 58, color: colors.onSurfaceInverse },
+  scoreOutOf: { fontSize: 18, color: "rgba(250,250,250,0.5)", marginBottom: 8, marginLeft: 2 },
+  scoreRing: { width: 52, height: 52, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  scoreReasons: { marginTop: spacing.lg, gap: spacing.sm },
+  scoreReasonRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+  scoreReasonTxt: { flex: 1, fontSize: 13, color: "rgba(250,250,250,0.85)", lineHeight: 18 },
   resultSummary: { fontSize: 22, lineHeight: 28, marginBottom: spacing.xl, color: colors.onSurface },
   collage: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
   collageItem: { width: "47%" },

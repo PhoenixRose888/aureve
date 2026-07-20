@@ -23,6 +23,12 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
+## Implemented (2026-07-20)
+- ✅ **Outfit Confidence Score** — Stylist now returns a 0-100 score (colour harmony, style cohesion, occasion + weather fit, proportion, wardrobe use) with 3-5 justifying reasons, shown as a prominent dark score card.
+- ✅ **Wardrobe Intelligence / Compatibility Engine** — per-item versatility score (0-100) + star-rated (1-5) "pairs best with" list and stylist explanations, on-demand from item detail.
+- ✅ Richer AI capture: formality, warm/cool tone, style, sleeve length added to recognition + item detail.
+- ✅ Zero-Friction: item name is now optional (AI/attributes fill it); no forced fields.
+
 ## Implemented (2026-07-19)
 - ✅ Google OAuth login (Emergent), session handling, logout.
 - ✅ Wardrobe CRUD with hanging + worn photos (base64), filter chips, editorial grid.
@@ -36,16 +42,16 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 
 ## Prioritized Backlog
 - **P1**
-  - Packing / capsule assistant ("4 days in Melbourne → carry-on capsule").
-  - Calendar integration (prep outfits before events).
-  - Outfit history + "don't repeat around the same people".
-  - Save & browse a gallery of built looks (outfits screen UI).
+  - Laundry tracking (dirty/washing/drying/ready) — hide unavailable items from outfit suggestions.
+  - Outfit Planner / Calendar (plan work week, events, weddings) + save favourites & outfit history.
+  - Seasonal Capsule Builder (Autumn/Winter/Work/Travel capsules from owned items — reuse packing engine).
+  - "Looks" gallery to browse saved outfits + saved packing capsules.
 - **P2**
-  - Virtual try-on (AI-generated you wearing the outfit).
+  - Premium tier + paywall (free: 100 items / 3 outfits-a-day; premium: unlimited + advanced styling) via Stripe/RevenueCat.
+  - Virtual try-on (AI-generated preview of you in the outfit).
   - Social mode (compare wardrobes / borrow from friends).
-  - Wardrobe health reminders (sell/donate/upcycle prompts every 6 months).
-  - Richer figure-aware learning from worn photos (cuts/waist heights/lengths).
-  - Laundry status, resale/donation pile, condition-based repair prompts.
+  - Deeper figure-aware learning from worn photos (cuts/waist heights/lengths).
+  - Precompute & cache compatibility scores for instant "matches" counts per item.
 
 ## Next Tasks
 1. Build the "Looks" gallery screen to browse saved outfits + outfit history.

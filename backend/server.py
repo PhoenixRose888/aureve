@@ -158,6 +158,10 @@ class ItemCreate(BaseModel):
     fabric: Optional[str] = ""
     season: Optional[str] = "All"
     pattern: Optional[str] = ""
+    style: Optional[str] = ""
+    sleeve_length: Optional[str] = ""
+    formality: Optional[str] = ""
+    tone: Optional[str] = ""
     fit_notes: Optional[str] = ""
     brand: Optional[str] = ""
     size: Optional[str] = ""
@@ -175,6 +179,10 @@ class ItemUpdate(BaseModel):
     fabric: Optional[str] = None
     season: Optional[str] = None
     pattern: Optional[str] = None
+    style: Optional[str] = None
+    sleeve_length: Optional[str] = None
+    formality: Optional[str] = None
+    tone: Optional[str] = None
     fit_notes: Optional[str] = None
     brand: Optional[str] = None
     size: Optional[str] = None
@@ -279,6 +287,8 @@ ANALYZE_SYSTEM = (
     "colour (primary colour word), fabric (best guess, e.g. cotton/denim/wool/linen/leather/silk), "
     "pattern (e.g. solid, striped, floral, checked), style (e.g. blazer, trench, bomber, pencil skirt), "
     "sleeve_length (e.g. sleeveless, short, three-quarter, long, n/a), "
+    "formality (one of: Casual, Smart Casual, Business, Formal), "
+    "tone (one of: Warm, Cool, Neutral), "
     "season (one of: All, Spring, Summer, Autumn, Winter), "
     "condition (one of: New, Excellent, Good, Worn), "
     "needs_care (short string, e.g. 'needs steaming' or 'none'), "
@@ -339,14 +349,19 @@ async def learned_prefs(user_id: str) -> str:
 
 
 STYLIST_SYSTEM = (
-    "You are Aura, an expert personal stylist. You build outfits using ONLY the items in the user's wardrobe "
-    "(referenced by their exact id). Never invent items that are not in the list. "
+    "You are Aura, an expert personal stylist who thinks about balance, proportion, layering, contrast, colour "
+    "theory, texture and silhouette — not just colour matching. You build outfits using ONLY the items in the "
+    "user's wardrobe (referenced by their exact id). Never invent items that are not in the list. "
+    "Actively include styling accessories (belts, scarves, bags, sunglasses, jewellery) when they improve the look. "
     "Consider the occasion, temperature, weather, the user's learned preferences and which items flatter them. "
     "Return STRICT JSON with keys: "
-    "items (array of objects with keys slot, item_id, reason), "
+    "items (array of objects with keys slot, item_id, reason — reason explains WHY it works, like a stylist), "
+    "confidence_score (integer 0-100 rating the outfit on colour harmony, style cohesion, occasion + weather "
+    "suitability, proportion/silhouette and use of existing wardrobe), "
+    "score_reasons (array of 3-5 short bullet strings justifying the score), "
     "styling_notes (string), hair (string), makeup (string), confidence_tip (string), summary (string). "
-    "slot values should be human labels like Top, Bottom, Dress, Outerwear, Shoes, Bag, Jewellery, Accessory. "
-    "Only include item_id values that exist in the provided wardrobe. Return ONLY JSON."
+    "slot values should be human labels like Top, Bottom, Dress, Outerwear, Shoes, Bag, Belt, Scarf, Sunglasses, "
+    "Jewellery, Accessory. Only include item_id values that exist in the provided wardrobe. Return ONLY JSON."
 )
 
 
@@ -386,6 +401,61 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_curr
         if it:
             enriched.append({"slot": slot.get("slot", it.get("category")), "reason": slot.get("reason", ""), "item": it})
     result["resolved_items"] = enriched
+    return result
+
+
+# ----------------------------- AI: Compatibility / Wardrobe Intelligence -----------------------------
+COMPAT_SYSTEM = (
+    "You are Aura's compatibility engine. Given ONE focus item and the rest of the user's wardrobe, rate how "
+    "well each OTHER item pairs with the focus item, thinking like a stylist (colour harmony, tone, formality, "
+    "proportion, texture, season). Return STRICT JSON with keys: "
+    "versatility_score (integer 0-100 for how versatile the focus item is across the wardrobe), "
+    "summary (one sentence describing the focus item's styling role), "
+    "matches (array of objects: item_id, stars (integer 1-5), reason (short stylist explanation)). "
+    "Rank matches best-first and include every other wardrobe item. Only use ids that exist. Return ONLY JSON."
+)
+
+
+@api_router.post("/items/{item_id}/compatibility")
+async def item_compatibility(item_id: str, user: dict = Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    focus = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not focus:
+        raise HTTPException(status_code=404, detail="Item not found")
+    others = await db.items.find(
+        {"user_id": user["user_id"], "id": {"$ne": item_id}}, {"_id": 0}
+    ).to_list(1000)
+    if len(others) < 1:
+        raise HTTPException(status_code=400, detail="Add more items to see what pairs together")
+    focus_desc = (
+        f"id:{focus['id']} | {focus.get('category','')} | {focus.get('name','')} | "
+        f"colour:{focus.get('colour','')} | tone:{focus.get('tone','')} | "
+        f"formality:{focus.get('formality','')} | fabric:{focus.get('fabric','')} | season:{focus.get('season','All')}"
+    )
+    wardrobe = summarize_items_for_ai(others)
+    prompt = (
+        f"FOCUS ITEM:\n{focus_desc}\n\nREST OF WARDROBE (rate each against the focus item):\n{wardrobe}\n\n"
+        "Return JSON only."
+    )
+    chat = await ai_chat(f"compat-{user['user_id']}-{uuid.uuid4().hex[:6]}", COMPAT_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("compatibility failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp)
+    if not result or "matches" not in result:
+        raise HTTPException(status_code=502, detail="Could not analyze compatibility")
+    by_id = {it["id"]: it for it in others}
+    resolved = []
+    for m in result.get("matches", []):
+        it = by_id.get(m.get("item_id"))
+        if it:
+            resolved.append({"item": it, "stars": m.get("stars", 3), "reason": m.get("reason", "")})
+    result["resolved_matches"] = resolved
+    result["match_count"] = len([m for m in resolved if m["stars"] >= 3])
+    result["focus"] = focus
     return result
 
 

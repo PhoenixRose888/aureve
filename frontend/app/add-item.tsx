@@ -31,6 +31,7 @@ export default function AddItem() {
   const [fitNotes, setFitNotes] = useState("");
   const [condition, setCondition] = useState("");
   const [flatters, setFlatters] = useState<boolean | null>(null);
+  const [ai, setAi] = useState<{ style?: string; sleeve_length?: string; formality?: string; tone?: string }>({});
 
   const [pickerTarget, setPickerTarget] = useState<null | "photo" | "worn_photo">(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -55,6 +56,7 @@ export default function AddItem() {
         setFitNotes(it.fit_notes || "");
         setCondition(it.condition || "");
         setFlatters(it.flatters ?? null);
+        setAi({ style: it.style, sleeve_length: it.sleeve_length, formality: it.formality, tone: it.tone });
       } catch {}
     })();
   }, [editing, id]);
@@ -79,6 +81,7 @@ export default function AddItem() {
         if (r.season && SEASONS.includes(r.season)) setSeason(r.season);
         if (r.condition) setCondition(r.condition);
         if (r.estimated_value && !price) setPrice(String(r.estimated_value));
+        setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
       } catch (e: any) {
         setError("Couldn't auto-detect. Fill details manually.");
       }
@@ -88,19 +91,20 @@ export default function AddItem() {
   );
 
   const save = async () => {
-    if (!name.trim()) {
-      setError("Give this piece a name.");
-      return;
-    }
     setSaving(true);
     setError("");
+    const finalName = name.trim() || (colour ? `${colour} ${category.toLowerCase()}` : `New ${category.toLowerCase()}`);
     const body: any = {
-      name: name.trim(),
+      name: finalName,
       category,
       colour,
       fabric,
       pattern,
       season,
+      style: ai.style || "",
+      sleeve_length: ai.sleeve_length || "",
+      formality: ai.formality || "",
+      tone: ai.tone || "",
       brand,
       size,
       fit_notes: fitNotes,
@@ -172,7 +176,7 @@ export default function AddItem() {
 
         {error ? <Txt style={styles.error} testID="add-item-error">{error}</Txt> : null}
 
-        <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Cream linen blazer" testID="field-name" />
+        <Field label="Name (optional — AI fills it)" value={name} onChangeText={setName} placeholder="e.g. Cream linen blazer" testID="field-name" />
 
         <Txt style={styles.groupLabel}>CATEGORY</Txt>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
