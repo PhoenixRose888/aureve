@@ -831,6 +831,59 @@ async def packing_plan(payload: PackingRequest, user: dict = Depends(get_current
     return result
 
 
+# ----------------------------- AI: Seasonal / Purpose Capsule -----------------------------
+class CapsuleRequest(BaseModel):
+    theme: str  # e.g. Autumn, Winter, Work, Travel, Weekend
+
+
+CAPSULE_SYSTEM = (
+    "You are Aura's capsule wardrobe builder. Given a theme (a season or a purpose like Work or Weekend) and the "
+    "user's wardrobe, curate a lean, cohesive capsule using ONLY the items in the wardrobe (by exact id) that "
+    "maximises mix-and-match outfit combinations for that theme. "
+    "Return STRICT JSON with keys: "
+    "summary (one sentence describing the capsule's vibe), "
+    "capsule_item_ids (array of ids, keep it lean and versatile), "
+    "outfits (array of objects: name, item_ids (subset of the capsule)), "
+    "capsule_tip (one short styling sentence), "
+    "essentials_missing (array of short strings for gaps to complete the capsule, may be empty). "
+    "Only use ids present in the wardrobe. Return ONLY JSON."
+)
+
+
+@api_router.post("/capsule/build")
+async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = available_items(items)
+    if len(items) < 3:
+        raise HTTPException(status_code=400, detail="Need at least 3 ready-to-wear items to build a capsule")
+    wardrobe = summarize_items_for_ai(items)
+    prefs = await learned_prefs(user["user_id"])
+    prompt = (
+        f"Capsule theme: {payload.theme}\nLearned preferences: {prefs}\n\n"
+        f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
+        "Build a cohesive capsule and a set of outfits from it. Return JSON only."
+    )
+    chat = await ai_chat(f"capsule-{user['user_id']}-{uuid.uuid4().hex[:6]}", CAPSULE_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("capsule failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp)
+    if not result or "capsule_item_ids" not in result:
+        raise HTTPException(status_code=502, detail="Could not build a capsule")
+    by_id = {it["id"]: it for it in items}
+    result["capsule_items"] = [by_id[i] for i in result.get("capsule_item_ids", []) if i in by_id]
+    result["resolved_outfits"] = [
+        {"name": o.get("name", "Look"), "items": [by_id[i] for i in o.get("item_ids", []) if i in by_id]}
+        for o in result.get("outfits", [])
+    ]
+    result["theme"] = payload.theme
+    return result
+
+
 # ----------------------------- AI: Wardrobe Health Report -----------------------------
 HEALTH_SYSTEM = (
     "You are Aura's wardrobe health analyst. You are given wardrobe stats and the raw numbers. Write an honest, "

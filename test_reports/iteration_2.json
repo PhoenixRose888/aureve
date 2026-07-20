@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 2 regression: 46/46 backend tests passed (30 core re-run + 16 new features). NEW endpoints fully verified — analyze-item now returns formality/tone/style/sleeve_length; /api/stylist/suggest returns integer confidence_score (0-100) and score_reasons array; POST /api/items/{id}/compatibility returns versatility_score, summary, resolved_matches (each with item, stars 1-5, reason) and match_count; laundry flow works: PUT {availability:'Washing'} surfaces the item in /api/laundry and EXCLUDES it from /api/stylist/suggest (verified with a unique TEST item); POST /api/wear with mark_dirty:true sets availability='Dirty' and wear log listing is hydrated with items; outfits create/list(hydrated)/delete round-trip works; plans CRUD works with date-range filtering (item at 2026-02-15 returned for 2026-02-01..2026-02-28, out-of-range item at 2026-06-15 correctly excluded); /api/packing/plan for Melbourne, Australia days=4 returns capsule_items, resolved_outfits, weather_note (Open-Meteo forecast succeeded), fits_carry_on; /api/capsule/build theme=Work returns capsule_items, resolved_outfits, summary; /api/insights/health-report returns headline, wasted_summary, missing_piece and stats {total_items,total_value,unworn_count,unworn_value}. All laundry/dirty items were reset to 'Ready' and TEST_ artefacts deleted post-run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/items and POST /api/outfits and POST /api/plans", "issue": "Return HTTP 200 for creation instead of the conventional 201 Created. Not a blocker."},
+      {"endpoint": "DELETE /api/items/{id}, DELETE /api/outfits/{id}, DELETE /api/plans/{id}", "issue": "Always return 200 {ok:true} even when the id does not exist (silent no-op). Consider returning 404 to surface client bugs."},
+      {"endpoint": "GET /api/items", "issue": "Seed items created before the availability field was introduced have availability=null. The available_items() filter treats None as 'Ready' so it works, but consider a one-shot migration to backfill 'Ready' for consistency."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_aura_backend.py",
+    "/app/backend/tests/test_aura_new_features.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_core_regression.xml",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "Optional: switch POST creation endpoints (items, outfits, plans) to return 201 for correctness.",
+    "Optional: return 404 from DELETE endpoints when the resource is not found.",
+    "Optional: one-shot migration to set availability='Ready' for existing items where the field is missing/null (currently masked by available_items() default)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1013 lines and covers auth, items, laundry, AI stylist/compatibility/shop/packing/capsule/health, wear, outfits, plans, insights and weather. Strongly recommend splitting into routers (auth.py, items.py, ai.py, planning.py, insights.py) — it is well past the 700-line guideline.",
+    "Six separate AI endpoints reuse the same LlmChat pattern with subtly different SYSTEM prompts; extract a helper ai_json(system, prompt) and a schema-validation helper to remove duplication and to make required-key validation server-side (currently a missing key from the LLM only surfaces as a 502).",
+    "None of the AI endpoints enforce an explicit timeout on chat.send_message; a stalled OpenAI call can pin a worker. Wrap in asyncio.wait_for.",
+    "list_outfits, list_plans and list_wear all rebuild by_id by iterating the entire items collection for every request — fine at current scale but O(N) per hydration and includes base64 photos. Consider projecting only the fields the client needs.",
+    "insights.most_worn / least_worn returns full item docs including base64 photo strings; response can be tens of MB with a real wardrobe. Trim photo/worn_photo from those two lists.",
+    "shop-check does not pre-validate that image base64 is non-empty; a 400 pre-check would save an LLM call.",
+    "PlanCreate.date is a bare string (YYYY-MM-DD) with no validation; a malformed date breaks range queries silently. Use a pydantic date field or a regex validator."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_aura_new_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (46/46 — 30 core + 16 new)", "frontend": "not tested (Google OAuth cannot be automated)"},
+  "seed_data_creation": "Used existing seeded user_testaura01 with 5 wardrobe items. Tests created TEST_-prefixed items/outfits/plans/wear logs and cleaned them up in fixtures/finally blocks. Verified post-run: 0 TEST_ items remain, 0 items in laundry.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Auth: Bearer test-session-token-aura-123 -> user_testaura01 (5 seeded items, some with availability=null which counts as Ready). BASE_URL from conftest.py is fixed to the preview URL. All AI endpoints go through gpt-5.4 via EMERGENT_LLM_KEY — total run time ~45s for the 16 new AI tests, use timeout>=120s per request (packing/capsule/health used 180s). Laundry tests MUST reset items to availability='Ready' before deletion or the stylist starts refusing suggestions. Plans use plain YYYY-MM-DD strings and filter is lexicographic — pick dates within the same year for range checks. There is no /api/plans/{id} GET endpoint (only list + delete). Frontend uses EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL) in /app/frontend/.env — noteworthy if writing UI tests.",
+  "rca_of_issue": "N/A — no bugs found. All requested NEW endpoints behave as specified and the core regression continues to pass."
+}

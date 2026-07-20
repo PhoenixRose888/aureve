@@ -167,6 +167,16 @@ export default function Home() {
             <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
           </Pressable>
 
+          {/* Capsule builder */}
+          <Pressable style={styles.tripCta} testID="home-capsule-button" onPress={() => router.push("/capsule")}>
+            <Feather name="layers" size={20} color={colors.onSurface} />
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.tripTitle}>Build a capsule</Txt>
+              <Txt style={styles.tripSub}>A season or work capsule from your closet</Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+          </Pressable>
+
           {/* Recent items */}
           <View style={styles.sectionHead}>
             <Display weight="medium" style={styles.sectionTitle}>Recently added</Display>
