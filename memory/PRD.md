@@ -23,7 +23,13 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
-## Implemented (2026-07-20f) — bug fixes + measurements
+## Implemented (2026-07-20g) — Household multi-profile + UX fixes
+- ✅ **Household / Multi-Profile architecture VERIFIED** — one account, many wardrobe profiles. Backend `get_scope` resolves the active profile from the `X-Profile-Id` header and scopes ALL data per profile. Testing agent iteration 4: 20/20 passing; strict per-profile isolation confirmed (Aura vs David see only their own items/outfits/plans/wear/laundry; cross-profile GET/PUT → 404). Profile switcher lives in the Profile tab.
+- ✅ **Worn-photo AI isolation (Msg 371)** — POST /api/analyze-item now takes an optional `category_hint`. Adding a piece pops a "Which piece is this?" step (category chips + "Just detect it for me") so the vision AI focuses on one garment when several are worn. Verified: hint='Tops' → category='Tops'; no hint still works.
+- ✅ **Laundry discoverability (Msg 463)** — always-visible laundry (droplet) button in the Wardrobe header with a live count badge, plus a friendly "Laundry basket is empty" state when nothing is in the wash.
+- ✅ **Crop trap (Msg 371)** — confirmed already resolved (`allowsEditing:false`); photos go straight through.
+
+
 - ✅ **Personal Style Profile** — new Style Profile screen (from Insights tab): height, weight, bust, waist, hips, inseam, arm, shoulder, shoe size + body shape, skin tone, undertone, notes (all optional). `PUT /api/profile` (merges). Fed into the Stylist, Capsule and Packing AI prompts to flatter body shape + skin tone.
 - ✅ **BUGFIX packing 500** — future travel dates (`start_offset_days`) crashed on Open-Meteo null temps; now filtered. Packing has a "When's the trip?" selector (Today / 3 days / a week / 2 weeks) and forecasts the actual travel window.
 - ✅ **BUGFIX image-picker crop trap** — `allowsEditing:false` so photos go straight through (no forced crop).
