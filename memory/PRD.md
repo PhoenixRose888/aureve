@@ -23,6 +23,15 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
+## Implemented (2026-07-20f) — bug fixes + measurements
+- ✅ **Personal Style Profile** — new Style Profile screen (from Insights tab): height, weight, bust, waist, hips, inseam, arm, shoulder, shoe size + body shape, skin tone, undertone, notes (all optional). `PUT /api/profile` (merges). Fed into the Stylist, Capsule and Packing AI prompts to flatter body shape + skin tone.
+- ✅ **BUGFIX packing 500** — future travel dates (`start_offset_days`) crashed on Open-Meteo null temps; now filtered. Packing has a "When's the trip?" selector (Today / 3 days / a week / 2 weeks) and forecasts the actual travel window.
+- ✅ **BUGFIX image-picker crop trap** — `allowsEditing:false` so photos go straight through (no forced crop).
+- ✅ **BUGFIX weather hang / frozen pages** — 8s timeout on location so it never spins forever; Home/Stylist degrade gracefully to "styling without live weather".
+- ✅ **BUGFIX session drop cascade** — API client no longer clears the token on a transient 401 (was causing "nothing works" / request-failed cascades).
+- ✅ **Capsule occasion** — capsule builder now takes an optional purpose/occasion (e.g. business+pleasure trip).
+- ✅ Verified: testing agent 17/17.
+
 ## Implemented (2026-07-20e)
 - ✅ **Seasonal / Purpose Capsule Builder** (`app/capsule.tsx`) — pick a theme (Autumn/Winter/Spring/Summer/Work/Weekend/Travel/Evening); AI curates a lean mix-and-match capsule from owned items with outfit combos, a tip, gaps to complete it, and a "save to looks". New `POST /api/capsule/build`. Reached from Home.
 - ✅ **Full backend regression: 46/46 passing** (30 core + 16 new endpoints) via testing agent — laundry exclusion, confidence score, compatibility, plans, packing, capsule, health report all verified.
@@ -57,7 +66,9 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 
 ## Prioritized Backlog
 - **P1**
-  - Push reminder the night before a planned day ("tomorrow you're wearing X") — Emergent push notifications (real device only).
+  - Makeup & hair recommendations that use skin tone / undertone from the Style Profile.
+  - Worn-photo analysis with a "which piece is this?" confirmation step (figure-aware learning).
+  - Push reminder the night before a planned day ("tomorrow you're wearing X") — Emergent push (real device only).
   - Precompute compatibility for instant per-item "matches" counts on cards.
 - **P2**
   - Premium tier + paywall (free: 100 items / 3 outfits-a-day; premium: unlimited + advanced styling) via Stripe/RevenueCat.
