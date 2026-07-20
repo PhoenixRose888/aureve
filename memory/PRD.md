@@ -23,7 +23,11 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
-## Implemented (2026-07-20g) — Household multi-profile + UX fixes
+## Implemented (2026-07-20h) — Beauty + instant pairing badges
+- ✅ **Hair & Makeup recommendations** — new `POST /api/beauty/suggest` (AI colour analysis from the active profile's skin tone + undertone; optional occasion). New `app/beauty.tsx` screen reached from a CTA in the Profile tab: returns a flattering colour palette, makeup (base/blush/lip/eye/tip), hair (colour/style/tip), what to avoid, and an occasion note. Gracefully prompts to add skin tone/undertone if the profile is empty. Verified iteration 5.
+- ✅ **Instant "pairs with" badges** — `GET /api/items` now returns a rule-based `pairs_count` per item (no AI, instant), and wardrobe cards show a link-icon badge with the count. Pairing respects category logic (no same-category, Dresses don't pair with Tops/Bottoms) and one-step formality adjacency for main garments; laundry items are excluded. Scoped per profile. Verified iteration 5 (9/9).
+
+
 - ✅ **Household / Multi-Profile architecture VERIFIED** — one account, many wardrobe profiles. Backend `get_scope` resolves the active profile from the `X-Profile-Id` header and scopes ALL data per profile. Testing agent iteration 4: 20/20 passing; strict per-profile isolation confirmed (Aura vs David see only their own items/outfits/plans/wear/laundry; cross-profile GET/PUT → 404). Profile switcher lives in the Profile tab.
 - ✅ **Worn-photo AI isolation (Msg 371)** — POST /api/analyze-item now takes an optional `category_hint`. Adding a piece pops a "Which piece is this?" step (category chips + "Just detect it for me") so the vision AI focuses on one garment when several are worn. Verified: hint='Tops' → category='Tops'; no hint still works.
 - ✅ **Laundry discoverability (Msg 463)** — always-visible laundry (droplet) button in the Wardrobe header with a live count badge, plus a friendly "Laundry basket is empty" state when nothing is in the wash.
