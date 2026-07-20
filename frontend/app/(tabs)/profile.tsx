@@ -1,22 +1,26 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, TextInput } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
-import { colors, spacing, radius } from "@/src/theme";
+import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { useProfiles } from "@/src/context/ProfileContext";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
   const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [missing, setMissing] = useState<any>(null);
   const [missingLoading, setMissingLoading] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [newName, setNewName] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -58,17 +62,18 @@ export default function Profile() {
       >
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.profileRow}>
-            {user?.picture ? (
-              <Image source={{ uri: user.picture }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Feather name="user" size={22} color={colors.onSurfaceTertiary} />
+            <Pressable style={styles.switcherTrigger} testID="profile-switcher-trigger" onPress={() => setShowSwitcher(true)}>
+              <View style={styles.avatar}>
+                <Txt style={styles.avatarEmoji}>{active?.emoji || "👤"}</Txt>
               </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Display weight="medium" style={styles.name}>{user?.name || "Stylist"}</Display>
-              <Txt style={styles.email}>{user?.email}</Txt>
-            </View>
+              <View style={{ flex: 1 }}>
+                <Txt style={styles.accountName}>{user?.name || "Account"}</Txt>
+                <View style={styles.activeRow}>
+                  <Display weight="medium" style={styles.name}>{active?.name || "Wardrobe"}</Display>
+                  <Feather name="chevron-down" size={18} color={colors.onSurfaceSecondary} />
+                </View>
+              </View>
+            </Pressable>
             <Pressable onPress={logout} testID="logout-button" hitSlop={10}>
               <Feather name="log-out" size={20} color={colors.onSurfaceSecondary} />
             </Pressable>
@@ -84,7 +89,7 @@ export default function Profile() {
             <View style={{ flex: 1 }}>
               <Txt style={styles.spTitle}>Your style profile</Txt>
               <Txt style={styles.spSub}>
-                {(user as any)?.profile && Object.keys((user as any).profile).length > 0
+                {active?.profile && Object.keys(active.profile).length > 0
                   ? "Measurements & skin tone added — tap to edit"
                   : "Add measurements & skin tone for better fits"}
               </Txt>
@@ -212,6 +217,58 @@ export default function Profile() {
           ) : null}
         </View>
       </ScrollView>
+
+      <Modal visible={showSwitcher} transparent animationType="slide" onRequestClose={() => setShowSwitcher(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setShowSwitcher(false)}>
+          <Pressable style={styles.switchSheet} onPress={(e) => e.stopPropagation()}>
+            <Display weight="medium" style={styles.switchTitle}>Wardrobes</Display>
+            <Txt style={styles.switchSub}>One account, a wardrobe for everyone in the household.</Txt>
+            {profiles.map((p) => (
+              <View key={p.id} style={styles.profRow}>
+                <Pressable
+                  style={styles.profMain}
+                  testID={`switch-profile-${p.id}`}
+                  onPress={async () => { await switchTo(p.id); setShowSwitcher(false); load(); }}
+                >
+                  <View style={[styles.profAvatar, active?.id === p.id && styles.profAvatarActive]}>
+                    <Txt style={styles.avatarEmoji}>{p.emoji || "👤"}</Txt>
+                  </View>
+                  <Txt style={styles.profName}>{p.name}</Txt>
+                  {active?.id === p.id && <Feather name="check" size={18} color={colors.brand} />}
+                </Pressable>
+                {profiles.length > 1 && (
+                  <Pressable onPress={() => deleteProfile(p.id)} testID={`delete-profile-${p.id}`} hitSlop={8}>
+                    <Feather name="trash-2" size={16} color={colors.onSurfaceTertiary} />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            <View style={styles.addRow}>
+              <TextInput
+                style={styles.addInput}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="Add a wardrobe (e.g. David, Emily)"
+                placeholderTextColor={colors.onSurfaceTertiary}
+                testID="new-profile-input"
+              />
+              <Pressable
+                style={styles.addBtn}
+                testID="add-profile-button"
+                onPress={async () => {
+                  if (!newName.trim()) return;
+                  await createProfile(newName.trim(), "👤", "individual");
+                  setNewName("");
+                  setShowSwitcher(false);
+                  load();
+                }}
+              >
+                <Feather name="plus" size={18} color={colors.onBrandPrimary} />
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -264,10 +321,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.border },
   profileRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  avatar: { width: 52, height: 52, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary },
-  avatarFallback: { alignItems: "center", justifyContent: "center" },
+  switcherTrigger: { flexDirection: "row", alignItems: "center", gap: spacing.md, flex: 1 },
+  avatar: { width: 52, height: 52, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  avatarEmoji: { fontSize: 24 },
+  accountName: { fontSize: 12, color: colors.onSurfaceTertiary },
+  activeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   name: { fontSize: 24 },
-  email: { fontSize: 13, color: colors.onSurfaceTertiary },
+  backdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },
+  switchSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: spacing["2xl"] },
+  switchTitle: { fontSize: 24 },
+  switchSub: { fontSize: 13, color: colors.onSurfaceTertiary, marginTop: 2, marginBottom: spacing.lg },
+  profRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: spacing.sm },
+  profMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.md },
+  profAvatar: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  profAvatarActive: { borderWidth: 1.5, borderColor: colors.brand },
+  profName: { flex: 1, fontSize: 16, color: colors.onSurface },
+  addRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg, borderTopWidth: 0.5, borderTopColor: colors.divider, paddingTop: spacing.lg },
+  addInput: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm },
+  addBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   styleProfileCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   spIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },

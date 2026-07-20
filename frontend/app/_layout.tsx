@@ -10,6 +10,7 @@ import { useFonts } from "expo-font";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { ProfileProvider } from "@/src/context/ProfileContext";
 import { colors } from "@/src/theme";
 
 // Disable logbox errors etc so that users can see the app
@@ -46,6 +47,7 @@ export default function RootLayout() {
         <KeyboardProvider>
         <BottomSheetModalProvider>
           <AuthProvider>
+            <ProfileProvider>
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
@@ -59,6 +61,7 @@ export default function RootLayout() {
               <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
               <Stack.Screen name="health-report" options={{ presentation: "modal" }} />
             </Stack>
+            </ProfileProvider>
           </AuthProvider>
         </BottomSheetModalProvider>
         </KeyboardProvider>

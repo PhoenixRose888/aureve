@@ -4,6 +4,14 @@ const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
 export const API = `${BASE}/api`;
 export const TOKEN_KEY = "aura_session_token";
 
+let activeProfileId: string | null = null;
+export function setActiveProfileId(id: string | null) {
+  activeProfileId = id;
+}
+export function getActiveProfileId() {
+  return activeProfileId;
+}
+
 export async function getToken(): Promise<string | null> {
   return await storage.secureGet(TOKEN_KEY, null);
 }
@@ -28,6 +36,7 @@ export async function api<T = any>(path: string, opts: Options = {}): Promise<T>
   if (auth) {
     const token = await getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (activeProfileId) headers["X-Profile-Id"] = activeProfileId;
   }
   const res = await fetch(`${API}${path}`, {
     method,

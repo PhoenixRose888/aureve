@@ -86,6 +86,53 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     return user
 
 
+async def ensure_default_profile(account_id: str, name: Optional[str]) -> dict:
+    """Return the account's default profile, creating one (and migrating legacy
+    data whose owner id == account id) on first access."""
+    prof = await db.profiles.find_one({"user_id": account_id}, {"_id": 0}, sort=[("created_at", 1)])
+    if prof:
+        return prof
+    prof = {
+        "id": new_id("prof"),
+        "user_id": account_id,
+        "name": (name or "Me").split(" ")[0] or "Me",
+        "emoji": "👤",
+        "kind": "individual",
+        "profile": {},
+        "created_at": now_utc().isoformat(),
+    }
+    await db.profiles.insert_one({**prof})
+    prof.pop("_id", None)
+    # Migrate legacy documents (scoped by account id) to this default profile id.
+    for coll in (db.items, db.outfits, db.wear_logs, db.plans):
+        await coll.update_many(
+            {"user_id": account_id, "profile_id": {"$exists": False}},
+            {"$set": {"profile_id": prof["id"], "user_id": prof["id"]}},
+        )
+    return prof
+
+
+async def get_scope(x_profile_id: Optional[str] = Header(None),
+                    account: dict = Depends(get_current_user)) -> dict:
+    """Resolve the active wardrobe profile. Returns a scope dict whose
+    'user_id' is the PROFILE id, so existing data queries scope per-profile."""
+    account_id = account["user_id"]
+    prof = None
+    if x_profile_id:
+        prof = await db.profiles.find_one(
+            {"id": x_profile_id, "user_id": account_id}, {"_id": 0}
+        )
+    if not prof:
+        prof = await ensure_default_profile(account_id, account.get("name"))
+    return {
+        "user_id": prof["id"],       # data scope = profile id
+        "account_id": account_id,
+        "profile_id": prof["id"],
+        "profile_name": prof.get("name"),
+        "profile": prof.get("profile") or {},
+    }
+
+
 class SessionRequest(BaseModel):
     session_token: str
 
@@ -151,7 +198,7 @@ async def logout(authorization: Optional[str] = Header(None)):
 
 
 class ProfileUpdate(BaseModel):
-    measurements: Optional[dict] = None  # {height, weight, bust, waist, hips, inseam, arm, shoulder, shoe}
+    measurements: Optional[dict] = None
     body_shape: Optional[str] = None
     skin_tone: Optional[str] = None
     undertone: Optional[str] = None
@@ -160,13 +207,75 @@ class ProfileUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-@api_router.put("/profile")
-async def update_profile(payload: ProfileUpdate, user: dict = Depends(get_current_user)):
-    profile = user.get("profile") or {}
+class ProfileCreate(BaseModel):
+    name: str
+    emoji: Optional[str] = "👤"
+    kind: Optional[str] = "individual"  # individual | child | shared
+
+
+class ProfileRename(BaseModel):
+    name: Optional[str] = None
+    emoji: Optional[str] = None
+    kind: Optional[str] = None
+
+
+@api_router.get("/profiles")
+async def list_profiles(account: dict = Depends(get_current_user)):
+    profs = await db.profiles.find({"user_id": account["user_id"]}, {"_id": 0}).sort("created_at", 1).to_list(50)
+    if not profs:
+        prof = await ensure_default_profile(account["user_id"], account.get("name"))
+        profs = [prof]
+    return profs
+
+
+@api_router.post("/profiles")
+async def create_profile(payload: ProfileCreate, account: dict = Depends(get_current_user)):
+    await ensure_default_profile(account["user_id"], account.get("name"))
+    prof = {
+        "id": new_id("prof"),
+        "user_id": account["user_id"],
+        "name": payload.name,
+        "emoji": payload.emoji or "👤",
+        "kind": payload.kind or "individual",
+        "profile": {},
+        "created_at": now_utc().isoformat(),
+    }
+    await db.profiles.insert_one({**prof})
+    prof.pop("_id", None)
+    return prof
+
+
+@api_router.put("/profiles/{profile_id}")
+async def rename_profile(profile_id: str, payload: ProfileRename, account: dict = Depends(get_current_user)):
     updates = {k: v for k, v in payload.dict().items() if v is not None}
-    profile.update(updates)
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"profile": profile}})
-    return await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if updates:
+        await db.profiles.update_one(
+            {"id": profile_id, "user_id": account["user_id"]}, {"$set": updates}
+        )
+    return await db.profiles.find_one({"id": profile_id, "user_id": account["user_id"]}, {"_id": 0})
+
+
+@api_router.delete("/profiles/{profile_id}")
+async def delete_profile(profile_id: str, account: dict = Depends(get_current_user)):
+    count = await db.profiles.count_documents({"user_id": account["user_id"]})
+    if count <= 1:
+        raise HTTPException(status_code=400, detail="You need at least one profile")
+    # Remove the profile and its wardrobe data
+    for coll in (db.items, db.outfits, db.wear_logs, db.plans):
+        await coll.delete_many({"user_id": profile_id})
+    await db.profiles.delete_one({"id": profile_id, "user_id": account["user_id"]})
+    return {"ok": True}
+
+
+@api_router.put("/profile")
+async def update_profile(payload: ProfileUpdate, scope: dict = Depends(get_scope)):
+    """Update the active profile's style attributes (measurements, skin tone…)."""
+    prof = await db.profiles.find_one({"id": scope["profile_id"]}, {"_id": 0})
+    style = (prof.get("profile") if prof else {}) or {}
+    updates = {k: v for k, v in payload.dict().items() if v is not None}
+    style.update(updates)
+    await db.profiles.update_one({"id": scope["profile_id"]}, {"$set": {"profile": style}})
+    return await db.profiles.find_one({"id": scope["profile_id"]}, {"_id": 0})
 
 
 # ----------------------------- Models -----------------------------
@@ -252,7 +361,7 @@ def strip_image(doc: dict, keep: bool = False) -> dict:
 
 
 @api_router.post("/items")
-async def create_item(payload: ItemCreate, user: dict = Depends(get_current_user)):
+async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
     item = payload.dict()
     item["id"] = new_id("item")
     item["user_id"] = user["user_id"]
@@ -265,7 +374,7 @@ async def create_item(payload: ItemCreate, user: dict = Depends(get_current_user
 
 
 @api_router.get("/items")
-async def list_items(category: Optional[str] = None, user: dict = Depends(get_current_user)):
+async def list_items(category: Optional[str] = None, user: dict = Depends(get_scope)):
     query = {"user_id": user["user_id"]}
     if category and category.lower() != "all":
         query["category"] = category
@@ -274,7 +383,7 @@ async def list_items(category: Optional[str] = None, user: dict = Depends(get_cu
 
 
 @api_router.get("/laundry")
-async def laundry(user: dict = Depends(get_current_user)):
+async def laundry(user: dict = Depends(get_scope)):
     items = await db.items.find(
         {"user_id": user["user_id"], "availability": {"$in": ["Dirty", "Washing", "Drying"]}}, {"_id": 0}
     ).sort("name", 1).to_list(1000)
@@ -282,7 +391,7 @@ async def laundry(user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/items/{item_id}")
-async def get_item(item_id: str, user: dict = Depends(get_current_user)):
+async def get_item(item_id: str, user: dict = Depends(get_scope)):
     item = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -290,7 +399,7 @@ async def get_item(item_id: str, user: dict = Depends(get_current_user)):
 
 
 @api_router.put("/items/{item_id}")
-async def update_item(item_id: str, payload: ItemUpdate, user: dict = Depends(get_current_user)):
+async def update_item(item_id: str, payload: ItemUpdate, user: dict = Depends(get_scope)):
     updates = {k: v for k, v in payload.dict().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates")
@@ -304,7 +413,7 @@ async def update_item(item_id: str, payload: ItemUpdate, user: dict = Depends(ge
 
 
 @api_router.delete("/items/{item_id}")
-async def delete_item(item_id: str, user: dict = Depends(get_current_user)):
+async def delete_item(item_id: str, user: dict = Depends(get_scope)):
     await db.items.delete_one({"id": item_id, "user_id": user["user_id"]})
     return {"ok": True}
 
@@ -328,7 +437,7 @@ ANALYZE_SYSTEM = (
 
 
 @api_router.post("/analyze-item")
-async def analyze_item(payload: AnalyzeRequest, user: dict = Depends(get_current_user)):
+async def analyze_item(payload: AnalyzeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     chat = await ai_chat(f"analyze-{user['user_id']}-{uuid.uuid4().hex[:6]}", ANALYZE_SYSTEM)
@@ -423,7 +532,7 @@ STYLIST_SYSTEM = (
 
 
 @api_router.post("/stylist/suggest")
-async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_current_user)):
+async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
@@ -476,7 +585,7 @@ COMPAT_SYSTEM = (
 
 
 @api_router.post("/items/{item_id}/compatibility")
-async def item_compatibility(item_id: str, user: dict = Depends(get_current_user)):
+async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     focus = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
@@ -536,7 +645,7 @@ SHOP_SYSTEM = (
 
 
 @api_router.post("/shop-check")
-async def shop_check(payload: AnalyzeRequest, user: dict = Depends(get_current_user)):
+async def shop_check(payload: AnalyzeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
@@ -562,7 +671,7 @@ async def shop_check(payload: AnalyzeRequest, user: dict = Depends(get_current_u
 
 # ----------------------------- Outfits & Wear Logs -----------------------------
 @api_router.post("/outfits")
-async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_current_user)):
+async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_scope)):
     outfit = payload.dict()
     outfit["id"] = new_id("outfit")
     outfit["user_id"] = user["user_id"]
@@ -573,7 +682,7 @@ async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_current_
 
 
 @api_router.get("/outfits")
-async def list_outfits(user: dict = Depends(get_current_user)):
+async def list_outfits(user: dict = Depends(get_scope)):
     outfits = await db.outfits.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
     for o in outfits:
@@ -582,7 +691,7 @@ async def list_outfits(user: dict = Depends(get_current_user)):
 
 
 @api_router.delete("/outfits/{outfit_id}")
-async def delete_outfit(outfit_id: str, user: dict = Depends(get_current_user)):
+async def delete_outfit(outfit_id: str, user: dict = Depends(get_scope)):
     await db.outfits.delete_one({"id": outfit_id, "user_id": user["user_id"]})
     return {"ok": True}
 
@@ -598,7 +707,7 @@ class PlanCreate(BaseModel):
 
 
 @api_router.post("/plans")
-async def create_plan(payload: PlanCreate, user: dict = Depends(get_current_user)):
+async def create_plan(payload: PlanCreate, user: dict = Depends(get_scope)):
     plan = payload.dict()
     plan["id"] = new_id("plan")
     plan["user_id"] = user["user_id"]
@@ -617,7 +726,7 @@ async def create_plan(payload: PlanCreate, user: dict = Depends(get_current_user
 
 @api_router.get("/plans")
 async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = None,
-                     user: dict = Depends(get_current_user)):
+                     user: dict = Depends(get_scope)):
     query: dict = {"user_id": user["user_id"]}
     if from_date or to_date:
         query["date"] = {}
@@ -633,13 +742,13 @@ async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = N
 
 
 @api_router.delete("/plans/{plan_id}")
-async def delete_plan(plan_id: str, user: dict = Depends(get_current_user)):
+async def delete_plan(plan_id: str, user: dict = Depends(get_scope)):
     await db.plans.delete_one({"id": plan_id, "user_id": user["user_id"]})
     return {"ok": True}
 
 
 @api_router.post("/wear")
-async def log_wear(payload: WearLog, user: dict = Depends(get_current_user)):
+async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
     log = payload.dict()
     log["id"] = new_id("wear")
     log["user_id"] = user["user_id"]
@@ -659,7 +768,7 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/wear")
-async def list_wear(user: dict = Depends(get_current_user)):
+async def list_wear(user: dict = Depends(get_scope)):
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
     for lg in logs:
@@ -669,7 +778,7 @@ async def list_wear(user: dict = Depends(get_current_user)):
 
 # ----------------------------- Insights -----------------------------
 @api_router.get("/insights")
-async def insights(user: dict = Depends(get_current_user)):
+async def insights(user: dict = Depends(get_scope)):
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     total_items = len(items)
@@ -726,7 +835,7 @@ MISSING_SYSTEM = (
 
 
 @api_router.post("/insights/missing-piece")
-async def missing_piece(user: dict = Depends(get_current_user)):
+async def missing_piece(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
@@ -830,7 +939,7 @@ PACKING_SYSTEM = (
 
 
 @api_router.post("/packing/plan")
-async def packing_plan(payload: PackingRequest, user: dict = Depends(get_current_user)):
+async def packing_plan(payload: PackingRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
@@ -900,7 +1009,7 @@ CAPSULE_SYSTEM = (
 
 
 @api_router.post("/capsule/build")
-async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_current_user)):
+async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
@@ -951,7 +1060,7 @@ HEALTH_SYSTEM = (
 
 
 @api_router.post("/insights/health-report")
-async def health_report(user: dict = Depends(get_current_user)):
+async def health_report(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)

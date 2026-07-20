@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
-import { useAuth } from "@/src/context/AuthContext";
+import { useProfiles } from "@/src/context/ProfileContext";
 
 const BODY_SHAPES = ["Hourglass", "Pear", "Apple", "Rectangle", "Inverted triangle", "Athletic"];
 const SKIN_TONES = ["Fair", "Light", "Medium", "Olive", "Tan", "Deep", "Dark"];
@@ -27,8 +27,8 @@ const MEAS = [
 export default function ProfileEdit() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, refreshUser } = useAuth();
-  const existing = (user as any)?.profile || {};
+  const { active, refresh } = useProfiles();
+  const existing = active?.profile || {};
 
   const [meas, setMeas] = useState<Record<string, string>>(existing.measurements || {});
   const [bodyShape, setBodyShape] = useState(existing.body_shape || "");
@@ -52,7 +52,7 @@ export default function ProfileEdit() {
           notes,
         },
       });
-      await refreshUser();
+      await refresh();
       setSaved(true);
       setTimeout(() => router.back(), 400);
     } catch {
