@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 4 — Multi-profile Household refactor verified. 20/20 executed backend tests passed (1 intentionally skipped to avoid destructive last-profile deletion of seeded data). Strict per-profile data isolation confirmed via X-Profile-Id: items/outfits/plans/wear/laundry created under 'Aura' (prof_365ddfe52deb) are invisible to 'David' (prof_a82ae0522746) and vice-versa; cross-profile GET/{id} → 404, cross-profile PUT/{id} → 404, cross-profile DELETE is a silent no-op (owned resource remains). Omitting X-Profile-Id resolves to the earliest-created profile (Aura) — verified item lists match exactly. Profile CRUD works end-to-end: POST /api/profiles (creates prof_ id, echoes name/emoji), PUT /api/profiles/{id} (rename+emoji change), DELETE /api/profiles/{id} (also purges the profile's items/outfits/plans/wear_logs). PUT /api/profile scoped to the active profile only — updating David's body_shape/notes did NOT touch Aura's style block. NEW: POST /api/analyze-item accepts optional category_hint and correctly forces category='Tops' when hint='Tops'; still works without the hint (backward compatible, 200 both ways). Regression on scoped AI + data endpoints under X-Profile-Id: stylist/suggest (Aura=200 with resolved_items; David empty wardrobe=200), items/{id}/compatibility, capsule/build, packing/plan (offsets 0 and 14), insights/missing-piece, insights/health-report, GET /insights, GET /laundry — all 200. Laundry per-profile: item flipped to Washing appears in Aura's /laundry only, not David's; reset to Ready removes it. Wear + plans CRUD also isolated. Post-run cleanup verified clean state: 0 TEST_ items, 0 laundry items, 0 leftover profiles beyond the 2 seeded ones.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/items/{id}, /api/outfits/{id}, /api/plans/{id}", "issue": "Cross-profile DELETE is a silent no-op (returns {ok:true} without indicating nothing was matched). Owned resource is not affected, so this is safe, but a 404 would be more explicit. Carried over from iter 2/3."},
+      {"endpoint": "POST /api/items, POST /api/outfits, POST /api/plans, POST /api/profiles", "issue": "Return 200 on creation instead of 201 (convention). Carried over from iter 2/3."},
+      {"endpoint": "PUT /api/profile", "issue": "ProfileUpdate skips None entries — sending {measurements: null} does NOT clear the field. Cannot fully reset a profile's style back to {} without direct DB access; empty strings ('') can be persisted but 'null' cannot. Documented in iter-3 code review; still applies."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multiprofile_scoping.py",
+    "/app/backend/tests/test_iteration3_targeted.py",
+    "/app/backend/tests/test_aura_backend.py",
+    "/app/backend/tests/test_aura_new_features.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iteration4_fast.xml",
+    "/app/test_reports/pytest/pytest_iteration4_ai.xml"
+  ],
+  "action_items": [
+    "None required — multi-profile refactor and analyze-item category_hint feature verified working end-to-end.",
+    "Optional cleanup: David profile now has body_shape='' and notes='' as harmless residue from the isolation test (cannot be cleared to null via PUT /api/profile due to None-skipping in ProfileUpdate). If a fully-empty profile.profile is desired, reset via direct DB update or extend PUT to accept explicit clears.",
+    "Optional (carried over): return 201 from creation endpoints; return 404 from delete-on-missing; wrap LLM chat.send_message with asyncio.wait_for; split server.py (1184 lines) into routers."
+  ],
+  "critical_code_review_comments": [
+    "get_scope (server.py:115-133) correctly returns user_id = profile_id, so all existing data queries scope per-profile with no per-endpoint refactor needed — clean design.",
+    "ensure_default_profile (server.py:89-112) auto-creates a default profile on first access AND migrates legacy documents (user_id==account_id) to the new profile id. This is a one-shot migration; safe for existing accounts, and it correctly runs when GET /api/profiles is called with no rows.",
+    "DELETE /api/profiles/{id} (server.py:258-267) cascades and removes items/outfits/wear_logs/plans owned by that profile — matches spec.",
+    "Last-profile guard (server.py:260-262) raises 400 if count<=1. Correct behaviour by inspection; not asserted destructively in tests (would delete seeded profiles).",
+    "PUT /api/profiles/{id} (rename) uses `payload.dict()` filter for None — so passing empty string DOES update. Consistent with PUT /api/profile.",
+    "analyze-item category_hint prompt (server.py:445-450) is passed as user text; category_hint is NOT sanitized against the enum server-side. If FE sends an invalid category, the LLM will simply reflect it. Consider validating hint against the Tops/Bottoms/... allowed set."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_multiprofile_scoping.py (new — 20 test cases, 1 skip)",
+    "/app/backend/tests/conftest.py (base URL updated to match frontend/.env EXPO_PUBLIC_BACKEND_URL = https://wardrobe-ai-311.preview.emergentagent.com)"
+  ],
+  "success_rate": {"backend": "100% (20/20 executed; 1 intentionally skipped). Iteration-3 targeted 17/17 still passing.", "frontend": "not tested (backend only per request; Google OAuth flow is not automatable)"},
+  "seed_data_creation": "All TEST_MP_-prefixed items/plans/wear logs are cleaned up in test fixtures (finally blocks). Temp profile 'TEST_MP_Guest' created and deleted within the same test. Verified post-run: 0 TEST_ items, 0 laundry items, only the 2 seeded profiles remain. Minor residue: David profile.profile now has body_shape='' and notes='' (empty strings) from the isolation test — cannot be null'd via PUT /api/profile; harmless.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Auth: Bearer test-session-token-aura-123 -> user_testaura01. Two seeded profiles: 'Aura' (prof_365ddfe52deb, has items) and 'David' (prof_a82ae0522746, empty wardrobe). Pass header X-Profile-Id to scope. Omitting the header resolves to Aura (earliest created_at). BASE_URL in conftest.py is now https://wardrobe-ai-311.preview.emergentagent.com/api (matches frontend/.env). AI/packing/capsule/health-report calls need timeout>=180s. David profile.profile now has body_shape='' and notes='' from the isolation test (harmless). Iteration 4 file run time: ~48s total (~6s fast + ~42s AI-heavy).",
+  "rca_of_issue": "No new bugs to root-cause. The multi-profile refactor is behaving as spec'd: scope resolution via X-Profile-Id header cleanly threads the profile id through every collection query, ensure_default_profile transparently migrates legacy data on first access, DELETE cascades, and rename works. The new analyze-item category_hint feature is a minimal, safe addition (prompt-level steering + forced category in the LLM instructions). No regressions detected."
+}

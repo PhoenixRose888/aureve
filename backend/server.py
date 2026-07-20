@@ -325,6 +325,7 @@ class ItemUpdate(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     image: str  # base64 without data uri prefix
+    category_hint: Optional[str] = None  # e.g. "Tops" — focus the AI when several garments are worn
 
 
 class SuggestRequest(BaseModel):
@@ -441,8 +442,16 @@ async def analyze_item(payload: AnalyzeRequest, user: dict = Depends(get_scope))
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     chat = await ai_chat(f"analyze-{user['user_id']}-{uuid.uuid4().hex[:6]}", ANALYZE_SYSTEM)
+    if payload.category_hint:
+        text = (
+            f"The person in the photo may be wearing several garments. Focus ONLY on the "
+            f"{payload.category_hint} and catalogue that single item, ignoring everything else "
+            f"they are wearing. Set the category to '{payload.category_hint}'. Return JSON only."
+        )
+    else:
+        text = "Catalogue this clothing item. Return JSON only."
     msg = UserMessage(
-        text="Catalogue this clothing item. Return JSON only.",
+        text=text,
         file_contents=[ImageContent(image_base64=payload.image)],
     )
     try:

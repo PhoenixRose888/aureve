@@ -4,8 +4,8 @@ import io
 import pytest
 import requests
 
-# Use base URL from review request; also matches /api routing on ingress
-BASE_URL = "https://8647bd50-0a71-4b37-9fef-4ea3b2f08052.preview.emergentagent.com/api"
+# Use base URL from frontend/.env (preview URL). Also matches /api routing on ingress.
+BASE_URL = "https://wardrobe-ai-311.preview.emergentagent.com/api"
 TEST_TOKEN = "test-session-token-aura-123"
 
 

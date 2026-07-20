@@ -82,9 +82,23 @@ export default function Wardrobe() {
             <Txt style={styles.kicker}>{items.length} PIECES</Txt>
             <Display weight="medium" style={styles.title}>Wardrobe</Display>
           </View>
-          <Pressable style={styles.addBtn} testID="wardrobe-add-button" onPress={() => router.push("/add-item")}>
-            <Feather name="plus" size={20} color={colors.onBrandPrimary} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={[styles.laundryIconBtn, laundryMode && styles.laundryIconBtnActive]}
+              testID="wardrobe-laundry-button"
+              onPress={() => setLaundryMode((m) => !m)}
+            >
+              <Feather name="droplet" size={19} color={laundryMode ? colors.onBrandPrimary : colors.onSurface} />
+              {notReady.length > 0 && !laundryMode && (
+                <View style={styles.laundryCountBadge}>
+                  <Txt style={styles.laundryCountTxt}>{notReady.length}</Txt>
+                </View>
+              )}
+            </Pressable>
+            <Pressable style={styles.addBtn} testID="wardrobe-add-button" onPress={() => router.push("/add-item")}>
+              <Feather name="plus" size={20} color={colors.onBrandPrimary} />
+            </Pressable>
+          </View>
         </View>
         <ScrollView
           horizontal
@@ -126,14 +140,29 @@ export default function Wardrobe() {
         <View style={styles.center}><ActivityIndicator color={colors.onSurface} /></View>
       ) : filtered.length === 0 ? (
         <ScrollView contentContainerStyle={styles.emptyWrap}>
-          <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
-          <Display weight="medium" style={styles.emptyTitle}>
-            {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
-          </Display>
-          <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
-          <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>
-            <Txt style={styles.emptyBtnTxt}>Add first piece</Txt>
-          </Pressable>
+          {laundryMode ? (
+            <>
+              <View style={styles.laundryEmptyIcon}>
+                <Feather name="droplet" size={28} color={colors.brand} />
+              </View>
+              <Display weight="medium" style={styles.emptyTitle}>Laundry basket is empty</Display>
+              <Txt style={styles.emptySub}>Nothing is in the wash. Mark a piece as Washing from its detail screen and it will appear here.</Txt>
+              <Pressable style={styles.emptyBtn} testID="laundry-empty-back" onPress={() => setLaundryMode(false)}>
+                <Txt style={styles.emptyBtnTxt}>Back to wardrobe</Txt>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
+              <Display weight="medium" style={styles.emptyTitle}>
+                {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
+              </Display>
+              <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
+              <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>
+                <Txt style={styles.emptyBtnTxt}>Add first piece</Txt>
+              </Pressable>
+            </>
+          )}
         </ScrollView>
       ) : (
         <FlatList
@@ -160,6 +189,30 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   headerRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  laundryIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  laundryIconBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  laundryCountBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  laundryCountTxt: { color: colors.onSurfaceInverse, fontSize: 10, fontWeight: "600" },
   kicker: { fontSize: 11, letterSpacing: 2, color: colors.onSurfaceTertiary, marginBottom: 2 },
   title: { fontSize: 34, color: colors.onSurface },
   addBtn: {
@@ -222,6 +275,15 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   emptyWrap: { padding: spacing.xl, alignItems: "center", paddingTop: spacing["2xl"] },
   emptyImg: { width: "100%", height: 260, borderRadius: radius.md, marginBottom: spacing.xl },
+  laundryEmptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xl,
+  },
   emptyTitle: { fontSize: 26, textAlign: "center", marginBottom: spacing.sm },
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", marginBottom: spacing.xl },
   emptyBtn: {

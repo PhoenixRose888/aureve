@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator, TextInput, ScrollView } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, TextInput, ScrollView, Modal } from "react-native";
 import { Image } from "expo-image";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -34,6 +34,7 @@ export default function AddItem() {
   const [ai, setAi] = useState<{ style?: string; sleeve_length?: string; formality?: string; tone?: string }>({});
 
   const [pickerTarget, setPickerTarget] = useState<null | "photo" | "worn_photo">(null);
+  const [hintPhoto, setHintPhoto] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -61,20 +62,18 @@ export default function AddItem() {
     })();
   }, [editing, id]);
 
-  const onPicked = useCallback(
-    async (base64: string) => {
-      if (pickerTarget === "worn_photo") {
-        setPhotos((p) => ({ ...p, worn_photo: base64 }));
-        return;
-      }
-      setPhotos((p) => ({ ...p, photo: base64 }));
-      // Auto analyze on first hanging photo
+  const runAnalyze = useCallback(
+    async (base64: string, hint?: string) => {
+      if (hint && CATEGORIES.includes(hint)) setCategory(hint);
       setAnalyzing(true);
       setError("");
       try {
-        const r = await api<any>("/analyze-item", { method: "POST", body: { image: base64 } });
+        const r = await api<any>("/analyze-item", {
+          method: "POST",
+          body: { image: base64, category_hint: hint || null },
+        });
         if (r.name && !name) setName(r.name);
-        if (r.category && CATEGORIES.includes(r.category)) setCategory(r.category);
+        if (r.category && CATEGORIES.includes(r.category) && !hint) setCategory(r.category);
         if (r.colour) setColour(r.colour);
         if (r.fabric) setFabric(r.fabric);
         if (r.pattern) setPattern(r.pattern);
@@ -82,12 +81,25 @@ export default function AddItem() {
         if (r.condition) setCondition(r.condition);
         if (r.estimated_value && !price) setPrice(String(r.estimated_value));
         setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
-      } catch (e: any) {
+      } catch {
         setError("Couldn't auto-detect. Fill details manually.");
       }
       setAnalyzing(false);
     },
-    [pickerTarget, name]
+    [name, price]
+  );
+
+  const onPicked = useCallback(
+    async (base64: string) => {
+      if (pickerTarget === "worn_photo") {
+        setPhotos((p) => ({ ...p, worn_photo: base64 }));
+        return;
+      }
+      setPhotos((p) => ({ ...p, photo: base64 }));
+      // Ask which piece to focus on before AI reads it (handles worn / multi-garment photos)
+      setHintPhoto(base64);
+    },
+    [pickerTarget]
   );
 
   const save = async () => {
@@ -248,6 +260,45 @@ export default function AddItem() {
         onPicked={onPicked}
         title={pickerTarget === "worn_photo" ? "Add a worn photo" : "Add item photo"}
       />
+
+      <Modal visible={hintPhoto !== null} transparent animationType="fade" onRequestClose={() => setHintPhoto(null)}>
+        <View style={styles.hintBackdrop}>
+          <View style={styles.hintSheet}>
+            <Display weight="medium" style={styles.hintTitle}>Which piece is this?</Display>
+            <Txt style={styles.hintSub}>
+              Wearing more than one thing? Tell Aura which garment to focus on for an accurate read.
+            </Txt>
+            <View style={styles.hintChips}>
+              {CATEGORIES.map((c) => (
+                <Pressable
+                  key={c}
+                  testID={`hint-${c}`}
+                  style={styles.hintChip}
+                  onPress={() => {
+                    const b64 = hintPhoto!;
+                    setHintPhoto(null);
+                    runAnalyze(b64, c);
+                  }}
+                >
+                  <Txt style={styles.hintChipTxt}>{c}</Txt>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              style={styles.hintAuto}
+              testID="hint-auto"
+              onPress={() => {
+                const b64 = hintPhoto!;
+                setHintPhoto(null);
+                runAnalyze(b64);
+              }}
+            >
+              <Feather name="zap" size={16} color={colors.onBrandPrimary} />
+              <Txt style={styles.hintAutoTxt}>Just detect it for me</Txt>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -359,4 +410,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   saveTxt: { color: colors.onBrandPrimary, fontSize: 16 },
+  hintBackdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.5)", justifyContent: "flex-end" },
+  hintSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.xl,
+    paddingBottom: spacing["2xl"],
+  },
+  hintTitle: { fontSize: 24 },
+  hintSub: { fontSize: 13, color: colors.onSurfaceTertiary, marginTop: 4, marginBottom: spacing.lg, lineHeight: 19 },
+  hintChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  hintChip: {
+    paddingHorizontal: spacing.lg,
+    height: 40,
+    borderRadius: radius.pill,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hintChipTxt: { fontSize: 14, color: colors.onSurface },
+  hintAuto: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    height: 50,
+    borderRadius: radius.sm,
+    backgroundColor: colors.brandPrimary,
+    marginTop: spacing.lg,
+  },
+  hintAutoTxt: { color: colors.onBrandPrimary, fontSize: 15 },
 });
