@@ -23,6 +23,10 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
+## Implemented (2026-07-20e)
+- ✅ **Seasonal / Purpose Capsule Builder** (`app/capsule.tsx`) — pick a theme (Autumn/Winter/Spring/Summer/Work/Weekend/Travel/Evening); AI curates a lean mix-and-match capsule from owned items with outfit combos, a tip, gaps to complete it, and a "save to looks". New `POST /api/capsule/build`. Reached from Home.
+- ✅ **Full backend regression: 46/46 passing** (30 core + 16 new endpoints) via testing agent — laundry exclusion, confidence score, compatibility, plans, packing, capsule, health report all verified.
+
 ## Implemented (2026-07-20d)
 - ✅ **Outfit Planner / Calendar** (`app/planner.tsx`) — a 7-day agenda; tap any day to plan an outfit by picking a saved look or auto-styling with AI. Reached from Home. New `plans` CRUD: `POST/GET/DELETE /api/plans` (range query + hydrated items; snapshots item_ids from linked outfits).
 
@@ -53,13 +57,14 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 
 ## Prioritized Backlog
 - **P1**
-  - Seasonal Capsule Builder (Autumn/Winter/Work/Travel capsules from owned items — reuse packing engine).
+  - Push reminder the night before a planned day ("tomorrow you're wearing X") — Emergent push notifications (real device only).
+  - Precompute compatibility for instant per-item "matches" counts on cards.
 - **P2**
   - Premium tier + paywall (free: 100 items / 3 outfits-a-day; premium: unlimited + advanced styling) via Stripe/RevenueCat.
   - Virtual try-on (AI-generated preview of you in the outfit).
   - Social mode (compare wardrobes / borrow from friends).
   - Deeper figure-aware learning from worn photos (cuts/waist heights/lengths).
-  - Precompute & cache compatibility scores for instant "matches" counts per item.
+  - Split server.py into routers; add timeout wrapper on LlmChat calls; trim base64 from insights list payloads.
 
 ## Next Tasks
 1. Build the "Looks" gallery screen to browse saved outfits + outfit history.
