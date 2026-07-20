@@ -54,6 +54,7 @@ export default function RootLayout() {
               <Stack.Screen name="item/[id]" />
               <Stack.Screen name="packing" />
               <Stack.Screen name="looks" />
+              <Stack.Screen name="planner" />
               <Stack.Screen name="health-report" options={{ presentation: "modal" }} />
             </Stack>
           </AuthProvider>

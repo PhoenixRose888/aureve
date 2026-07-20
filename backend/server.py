@@ -546,6 +546,57 @@ async def delete_outfit(outfit_id: str, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+# ----------------------------- Outfit Planner -----------------------------
+class PlanCreate(BaseModel):
+    date: str  # YYYY-MM-DD
+    title: Optional[str] = ""
+    occasion: Optional[str] = ""
+    outfit_id: Optional[str] = None
+    item_ids: List[str] = []
+    notes: Optional[str] = ""
+
+
+@api_router.post("/plans")
+async def create_plan(payload: PlanCreate, user: dict = Depends(get_current_user)):
+    plan = payload.dict()
+    plan["id"] = new_id("plan")
+    plan["user_id"] = user["user_id"]
+    plan["created_at"] = now_utc().isoformat()
+    # If linked to a saved outfit, snapshot its item_ids
+    if plan.get("outfit_id") and not plan.get("item_ids"):
+        outfit = await db.outfits.find_one({"id": plan["outfit_id"], "user_id": user["user_id"]}, {"_id": 0})
+        if outfit:
+            plan["item_ids"] = outfit.get("item_ids", [])
+            if not plan.get("title"):
+                plan["title"] = outfit.get("name", "")
+    await db.plans.insert_one({**plan})
+    plan.pop("_id", None)
+    return plan
+
+
+@api_router.get("/plans")
+async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                     user: dict = Depends(get_current_user)):
+    query: dict = {"user_id": user["user_id"]}
+    if from_date or to_date:
+        query["date"] = {}
+        if from_date:
+            query["date"]["$gte"] = from_date
+        if to_date:
+            query["date"]["$lte"] = to_date
+    plans = await db.plans.find(query, {"_id": 0}).sort("date", 1).to_list(500)
+    by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    for p in plans:
+        p["items"] = [by_id[i] for i in p.get("item_ids", []) if i in by_id]
+    return plans
+
+
+@api_router.delete("/plans/{plan_id}")
+async def delete_plan(plan_id: str, user: dict = Depends(get_current_user)):
+    await db.plans.delete_one({"id": plan_id, "user_id": user["user_id"]})
+    return {"ok": True}
+
+
 @api_router.post("/wear")
 async def log_wear(payload: WearLog, user: dict = Depends(get_current_user)):
     log = payload.dict()
