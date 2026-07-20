@@ -20,6 +20,7 @@ export default function Packing() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   const generate = async () => {
     if (!destination.trim()) {
@@ -29,6 +30,7 @@ export default function Packing() {
     setLoading(true);
     setError("");
     setResult(null);
+    setSaved(false);
     try {
       const r = await api<any>("/packing/plan", {
         method: "POST",
@@ -39,6 +41,22 @@ export default function Packing() {
       setError(e.message || "Couldn't build a capsule");
     }
     setLoading(false);
+  };
+
+  const saveCapsule = async () => {
+    if (!result?.capsule_items?.length) return;
+    try {
+      await api("/outfits", {
+        method: "POST",
+        body: {
+          name: `${result.destination} capsule`,
+          item_ids: result.capsule_items.map((i: any) => i.id),
+          occasion: `${result.days}-day trip`,
+          source: "capsule",
+        },
+      });
+      setSaved(true);
+    } catch {}
   };
 
   return (
@@ -190,6 +208,11 @@ export default function Packing() {
                 <Txt style={styles.tipTxt}>{result.packing_tip}</Txt>
               </View>
             ) : null}
+
+            <Pressable style={styles.saveCapsuleBtn} testID="save-capsule-button" onPress={saveCapsule} disabled={saved}>
+              <Feather name={saved ? "check" : "bookmark"} size={16} color={colors.onSurface} />
+              <Txt style={styles.saveCapsuleTxt}>{saved ? "Saved to your looks" : "Save this capsule"}</Txt>
+            </Pressable>
           </View>
         )}
       </KeyboardAwareScrollView>
@@ -238,4 +261,6 @@ const styles = StyleSheet.create({
   missingItemTxt: { fontSize: 13, color: colors.onSurfaceSecondary },
   tipCard: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg, alignItems: "center" },
   tipTxt: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19, fontStyle: "italic" },
+  saveCapsuleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 52, borderWidth: 0.5, borderColor: colors.borderStrong, borderRadius: radius.sm, marginTop: spacing.xl },
+  saveCapsuleTxt: { fontSize: 15, color: colors.onSurface },
 });

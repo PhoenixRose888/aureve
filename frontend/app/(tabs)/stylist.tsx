@@ -41,6 +41,7 @@ export default function Stylist() {
   const [comfort, setComfort] = useState(4);
   const [confidence, setConfidence] = useState(4);
   const [logged, setLogged] = useState(false);
+  const [moveToLaundry, setMoveToLaundry] = useState(false);
 
   const generate = async () => {
     if (!occasion.trim()) {
@@ -95,6 +96,7 @@ export default function Stylist() {
           flattering,
           comfort,
           confidence,
+          mark_dirty: moveToLaundry,
         },
       });
       setLogged(true);
@@ -255,6 +257,10 @@ export default function Stylist() {
                 <Rating label="Flattering" value={flattering} onChange={setFlattering} />
                 <Rating label="Comfort" value={comfort} onChange={setComfort} />
                 <Rating label="Confidence" value={confidence} onChange={setConfidence} />
+                <Pressable style={styles.laundryToggle} testID="move-laundry-toggle" onPress={() => setMoveToLaundry((v) => !v)}>
+                  <Feather name={moveToLaundry ? "check-square" : "square"} size={18} color={colors.onBrandTertiary} />
+                  <Txt style={styles.laundryToggleTxt}>Move these pieces to the laundry</Txt>
+                </Pressable>
                 <Pressable style={styles.logBtn} testID="log-wear-button" onPress={logWear}>
                   <Txt style={styles.logTxt}>Save feedback</Txt>
                 </Pressable>
@@ -390,4 +396,6 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: colors.brand },
   logBtn: { backgroundColor: colors.brandPrimary, height: 46, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
   logTxt: { color: colors.onBrandPrimary, fontSize: 15 },
+  laundryToggle: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
+  laundryToggleTxt: { fontSize: 13, color: colors.onBrandTertiary },
 });

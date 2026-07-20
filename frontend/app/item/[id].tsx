@@ -30,6 +30,7 @@ export default function ItemDetail() {
   const [compatLoading, setCompatLoading] = useState(false);
   const [compatError, setCompatError] = useState("");
   const [savingStatus, setSavingStatus] = useState(false);
+  const [showLaundryPrompt, setShowLaundryPrompt] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +52,7 @@ export default function ItemDetail() {
     try {
       await api("/wear", { method: "POST", body: { item_ids: [id], occasion: item?.name } });
       setLogged(true);
+      if ((item?.availability || "Ready") === "Ready") setShowLaundryPrompt(true);
       load();
     } catch {}
   };
@@ -272,6 +274,24 @@ export default function ItemDetail() {
             <Feather name={logged ? "check" : "plus"} size={17} color={colors.onBrandPrimary} />
             <Txt style={styles.wearTxt}>{logged ? "Logged today" : "I wore this today"}</Txt>
           </Pressable>
+
+          {showLaundryPrompt && (
+            <View style={styles.laundryPrompt} testID="laundry-prompt">
+              <Txt style={styles.laundryPromptTxt}>Add this to the laundry so it's hidden from suggestions?</Txt>
+              <View style={styles.laundryPromptRow}>
+                <Pressable
+                  style={styles.laundryPromptBtn}
+                  testID="prompt-add-laundry"
+                  onPress={() => { setStatus("Dirty"); setShowLaundryPrompt(false); }}
+                >
+                  <Txt style={styles.laundryPromptBtnTxt}>Add to laundry</Txt>
+                </Pressable>
+                <Pressable style={styles.laundryPromptDismiss} onPress={() => setShowLaundryPrompt(false)}>
+                  <Txt style={styles.laundryPromptDismissTxt}>Not now</Txt>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -378,6 +398,13 @@ const styles = StyleSheet.create({
   pairReason: { fontSize: 12, color: colors.onSurfaceTertiary, lineHeight: 17, marginTop: 2 },
   wearBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, height: 54, borderRadius: radius.sm, marginTop: spacing["2xl"] },
   wearTxt: { color: colors.onBrandPrimary, fontSize: 16 },
+  laundryPrompt: { marginTop: spacing.lg, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg },
+  laundryPromptTxt: { fontSize: 13, color: colors.onBrandTertiary, marginBottom: spacing.md, lineHeight: 19 },
+  laundryPromptRow: { flexDirection: "row", gap: spacing.md, alignItems: "center" },
+  laundryPromptBtn: { flex: 1, backgroundColor: colors.brandPrimary, height: 44, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  laundryPromptBtnTxt: { color: colors.onBrandPrimary, fontSize: 14 },
+  laundryPromptDismiss: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  laundryPromptDismissTxt: { color: colors.onBrandTertiary, fontSize: 14 },
   backdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },
   confirmSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: spacing["2xl"] },
   confirmTitle: { fontSize: 24, marginBottom: spacing.sm },

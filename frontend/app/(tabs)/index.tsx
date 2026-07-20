@@ -147,6 +147,16 @@ export default function Home() {
             <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
           </Pressable>
 
+          {/* My looks */}
+          <Pressable style={styles.tripCta} testID="home-looks-button" onPress={() => router.push("/looks")}>
+            <Feather name="bookmark" size={20} color={colors.onSurface} />
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.tripTitle}>My looks</Txt>
+              <Txt style={styles.tripSub}>Saved outfits & your wear history</Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+          </Pressable>
+
           {/* Recent items */}
           <View style={styles.sectionHead}>
             <Display weight="medium" style={styles.sectionTitle}>Recently added</Display>

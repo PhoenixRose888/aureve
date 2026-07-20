@@ -23,6 +23,11 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Shopping checker (buy/skip verdict + duplicates + gap).
 - Insights: cost-per-wear, most/least worn, confidence scores, wardrobe health, "Missing Piece".
 
+## Implemented (2026-07-20c)
+- ✅ **"Looks" gallery** (`app/looks.tsx`) — Saved looks (AI-styled / manual / capsule, with delete) + wear History (date, occasion, ratings, item thumbnails). Reached from Home. New `DELETE /api/outfits/{id}` and hydrated `GET /api/wear`.
+- ✅ **Save packing capsules** — capsules can be saved to Looks (source "capsule").
+- ✅ **Auto-laundry loop** — `mark_dirty` on `/api/wear`; Stylist rate card has a "move pieces to laundry" toggle, and item detail prompts to add to laundry right after "I wore this today" (Zero-Friction).
+
 ## Implemented (2026-07-20b)
 - ✅ **Laundry-aware availability** — every item has a status (Ready / Dirty / Washing / Drying), set from item detail. Anything not "Ready" is automatically excluded from Stylist, Packing and Compatibility suggestions. Wardrobe shows laundry badges + a "N in the laundry" filter banner; new `GET /api/laundry` endpoint. Verified end-to-end.
 
@@ -45,9 +50,8 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 
 ## Prioritized Backlog
 - **P1**
-  - Outfit Planner / Calendar (plan work week, events, weddings) + save favourites & outfit history.
+  - Outfit Planner / Calendar (plan work week, events, weddings) — assign saved looks to dates.
   - Seasonal Capsule Builder (Autumn/Winter/Work/Travel capsules from owned items — reuse packing engine).
-  - "Looks" gallery to browse saved outfits + saved packing capsules.
 - **P2**
   - Premium tier + paywall (free: 100 items / 3 outfits-a-day; premium: unlimited + advanced styling) via Stripe/RevenueCat.
   - Virtual try-on (AI-generated preview of you in the outfit).

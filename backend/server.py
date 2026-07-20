@@ -215,6 +215,7 @@ class WearLog(BaseModel):
     comfort: int = 3
     confidence: int = 3
     notes: Optional[str] = ""
+    mark_dirty: bool = False
 
 
 class OutfitCreate(BaseModel):
@@ -539,6 +540,12 @@ async def list_outfits(user: dict = Depends(get_current_user)):
     return outfits
 
 
+@api_router.delete("/outfits/{outfit_id}")
+async def delete_outfit(outfit_id: str, user: dict = Depends(get_current_user)):
+    await db.outfits.delete_one({"id": outfit_id, "user_id": user["user_id"]})
+    return {"ok": True}
+
+
 @api_router.post("/wear")
 async def log_wear(payload: WearLog, user: dict = Depends(get_current_user)):
     log = payload.dict()
@@ -546,11 +553,14 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_current_user)):
     log["user_id"] = user["user_id"]
     log["created_at"] = now_utc().isoformat()
     await db.wear_logs.insert_one({**log})
-    # Increment wear counts
+    # Increment wear counts (and optionally move to laundry)
+    item_set = {"last_worn": now_utc().isoformat()}
+    if payload.mark_dirty:
+        item_set["availability"] = "Dirty"
     for iid in payload.item_ids:
         await db.items.update_one(
             {"id": iid, "user_id": user["user_id"]},
-            {"$inc": {"wear_count": 1}, "$set": {"last_worn": now_utc().isoformat()}},
+            {"$inc": {"wear_count": 1}, "$set": item_set},
         )
     log.pop("_id", None)
     return log
@@ -559,6 +569,9 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_current_user)):
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_current_user)):
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    for lg in logs:
+        lg["items"] = [by_id[i] for i in lg.get("item_ids", []) if i in by_id]
     return logs
 
 
