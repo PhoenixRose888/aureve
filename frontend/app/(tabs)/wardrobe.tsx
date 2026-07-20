@@ -65,6 +65,12 @@ export default function Wardrobe() {
           <Txt style={styles.laundryBadgeTxt}>{status}</Txt>
         </View>
       )}
+      {status === "Ready" && (item.pairs_count || 0) > 0 && (
+        <View style={styles.pairsBadge}>
+          <Feather name="link-2" size={10} color={colors.onSurfaceInverse} />
+          <Txt style={styles.pairsBadgeTxt}>{item.pairs_count}</Txt>
+        </View>
+      )}
       <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
       <Txt style={styles.cardMeta} numberOfLines={1}>
         {item.brand ? `${item.brand} · ` : ""}{item.category}
@@ -255,6 +261,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   laundryBadgeTxt: { color: colors.onSurfaceInverse, fontSize: 10 },
+  pairsBadge: {
+    position: "absolute",
+    bottom: 44,
+    left: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(26,26,26,0.6)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+  },
+  pairsBadgeTxt: { color: colors.onSurfaceInverse, fontSize: 10, fontWeight: "600" },
   laundryBanner: {
     flexDirection: "row",
     alignItems: "center",

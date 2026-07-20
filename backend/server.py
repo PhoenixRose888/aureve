@@ -356,6 +356,40 @@ class OutfitCreate(BaseModel):
 
 
 # ----------------------------- Wardrobe Items -----------------------------
+FORMALITY_ORDER = {"Casual": 0, "Smart Casual": 1, "Business": 2, "Formal": 3}
+_MAIN_CATS = {"Tops", "Bottoms", "Dresses", "Outerwear"}
+_PAIR_EXCLUSIONS = {("Dresses", "Tops"), ("Dresses", "Bottoms")}
+
+
+def _items_pair(a: dict, b: dict) -> bool:
+    """Rule-based (instant, no AI) check of whether two owned pieces can appear
+    in the same outfit — used to precompute a 'pairs with' count per item."""
+    ca, cb = a.get("category"), b.get("category")
+    if not ca or not cb or ca == cb:
+        return False
+    if (ca, cb) in _PAIR_EXCLUSIONS or (cb, ca) in _PAIR_EXCLUSIONS:
+        return False
+    # Formality must be within one step for the main garments.
+    if ca in _MAIN_CATS and cb in _MAIN_CATS:
+        fa = FORMALITY_ORDER.get(a.get("formality") or "")
+        fb = FORMALITY_ORDER.get(b.get("formality") or "")
+        if fa is not None and fb is not None and abs(fa - fb) > 1:
+            return False
+    return True
+
+
+def compute_pairs_counts(items: List[dict]) -> dict:
+    """For every item, how many OTHER ready-to-wear items it can be styled with."""
+    ready = [it for it in items if (it.get("availability") or "Ready") == "Ready"]
+    counts = {it["id"]: 0 for it in items}
+    for i in range(len(ready)):
+        for j in range(i + 1, len(ready)):
+            if _items_pair(ready[i], ready[j]):
+                counts[ready[i]["id"]] += 1
+                counts[ready[j]["id"]] += 1
+    return counts
+
+
 def strip_image(doc: dict, keep: bool = False) -> dict:
     """For list views we keep photos (needed for grid) but this hook allows trimming."""
     return doc
@@ -376,10 +410,14 @@ async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
 
 @api_router.get("/items")
 async def list_items(category: Optional[str] = None, user: dict = Depends(get_scope)):
-    query = {"user_id": user["user_id"]}
+    all_items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    counts = compute_pairs_counts(all_items)
     if category and category.lower() != "all":
-        query["category"] = category
-    items = await db.items.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+        items = [it for it in all_items if it.get("category") == category]
+    else:
+        items = all_items
+    for it in items:
+        it["pairs_count"] = counts.get(it["id"], 0)
     return items
 
 
@@ -1117,6 +1155,64 @@ async def health_report(user: dict = Depends(get_scope)):
         "unworn_count": len(unworn),
         "unworn_value": unworn_value,
     }
+    return result
+
+
+# ----------------------------- AI: Hair & Makeup -----------------------------
+class BeautyRequest(BaseModel):
+    occasion: Optional[str] = ""
+
+
+BEAUTY_SYSTEM = (
+    "You are Aura's professional colour analyst and beauty stylist. Using the person's skin tone, undertone and "
+    "any personal notes, recommend hair and makeup that flatter THEM — grounded in colour theory (warm vs cool "
+    "undertones, contrast levels), never generic. Be confident, calm and specific; explain the reasoning briefly, "
+    "like a stylist, and stay inclusive of all genders and presentations. "
+    "Return STRICT JSON with keys: "
+    "summary (one sentence on the person's colouring and the direction), "
+    "palette (array of 5-8 flattering colour names to wear near the face), "
+    "makeup (object: foundation (undertone guidance), blush, lip, eye, tip — each a short string; keep it "
+    "wearable and optional), "
+    "hair (object: colour (flattering hair-colour directions), style (a styling suggestion for the occasion), "
+    "tip (one short string)), "
+    "avoid (array of 2-4 short strings — colours/finishes that fight this colouring), "
+    "occasion_note (one short sentence tailoring the look to the stated occasion). "
+    "Return ONLY JSON."
+)
+
+
+@api_router.post("/beauty/suggest")
+async def beauty_suggest(payload: BeautyRequest, user: dict = Depends(get_scope)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    p = user.get("profile") or {}
+    skin = p.get("skin_tone")
+    undertone = p.get("undertone")
+    notes = p.get("notes")
+    if not skin and not undertone:
+        raise HTTPException(
+            status_code=400,
+            detail="Add your skin tone and undertone in your style profile for personalised beauty advice.",
+        )
+    profile_line = "; ".join(
+        f"{k}: {v}" for k, v in [
+            ("skin tone", skin), ("undertone", undertone), ("notes", notes),
+        ] if v
+    )
+    prompt = (
+        f"Person's colouring — {profile_line}.\n"
+        f"Occasion: {payload.occasion or 'everyday'}.\n\n"
+        "Recommend flattering hair and makeup for this colouring and occasion. Return JSON only."
+    )
+    chat = await ai_chat(f"beauty-{user['user_id']}-{uuid.uuid4().hex[:6]}", BEAUTY_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("beauty failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp)
+    if not result:
+        raise HTTPException(status_code=502, detail="Could not generate beauty recommendations")
     return result
 
 

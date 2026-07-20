@@ -97,7 +97,18 @@ export default function Profile() {
             <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
           </Pressable>
 
-          {/* Headline metrics */}
+          {/* Hair & makeup */}
+          <Pressable style={styles.beautyCta} testID="open-beauty" onPress={() => router.push("/beauty")}>
+            <View style={styles.beautyIcon}>
+              <Feather name="feather" size={18} color={colors.onBrandTertiary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.spTitle}>Hair & makeup for your colouring</Txt>
+              <Txt style={styles.spSub}>AI colour analysis from your skin tone & undertone</Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+          </Pressable>
+
           <View style={styles.metricRow}>
             <Metric value={data?.total_items ?? 0} label="Pieces" />
             <View style={styles.mDiv} />
@@ -192,7 +203,7 @@ export default function Profile() {
               <View style={styles.healthCard}>
                 <Feather name="rotate-ccw" size={18} color={colors.brand} />
                 <Txt style={styles.healthTxt}>
-                  You haven't worn {unworn.length} {unworn.length === 1 ? "piece" : "pieces"} yet. Style them, sell, or donate to keep your wardrobe lean.
+                  You have not worn {unworn.length} {unworn.length === 1 ? "piece" : "pieces"} yet. Style them, sell, or donate to keep your wardrobe lean.
                 </Txt>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.xl, marginTop: spacing.md }}>
@@ -344,6 +355,8 @@ const styles = StyleSheet.create({
   spIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   spTitle: { fontSize: 15, color: colors.onSurface },
   spSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
+  beautyCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
+  beautyIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   metricRow: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.lg, borderBottomWidth: 0.5, borderColor: colors.divider },
   metric: { flex: 1, alignItems: "center", gap: 4 },
   mDiv: { width: 0.5, height: 40, backgroundColor: colors.divider },
