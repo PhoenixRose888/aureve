@@ -85,6 +85,18 @@ export default function Profile() {
             <Metric value={data?.outfits_logged ?? 0} label="Looks logged" />
           </View>
 
+          {/* Monthly wardrobe health report */}
+          <Pressable style={styles.reportCta} testID="open-health-report" onPress={() => router.push("/health-report")}>
+            <View style={styles.reportIcon}>
+              <Feather name="activity" size={18} color={colors.onSurfaceInverse} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.reportTitle}>Monthly wardrobe health report</Txt>
+              <Txt style={styles.reportSub}>Wasted money + your #1 unlocking buy</Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+          </Pressable>
+
           {/* Missing Piece — the honest gap analyzer */}
           <View style={styles.missingCard}>
             <Txt style={styles.missingKicker}>THE MISSING PIECE</Txt>
@@ -247,6 +259,19 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 28, color: colors.onSurface },
   metricLabel: { fontSize: 11, color: colors.onSurfaceTertiary, textAlign: "center" },
   missingCard: { marginTop: spacing.xl, backgroundColor: colors.surfaceInverse, borderRadius: radius.md, padding: spacing.xl },
+  reportCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.xl,
+    borderWidth: 0.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+  },
+  reportIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  reportTitle: { fontSize: 15, color: colors.onSurface },
+  reportSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   missingKicker: { fontSize: 11, letterSpacing: 2, color: colors.brandTertiary, marginBottom: spacing.sm },
   missingTitle: { fontSize: 24, lineHeight: 28, color: colors.onSurfaceInverse },
   missingItem: { fontSize: 16, color: colors.onSurfaceInverse, lineHeight: 22 },

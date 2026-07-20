@@ -137,6 +137,16 @@ export default function Home() {
             </Pressable>
           </View>
 
+          {/* Pack a trip */}
+          <Pressable style={styles.tripCta} testID="home-packing-button" onPress={() => router.push("/packing")}>
+            <Feather name="briefcase" size={20} color={colors.onSurface} />
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.tripTitle}>Pack for a trip</Txt>
+              <Txt style={styles.tripSub}>A carry-on capsule from your wardrobe</Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+          </Pressable>
+
           {/* Recent items */}
           <View style={styles.sectionHead}>
             <Display weight="medium" style={styles.sectionTitle}>Recently added</Display>
@@ -223,6 +233,18 @@ const styles = StyleSheet.create({
   },
   quickTxt: { fontSize: 15, color: colors.onSurface, marginTop: spacing.xs },
   quickSub: { fontSize: 12, color: colors.onSurfaceTertiary },
+  tripCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+  },
+  tripTitle: { fontSize: 15, color: colors.onSurface },
+  tripSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   sectionHead: {
     flexDirection: "row",
     alignItems: "flex-end",

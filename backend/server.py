@@ -561,6 +561,189 @@ async def missing_piece(user: dict = Depends(get_current_user)):
     return result
 
 
+# ----------------------------- AI: Packing Capsule -----------------------------
+class PackingRequest(BaseModel):
+    destination: str
+    days: int = 3
+    occasions: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+async def geocode_place(name: str):
+    async with httpx.AsyncClient(timeout=15) as hc:
+        r = await hc.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": name, "count": 1, "language": "en"},
+        )
+    if r.status_code != 200:
+        return None
+    results = r.json().get("results") or []
+    if not results:
+        return None
+    g = results[0]
+    return {
+        "lat": g["latitude"],
+        "lon": g["longitude"],
+        "city": g.get("name"),
+        "country": g.get("country", ""),
+    }
+
+
+async def forecast_summary(lat: float, lon: float, days: int):
+    days = max(1, min(days, 16))
+    async with httpx.AsyncClient(timeout=15) as hc:
+        r = await hc.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat, "longitude": lon,
+                "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+                "forecast_days": days, "timezone": "auto",
+            },
+        )
+    if r.status_code != 200:
+        return None
+    d = r.json().get("daily", {})
+    highs = d.get("temperature_2m_max", []) or []
+    lows = d.get("temperature_2m_min", []) or []
+    codes = d.get("weather_code", []) or []
+    if not highs:
+        return None
+    conditions = list({WEATHER_CODES.get(c, "Unknown") for c in codes})
+    return {
+        "high": round(max(highs)),
+        "low": round(min(lows)),
+        "conditions": conditions,
+        "text": f"Highs {round(max(highs))}°C, lows {round(min(lows))}°C. Expect: {', '.join(conditions)}.",
+    }
+
+
+PACKING_SYSTEM = (
+    "You are Aura's packing assistant. Build a smart CAPSULE wardrobe for a trip using ONLY the items in the "
+    "user's wardrobe (by exact id). Maximise outfit combinations while minimising the number of pieces so it "
+    "fits in a carry-on. Match the destination weather and the occasions. "
+    "Return STRICT JSON with keys: "
+    "weather_note (one sentence summarising conditions to pack for), "
+    "capsule_item_ids (array of the item ids to pack, keep it lean), "
+    "outfits (array of objects: name, item_ids (subset of the capsule)), "
+    "fits_carry_on (boolean), packing_tip (one short sentence), "
+    "essentials_missing (array of short strings for gaps the wardrobe can't cover, may be empty). "
+    "Only use ids present in the wardrobe. Return ONLY JSON."
+)
+
+
+@api_router.post("/packing/plan")
+async def packing_plan(payload: PackingRequest, user: dict = Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    if len(items) < 3:
+        raise HTTPException(status_code=400, detail="Add at least 3 wardrobe items to build a capsule")
+
+    geo = await geocode_place(payload.destination)
+    weather = None
+    if geo:
+        weather = await forecast_summary(geo["lat"], geo["lon"], payload.days)
+
+    wardrobe = summarize_items_for_ai(items)
+    prefs = await learned_prefs(user["user_id"])
+    place = f"{geo['city']}, {geo['country']}" if geo else payload.destination
+    weather_line = weather["text"] if weather else "Weather forecast unavailable — pack versatile layers."
+    prompt = (
+        f"Destination: {place}\nTrip length: {payload.days} days\n"
+        f"Occasions: {payload.occasions or 'general travel'}\n"
+        f"Forecast: {weather_line}\n"
+        f"Extra notes: {payload.notes or 'none'}\n"
+        f"Learned preferences: {prefs}\n\n"
+        f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
+        "Build a lean carry-on capsule and a set of outfits from it. Return JSON only."
+    )
+    chat = await ai_chat(f"packing-{user['user_id']}-{uuid.uuid4().hex[:6]}", PACKING_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("packing failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp)
+    if not result or "capsule_item_ids" not in result:
+        raise HTTPException(status_code=502, detail="Could not build a packing plan")
+
+    by_id = {it["id"]: it for it in items}
+    result["capsule_items"] = [by_id[i] for i in result.get("capsule_item_ids", []) if i in by_id]
+    result["resolved_outfits"] = [
+        {"name": o.get("name", "Look"), "items": [by_id[i] for i in o.get("item_ids", []) if i in by_id]}
+        for o in result.get("outfits", [])
+    ]
+    result["destination"] = place
+    result["days"] = payload.days
+    return result
+
+
+# ----------------------------- AI: Wardrobe Health Report -----------------------------
+HEALTH_SYSTEM = (
+    "You are Aura's wardrobe health analyst. You are given wardrobe stats and the raw numbers. Write an honest, "
+    "encouraging monthly report. Return STRICT JSON with keys: "
+    "headline (one punchy sentence summarising the month), "
+    "wasted_summary (2-3 sentences about money tied up in unworn/rarely-worn items, using the numbers given), "
+    "lesson (one actionable sentence about what to wear more or rotate), "
+    "missing_piece (object: recommendation, reason, unlock_note), "
+    "wins (array of 1-3 short positive observations), "
+    "nudges (array of 1-3 short gentle action nudges e.g. 'Wear or donate the 3 untouched dresses'). "
+    "Return ONLY JSON."
+)
+
+
+@api_router.post("/insights/health-report")
+async def health_report(user: dict = Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
+    if len(items) < 3:
+        raise HTTPException(status_code=400, detail="Add a few more pieces to generate your report")
+
+    unworn = [it for it in items if (it.get("wear_count", 0) or 0) == 0]
+    unworn_value = round(sum(it.get("price", 0) or 0 for it in unworn), 2)
+    total_value = round(sum(it.get("price", 0) or 0 for it in items), 2)
+
+    def cpw(it):
+        wc = it.get("wear_count", 0) or 0
+        return (it["price"] / wc) if it.get("price") and wc > 0 else None
+
+    high_cpw = sorted(
+        [it for it in items if cpw(it) is not None],
+        key=lambda x: cpw(x), reverse=True,
+    )[:3]
+    high_cpw_desc = "; ".join(f"{it['name']} (${cpw(it):.2f}/wear)" for it in high_cpw) or "none yet"
+    counts: dict = {}
+    for it in items:
+        counts[it.get("category", "Other")] = counts.get(it.get("category", "Other"), 0) + 1
+    breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items())
+
+    prompt = (
+        f"Total pieces: {len(items)}. Total wardrobe value: ${total_value}.\n"
+        f"Unworn pieces: {len(unworn)} worth ${unworn_value}.\n"
+        f"Highest cost-per-wear items: {high_cpw_desc}.\n"
+        f"Category breakdown: {breakdown}.\n\n"
+        "Write the monthly wardrobe health report. Be honest about wasted money and name the single "
+        "purchase that would unlock the most outfits. Return JSON only."
+    )
+    chat = await ai_chat(f"health-{user['user_id']}-{uuid.uuid4().hex[:6]}", HEALTH_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("health-report failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp)
+    if not result:
+        raise HTTPException(status_code=502, detail="Could not generate your report")
+    result["stats"] = {
+        "total_items": len(items),
+        "total_value": total_value,
+        "unworn_count": len(unworn),
+        "unworn_value": unworn_value,
+    }
+    return result
+
+
 # ----------------------------- Weather -----------------------------
 WEATHER_CODES = {
     0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
