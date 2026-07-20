@@ -25,8 +25,8 @@ const OPTS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ["images"],
   quality: 0.6,
   base64: true,
-  allowsEditing: true,
-  aspect: [3, 4],
+  allowsEditing: false,
+  allowsMultipleSelection: false,
 };
 
 export async function pickFromLibrary(): Promise<PickResult> {

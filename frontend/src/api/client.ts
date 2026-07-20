@@ -35,7 +35,9 @@ export async function api<T = any>(path: string, opts: Options = {}): Promise<T>
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) {
-    await clearToken();
+    // Don't wipe the stored token here — a transient 401 on one call
+    // shouldn't log the user out of the whole app. Auth bootstrap
+    // (/auth/me) handles genuine invalid sessions.
     throw new Error("Unauthorized");
   }
   if (!res.ok) {

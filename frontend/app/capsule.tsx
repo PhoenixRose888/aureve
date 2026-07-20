@@ -1,11 +1,11 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
-import { colors, spacing, radius } from "@/src/theme";
+import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 
 const THEMES = ["Autumn", "Winter", "Spring", "Summer", "Work", "Weekend", "Travel", "Evening"];
@@ -14,6 +14,7 @@ export default function Capsule() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [theme, setTheme] = useState("Autumn");
+  const [occasion, setOccasion] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export default function Capsule() {
     setResult(null);
     setSaved(false);
     try {
-      setResult(await api<any>("/capsule/build", { method: "POST", body: { theme } }));
+      setResult(await api<any>("/capsule/build", { method: "POST", body: { theme, occasion } }));
     } catch (e: any) {
       setError(e.message || "Couldn't build a capsule");
     }
@@ -78,6 +79,16 @@ export default function Capsule() {
         </View>
 
         {error ? <Txt style={styles.error} testID="capsule-error">{error}</Txt> : null}
+
+        <Txt style={styles.groupLabel}>PURPOSE (OPTIONAL)</Txt>
+        <TextInput
+          testID="capsule-occasion-input"
+          style={styles.occInput}
+          value={occasion}
+          onChangeText={setOccasion}
+          placeholder="e.g. business + pleasure trip, everyday work…"
+          placeholderTextColor={colors.onSurfaceTertiary}
+        />
 
         <Pressable style={styles.buildBtn} testID="build-capsule-button" onPress={build} disabled={loading}>
           {loading ? (
@@ -173,6 +184,7 @@ const styles = StyleSheet.create({
   themeTxt: { fontSize: 14, color: colors.onSurfaceSecondary },
   themeTxtActive: { color: colors.onBrandPrimary },
   error: { color: colors.error, fontSize: 13, marginTop: spacing.lg },
+  occInput: { fontFamily: fonts.body, fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm },
   buildBtn: { backgroundColor: colors.brandPrimary, height: 54, borderRadius: radius.sm, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, marginTop: spacing.xl },
   buildTxt: { color: colors.onBrandPrimary, fontSize: 16 },
   loadingTxt: { textAlign: "center", color: colors.onSurfaceTertiary, fontSize: 13, marginTop: spacing.lg, fontStyle: "italic" },

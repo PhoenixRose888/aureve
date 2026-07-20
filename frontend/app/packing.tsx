@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
+import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useRouter } from "expo-router";
@@ -16,6 +16,7 @@ export default function Packing() {
   const router = useRouter();
   const [destination, setDestination] = useState("");
   const [days, setDays] = useState(4);
+  const [startOffset, setStartOffset] = useState(0);
   const [occasions, setOccasions] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -34,7 +35,7 @@ export default function Packing() {
     try {
       const r = await api<any>("/packing/plan", {
         method: "POST",
-        body: { destination: destination.trim(), days, occasions },
+        body: { destination: destination.trim(), days, start_offset_days: startOffset, occasions },
       });
       setResult(r);
     } catch (e: any) {
@@ -100,6 +101,26 @@ export default function Packing() {
             <Feather name="plus" size={18} color={colors.onSurface} />
           </Pressable>
         </View>
+
+        <Txt style={styles.groupLabel}>WHEN'S THE TRIP?</Txt>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.whenRow}>
+          {[
+            { label: "Today", v: 0 },
+            { label: "In 3 days", v: 3 },
+            { label: "In a week", v: 7 },
+            { label: "In 2 weeks", v: 14 },
+          ].map((o) => (
+            <Pressable
+              key={o.v}
+              testID={`when-${o.v}`}
+              style={[styles.whenChip, startOffset === o.v && styles.whenActive]}
+              onPress={() => setStartOffset(o.v)}
+            >
+              <Txt style={[styles.whenTxt, startOffset === o.v && styles.whenTxtActive]}>{o.label}</Txt>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <Txt style={styles.whenHint}>Forecast is checked for your actual travel dates (up to ~2 weeks ahead).</Txt>
 
         <Txt style={styles.groupLabel}>WHAT'S THE TRIP FOR?</Txt>
         <TextInput
@@ -232,6 +253,12 @@ const styles = StyleSheet.create({
   stepBtn: { width: 44, height: 44, borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   daysNum: { fontSize: 32, minWidth: 40, textAlign: "center" },
   presetRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
+  whenRow: { gap: spacing.sm, paddingRight: spacing.xl },
+  whenChip: { height: 40, flexShrink: 0, paddingHorizontal: spacing.lg, borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  whenActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  whenTxt: { fontSize: 13, color: colors.onSurfaceSecondary },
+  whenTxtActive: { color: colors.onBrandPrimary },
+  whenHint: { fontSize: 11, color: colors.onSurfaceTertiary, marginTop: spacing.sm },
   preset: { borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 7 },
   presetTxt: { fontSize: 12, color: colors.onSurfaceSecondary },
   error: { color: colors.error, fontSize: 13, marginTop: spacing.lg },

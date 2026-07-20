@@ -56,6 +56,7 @@ export default function RootLayout() {
               <Stack.Screen name="looks" />
               <Stack.Screen name="planner" />
               <Stack.Screen name="capsule" />
+              <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
               <Stack.Screen name="health-report" options={{ presentation: "modal" }} />
             </Stack>
           </AuthProvider>

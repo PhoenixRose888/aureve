@@ -76,6 +76,22 @@ export default function Profile() {
         </View>
 
         <View style={styles.body}>
+          {/* Style profile */}
+          <Pressable style={styles.styleProfileCta} testID="open-style-profile" onPress={() => router.push("/profile-edit")}>
+            <View style={styles.spIcon}>
+              <Feather name="user" size={18} color={colors.onSurface} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.spTitle}>Your style profile</Txt>
+              <Txt style={styles.spSub}>
+                {(user as any)?.profile && Object.keys((user as any).profile).length > 0
+                  ? "Measurements & skin tone added — tap to edit"
+                  : "Add measurements & skin tone for better fits"}
+              </Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+          </Pressable>
+
           {/* Headline metrics */}
           <View style={styles.metricRow}>
             <Metric value={data?.total_items ?? 0} label="Pieces" />
@@ -253,6 +269,10 @@ const styles = StyleSheet.create({
   name: { fontSize: 24 },
   email: { fontSize: 13, color: colors.onSurfaceTertiary },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
+  styleProfileCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
+  spIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  spTitle: { fontSize: 15, color: colors.onSurface },
+  spSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   metricRow: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.lg, borderBottomWidth: 0.5, borderColor: colors.divider },
   metric: { flex: 1, alignItems: "center", gap: 4 },
   mDiv: { width: 0.5, height: 40, backgroundColor: colors.divider },

@@ -86,9 +86,9 @@ export default function Home() {
               <Txt style={styles.weatherPillTxt}>
                 {status === "done" && weather
                   ? `${Math.round(weather.temperature)}°`
-                  : status === "denied"
-                  ? "—°"
-                  : "…"}
+                  : status === "loading"
+                  ? "…"
+                  : "—°"}
               </Txt>
             </View>
           </View>
@@ -103,9 +103,9 @@ export default function Home() {
                 {weather.city ? `${weather.city} · ` : ""}
                 {Math.round(weather.temperature)}°C · {weather.description}
               </Txt>
-            ) : status === "denied" ? (
+            ) : status === "loading" ? null : (
               <Txt style={styles.weatherLine}>Enable location for weather-aware looks</Txt>
-            ) : null}
+            )}
           </View>
         </View>
 

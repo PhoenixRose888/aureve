@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 3 targeted verification: 17/17 backend tests passed. Packing 500 regression is FIXED — POST /api/packing/plan for 'Melbourne, Australia' days=4 now returns 200 with capsule_items, resolved_outfits, and weather_note for start_offset_days values 0, 3, 7 and 14 (Open-Meteo null-forecast case no longer crashes; server falls back to 'Weather forecast unavailable — pack versatile layers.' text when needed). PUT /api/profile persists {measurements,body_shape,skin_tone,undertone,notes} and GET /api/auth/me returns them nested under 'profile'; partial update (only 'notes') correctly MERGED and did NOT wipe previously-set body_shape/skin_tone/measurements. POST /api/stylist/suggest still returns 200 with resolved_items + integer confidence_score after a profile is set. POST /api/capsule/build with {theme:'Travel', occasion:'business + pleasure'} returns 200 with capsule_items, resolved_outfits and theme echoed. Laundry regression still works — PUT availability:'Washing' surfaces the item in /api/laundry and stylist excludes it; reset to 'Ready' removes it. Quick regression on /api/, /api/weather, items CRUD, /api/insights, /api/insights/missing-piece, /api/items/{id}/compatibility, /api/outfits, /api/plans and /api/insights/health-report all returned 200. Post-run verified: 0 items in /laundry and 0 TEST_ items remain.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/items, POST /api/outfits, POST /api/plans", "issue": "Still return 200 for creation instead of the conventional 201 (carried over from iter 2)."},
+      {"endpoint": "DELETE /api/items/{id}, /api/outfits/{id}, /api/plans/{id}", "issue": "Still return 200 for non-existent ids (silent no-op). Consider 404 (carried over from iter 2)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_targeted.py",
+    "/app/backend/tests/test_aura_backend.py",
+    "/app/backend/tests/test_aura_new_features.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_iteration3.xml"
+  ],
+  "action_items": [
+    "None required for this iteration — all targeted fixes and new features verified.",
+    "Optional carry-overs from iter 2 (not blockers): return 201 from creation endpoints; return 404 from delete-on-missing; keep splitting server.py (now 1066 lines) into routers; add asyncio.wait_for around LlmChat.send_message; trim base64 photo fields out of insights.most_worn/least_worn responses."
+  ],
+  "critical_code_review_comments": [
+    "packing_plan gracefully handles null-forecast now (weather=None -> 'Weather forecast unavailable — pack versatile layers.') and clamps start_offset to <=15 and forecast_days to <=16 — good.",
+    "PUT /api/profile does an in-memory merge before persisting via $set on the whole 'profile' subdocument. Correct behaviour for partial updates in this test, but a concurrent update from the same user could still race (read-modify-write). Not a blocker for MVP; consider $set with dotted keys per field for atomicity.",
+    "ProfileUpdate.measurements is typed as `Optional[dict]` — passing {measurements: null} would explicitly clear it, but the current dict-comprehension filter `v is not None` in update_profile means null values silently no-op instead of clearing individual fields. Documented behaviour, but worth noting for the FE.",
+    "server.py is now 1066 lines; still recommend splitting into routers.",
+    "None of the AI endpoints enforce an explicit asyncio.wait_for timeout on chat.send_message; a stalled OpenAI call can pin a worker."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_targeted.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17 iteration-3 targeted; iter-2 46/46 still valid)", "frontend": "not tested (backend-only run as requested)"},
+  "seed_data_creation": "Used existing seeded user_testaura01 wardrobe. Tests created TEST_ITER3_-prefixed items and reset/deleted them in fixtures/finally blocks. Post-run verified: 0 TEST_ items and 0 laundry items remain. Profile on user_testaura01 is now populated (body_shape=hourglass, skin_tone=medium, undertone=warm, measurements={height:168,waist:72,hips:96,bust:88,inseam:78}, notes='TEST_prof_notes UPDATED') — main agent may want to reset it if a clean profile is expected for future runs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Auth: Bearer test-session-token-aura-123 -> user_testaura01. Profile is now populated (see seed_data_creation above); any test that assumes an empty profile should PUT a reset first. All 4 packing start_offset_days values (0/3/7/14) return 200 — the regression fix is verified end-to-end. BASE_URL is hard-coded in conftest.py to the preview URL. Run time for iteration_3 file: ~55s. Packing/capsule/health calls need timeout>=180s. Always reset laundry items to availability='Ready' before deletion (already handled in the fixtures).",
+  "rca_of_issue": "Original packing 500 RCA (fixed): Open-Meteo returns null entries in temperature_2m_max/min for days that fall past its usable forecast window. The old code called `max(highs)`/`min(lows)` on a list that could contain None, raising TypeError -> 500. Fix in server.py forecast_summary() now filters None values BEFORE aggregation and returns None (not a crash) when the forecast is unusable; packing_plan() then substitutes 'Weather forecast unavailable — pack versatile layers.' into the LLM prompt so the endpoint returns 200 with a sensible weather_note. Verified with start_offset_days=14 (which previously reproduced the 500)."
+}

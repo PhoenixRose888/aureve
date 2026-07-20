@@ -27,7 +27,11 @@ export function useWeather() {
         setStatus("denied");
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+      // Guard against getCurrentPositionAsync hanging indefinitely (common on web).
+      const loc = (await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+      ])) as Location.LocationObject;
       const { latitude, longitude } = loc.coords;
       let city: string | undefined;
       try {

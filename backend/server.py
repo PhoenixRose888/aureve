@@ -150,6 +150,25 @@ async def logout(authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
+class ProfileUpdate(BaseModel):
+    measurements: Optional[dict] = None  # {height, weight, bust, waist, hips, inseam, arm, shoulder, shoe}
+    body_shape: Optional[str] = None
+    skin_tone: Optional[str] = None
+    undertone: Optional[str] = None
+    height: Optional[str] = None
+    sizes: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@api_router.put("/profile")
+async def update_profile(payload: ProfileUpdate, user: dict = Depends(get_current_user)):
+    profile = user.get("profile") or {}
+    updates = {k: v for k, v in payload.dict().items() if v is not None}
+    profile.update(updates)
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"profile": profile}})
+    return await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+
+
 # ----------------------------- Models -----------------------------
 class ItemCreate(BaseModel):
     name: str
@@ -347,6 +366,27 @@ def available_items(items: List[dict]) -> List[dict]:
     return [it for it in items if (it.get("availability") or "Ready") == "Ready"]
 
 
+def profile_context(user: dict) -> str:
+    """Summarise the user's body profile / skin tone for the stylist prompt."""
+    p = user.get("profile") or {}
+    if not p:
+        return "No body profile provided — style with general best practices."
+    parts = []
+    m = p.get("measurements") or {}
+    meas = ", ".join(f"{k}: {v}" for k, v in m.items() if v)
+    if meas:
+        parts.append(f"measurements ({meas})")
+    for key in ["height", "body_shape", "skin_tone", "undertone", "sizes", "notes"]:
+        if p.get(key):
+            parts.append(f"{key.replace('_', ' ')}: {p[key]}")
+    if not parts:
+        return "No body profile provided — style with general best practices."
+    return (
+        "Body profile — " + "; ".join(parts) +
+        ". Choose cuts, lengths, proportions and colours that flatter this body shape and skin tone."
+    )
+
+
 async def learned_prefs(user_id: str) -> str:
     """Summarize what has worked well based on high-rated wear logs."""
     logs = await db.wear_logs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
@@ -398,6 +438,7 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_curr
     prompt = (
         f"Occasion: {payload.occasion}\n{weather_line}\n"
         f"Extra notes: {payload.notes or 'none'}\n"
+        f"{profile_context(user)}\n"
         f"Learned preferences: {prefs}\n\n"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
         "Build one cohesive, weather-appropriate outfit. Return JSON only."
@@ -717,6 +758,7 @@ async def missing_piece(user: dict = Depends(get_current_user)):
 class PackingRequest(BaseModel):
     destination: str
     days: int = 3
+    start_offset_days: int = 0  # how many days from today the trip begins
     occasions: Optional[str] = ""
     notes: Optional[str] = ""
 
@@ -741,31 +783,35 @@ async def geocode_place(name: str):
     }
 
 
-async def forecast_summary(lat: float, lon: float, days: int):
-    days = max(1, min(days, 16))
+async def forecast_summary(lat: float, lon: float, days: int, start_offset: int = 0):
+    # Open-Meteo free forecast reaches ~16 days ahead.
+    start_offset = max(0, min(start_offset, 15))
+    days = max(1, min(days, 16 - start_offset))
+    total = start_offset + days
     async with httpx.AsyncClient(timeout=15) as hc:
         r = await hc.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
                 "latitude": lat, "longitude": lon,
                 "daily": "temperature_2m_max,temperature_2m_min,weather_code",
-                "forecast_days": days, "timezone": "auto",
+                "forecast_days": min(total, 16), "timezone": "auto",
             },
         )
     if r.status_code != 200:
         return None
     d = r.json().get("daily", {})
-    highs = d.get("temperature_2m_max", []) or []
-    lows = d.get("temperature_2m_min", []) or []
-    codes = d.get("weather_code", []) or []
-    if not highs:
+    highs = [h for h in (d.get("temperature_2m_max", []) or [])[start_offset:total] if h is not None]
+    lows = [l for l in (d.get("temperature_2m_min", []) or [])[start_offset:total] if l is not None]
+    codes = [c for c in (d.get("weather_code", []) or [])[start_offset:total] if c is not None]
+    if not highs or not lows:
         return None
     conditions = list({WEATHER_CODES.get(c, "Unknown") for c in codes})
+    window = "for your travel dates" if start_offset > 0 else ""
     return {
         "high": round(max(highs)),
         "low": round(min(lows)),
         "conditions": conditions,
-        "text": f"Highs {round(max(highs))}°C, lows {round(min(lows))}°C. Expect: {', '.join(conditions)}.",
+        "text": f"Highs {round(max(highs))}°C, lows {round(min(lows))}°C {window}. Expect: {', '.join(conditions)}.".replace("  ", " "),
     }
 
 
@@ -795,17 +841,19 @@ async def packing_plan(payload: PackingRequest, user: dict = Depends(get_current
     geo = await geocode_place(payload.destination)
     weather = None
     if geo:
-        weather = await forecast_summary(geo["lat"], geo["lon"], payload.days)
+        weather = await forecast_summary(geo["lat"], geo["lon"], payload.days, payload.start_offset_days)
 
     wardrobe = summarize_items_for_ai(items)
     prefs = await learned_prefs(user["user_id"])
     place = f"{geo['city']}, {geo['country']}" if geo else payload.destination
     weather_line = weather["text"] if weather else "Weather forecast unavailable — pack versatile layers."
+    when = f"starting in {payload.start_offset_days} days" if payload.start_offset_days else "starting today"
     prompt = (
-        f"Destination: {place}\nTrip length: {payload.days} days\n"
+        f"Destination: {place}\nTrip length: {payload.days} days ({when})\n"
         f"Occasions: {payload.occasions or 'general travel'}\n"
         f"Forecast: {weather_line}\n"
         f"Extra notes: {payload.notes or 'none'}\n"
+        f"{profile_context(user)}\n"
         f"Learned preferences: {prefs}\n\n"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
         "Build a lean carry-on capsule and a set of outfits from it. Return JSON only."
@@ -834,6 +882,7 @@ async def packing_plan(payload: PackingRequest, user: dict = Depends(get_current
 # ----------------------------- AI: Seasonal / Purpose Capsule -----------------------------
 class CapsuleRequest(BaseModel):
     theme: str  # e.g. Autumn, Winter, Work, Travel, Weekend
+    occasion: Optional[str] = ""
 
 
 CAPSULE_SYSTEM = (
@@ -861,7 +910,10 @@ async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_curren
     wardrobe = summarize_items_for_ai(items)
     prefs = await learned_prefs(user["user_id"])
     prompt = (
-        f"Capsule theme: {payload.theme}\nLearned preferences: {prefs}\n\n"
+        f"Capsule theme: {payload.theme}\n"
+        f"Purpose / occasions: {payload.occasion or 'general'}\n"
+        f"{profile_context(user)}\n"
+        f"Learned preferences: {prefs}\n\n"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
         "Build a cohesive capsule and a set of outfits from it. Return JSON only."
     )

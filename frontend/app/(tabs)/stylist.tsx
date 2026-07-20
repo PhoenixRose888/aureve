@@ -123,9 +123,9 @@ export default function Stylist() {
           <Txt style={styles.weatherTxt}>
             {status === "done" && weather
               ? `${weather.city ? weather.city + " · " : ""}${Math.round(weather.temperature)}°C, ${weather.description}`
-              : status === "denied"
-              ? "Location off — styling without weather"
-              : "Fetching weather…"}
+              : status === "loading"
+              ? "Fetching weather…"
+              : "Styling without live weather"}
           </Txt>
         </View>
 

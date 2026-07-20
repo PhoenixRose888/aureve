@@ -14,6 +14,7 @@ type AuthCtx = {
   signingIn: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({} as AuthCtx);
@@ -114,8 +115,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await api<User>("/auth/me"));
+    } catch {}
+  }, []);
+
   return (
-    <Ctx.Provider value={{ user, loading, signingIn, login, logout }}>
+    <Ctx.Provider value={{ user, loading, signingIn, login, logout, refreshUser }}>
       {children}
     </Ctx.Provider>
   );
