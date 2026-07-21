@@ -17,6 +17,13 @@ export default function Profile() {
   const { user, logout } = useAuth();
   const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
   const premium = !!user?.premium;
+  const initials = (user?.name || user?.email || "?")
+    .split(/\s+/)
+    .map((w: string) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [missing, setMissing] = useState<any>(null);
@@ -73,24 +80,40 @@ export default function Profile() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.onSurface} />}
       >
-        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <View style={styles.profileRow}>
-            <Pressable style={styles.switcherTrigger} testID="profile-switcher-trigger" onPress={() => setShowSwitcher(true)}>
-              <View style={styles.avatar}>
-                <Txt style={styles.avatarEmoji}>{active?.emoji || "👤"}</Txt>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          <View style={styles.accountCard}>
+            <View style={styles.avatarLg}>
+              <Txt style={styles.avatarInitials}>{initials}</Txt>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{user?.name || "Your account"}</Display>
+              {user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
+              <View style={premium ? styles.badgePremium : styles.badgeFree}>
+                <Feather name={premium ? "award" : "user"} size={11} color={premium ? colors.onSage : colors.onSurfaceSecondary} />
+                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : "Free plan"}</Txt>
               </View>
-              <View style={{ flex: 1 }}>
-                <Txt style={styles.accountName}>{user?.name || "Account"}</Txt>
-                <View style={styles.activeRow}>
-                  <Display weight="medium" style={styles.name}>{active?.name || "Wardrobe"}</Display>
-                  <Feather name="chevron-down" size={18} color={colors.onSurfaceSecondary} />
-                </View>
-              </View>
-            </Pressable>
+            </View>
             <Pressable onPress={logout} testID="logout-button" hitSlop={10}>
-              <Feather name="log-out" size={20} color={colors.onSurfaceSecondary} />
+              <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
             </Pressable>
           </View>
+
+          <View style={styles.metricRow}>
+            <Metric value={data?.total_items ?? 0} label="Pieces" />
+            <View style={styles.mDiv} />
+            <Metric value={data?.outfits_logged ?? 0} label="Looks" />
+            <View style={styles.mDiv} />
+            <Metric value={profiles?.length ?? 1} label="Profiles" />
+          </View>
+
+          <Pressable style={styles.switcherRow} testID="profile-switcher-trigger" onPress={() => setShowSwitcher(true)}>
+            <View style={styles.avatarSm}><Txt style={styles.avatarEmoji}>{active?.emoji || "👤"}</Txt></View>
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.switcherLabel}>Active wardrobe</Txt>
+              <Txt style={styles.switcherName}>{active?.name || "Wardrobe"}</Txt>
+            </View>
+            <Feather name="chevron-down" size={18} color={colors.onSurfaceSecondary} />
+          </Pressable>
         </View>
 
         <View style={styles.body}>
@@ -163,14 +186,6 @@ export default function Profile() {
             </View>
             <Feather name="chevron-right" size={20} color={premium ? colors.onSurfaceTertiary : colors.brandTertiary} />
           </Pressable>
-
-          <View style={styles.metricRow}>
-            <Metric value={data?.total_items ?? 0} label="Pieces" />
-            <View style={styles.mDiv} />
-            <Metric value={data?.avg_cost_per_wear != null ? `$${data.avg_cost_per_wear}` : "—"} label="Avg cost/wear" />
-            <View style={styles.mDiv} />
-            <Metric value={data?.outfits_logged ?? 0} label="Looks logged" />
-          </View>
 
           {/* Monthly wardrobe health report */}
           <Pressable style={styles.reportCta} testID="open-health-report" onPress={() => (premium ? router.push("/health-report") : router.push("/premium"))}>
@@ -393,6 +408,19 @@ function RankList({ title, items, router }: { title: string; items: any[]; route
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.border },
+  accountCard: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  avatarLg: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.sage, alignItems: "center", justifyContent: "center" },
+  avatarInitials: { fontSize: 22, color: colors.onSage, fontFamily: fonts.displayMedium },
+  accountNameLg: { fontSize: 20 },
+  accountEmail: { fontSize: 13, color: colors.onSurfaceTertiary, marginTop: 1 },
+  badgePremium: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: colors.sage, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginTop: 6 },
+  badgePremiumTxt: { fontSize: 11, color: colors.onSage, fontFamily: fonts.displayMedium },
+  badgeFree: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: colors.surfaceSecondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginTop: 6 },
+  badgeFreeTxt: { fontSize: 11, color: colors.onSurfaceSecondary, fontFamily: fonts.displayMedium },
+  avatarSm: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  switcherRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
+  switcherLabel: { fontSize: 11, color: colors.onSurfaceTertiary },
+  switcherName: { fontSize: 15, color: colors.onSurface, fontFamily: fonts.displayMedium },
   profileRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   switcherTrigger: { flexDirection: "row", alignItems: "center", gap: spacing.md, flex: 1 },
   avatar: { width: 52, height: 52, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
