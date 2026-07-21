@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   actions: { paddingHorizontal: spacing.lg, marginTop: spacing["2xl"], gap: spacing.md },
   primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.sage, height: 52, borderRadius: radius.md },
   primaryDone: { backgroundColor: colors.sagePressed },
-  primaryTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayMedium },
+  primaryTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayBold },
   secondaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
-  secondaryTxt: { color: colors.onSurface, fontSize: 16, fontFamily: fonts.displayMedium },
+  secondaryTxt: { color: colors.onSurface, fontSize: 16, fontFamily: fonts.displayBold },
 });

@@ -54,12 +54,13 @@ export const radius = {
 };
 
 export const fonts = {
-  display: "PlusJakartaSans-SemiBold",
-  displayBold: "PlusJakartaSans-Bold",
-  displayMedium: "PlusJakartaSans-Medium",
-  displayRegular: "PlusJakartaSans-Regular",
-  body: "Geist",
-  // Elegant serif — used for the Aureve wordmark / brand lockups.
+  // Editorial UI type — Inter. Clean, modern, premium (Apple / Linear / COS feel).
+  display: "Inter-SemiBold",       // section headings — 600
+  displayBold: "Inter-Bold",       // primary CTAs — 700
+  displayMedium: "Inter-Medium",   // nav / medium emphasis — 500
+  displayRegular: "Inter-Regular", // 400
+  body: "Inter-Regular",           // body text — 400
+  // Elegant serif — used only for the Aureve wordmark / brand lockups.
   serif: "CormorantGaramond-SemiBold",
   serifMedium: "CormorantGaramond-Medium",
   serifRegular: "CormorantGaramond-Regular",

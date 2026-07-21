@@ -19,10 +19,10 @@ export default function TabsLayout() {
           paddingBottom: Platform.OS === "ios" ? 28 : 10,
         },
         tabBarLabelStyle: {
-          fontFamily: fonts.body,
-          fontSize: 10,
-          letterSpacing: 0.3,
-          marginTop: 2,
+          fontFamily: fonts.displayMedium,
+          fontSize: 11,
+          letterSpacing: 0,
+          marginTop: 4,
         },
       }}
     >

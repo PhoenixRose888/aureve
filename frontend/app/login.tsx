@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
   },
-  googleTxt: { color: colors.onSurface, fontSize: 16, fontFamily: fonts.body },
+  googleTxt: { color: colors.onSurface, fontSize: 16, fontFamily: fonts.displayBold },
   guestBtn: {
     height: 52,
     borderRadius: 4,

@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  saveTxt: { color: colors.onBrandPrimary, fontSize: 16 },
+  saveTxt: { color: colors.onBrandPrimary, fontSize: 16, fontFamily: fonts.displayBold },
   hintBackdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.5)", justifyContent: "flex-end" },
   hintSheet: {
     backgroundColor: colors.surface,

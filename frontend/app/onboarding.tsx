@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   valueTitle: { fontSize: 27, textAlign: "center", marginBottom: spacing.lg, lineHeight: 34 },
   valueBody: { fontSize: 15, color: colors.onSurfaceSecondary, textAlign: "center", lineHeight: 23, paddingHorizontal: spacing.sm },
   primaryBtn: { alignSelf: "stretch", backgroundColor: colors.sage, height: 54, borderRadius: radius.md, alignItems: "center", justifyContent: "center", marginBottom: spacing.md },
-  primaryTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayMedium },
+  primaryTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayBold },
   signIn: { paddingVertical: spacing.sm },
   signInTxt: { fontSize: 15, color: colors.onSurfaceSecondary },
   dots: { position: "absolute", left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 },

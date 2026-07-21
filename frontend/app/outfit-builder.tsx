@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   feedbackTxt: { fontSize: 14, color: colors.onBrandTertiary, lineHeight: 21 },
   footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border, gap: spacing.md, backgroundColor: colors.surface },
   saveBtn: { backgroundColor: colors.sage, height: 52, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
-  saveTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayMedium },
+  saveTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayBold },
   aiBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.sage, height: 52, borderRadius: radius.md },
   aiBtnGhost: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   aiTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayMedium },

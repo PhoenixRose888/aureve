@@ -122,7 +122,7 @@ export default function Home() {
 
         {/* Hero: Dress Me */}
         <Pressable style={styles.dressBtn} testID="home-dress-me-button" onPress={openDressMe}>
-          <Display weight="semibold" style={styles.dressTxt}>Dress Me</Display>
+          <Display weight="bold" style={styles.dressTxt}>Dress Me</Display>
           <View style={styles.dressArrow}>
             <Feather name="arrow-right" size={20} color={colors.onSage} />
           </View>
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   dressTxt: { color: colors.onSage, fontSize: 22 },
   dressArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  sectionTitle: { fontSize: 16, color: colors.onSurface, fontFamily: fonts.displayMedium },
+  sectionTitle: { fontSize: 16, color: colors.onSurface, fontFamily: fonts.display, letterSpacing: -0.3 },
   seeAll: { fontSize: 13, color: colors.sage },
   recentRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
   recentCard: { width: 150 },

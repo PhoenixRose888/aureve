@@ -4,7 +4,7 @@ import { colors, fonts } from "@/src/theme";
 
 type Props = TextProps & { children: React.ReactNode };
 
-// Display headings (Plus Jakarta Sans) — modern, readable, timeless.
+// Display headings (Inter) — editorial, tight tracking, premium.
 export function Display(props: Props & { weight?: "regular" | "medium" | "semibold" | "bold" }) {
   const { style, weight = "semibold", ...rest } = props;
   const family =
@@ -18,7 +18,7 @@ export function Display(props: Props & { weight?: "regular" | "medium" | "semibo
   return <Text {...rest} style={[styles.display, { fontFamily: family }, style]} />;
 }
 
-// Body / UI text (Geist)
+// Body / UI text (Inter Regular)
 export function Txt(props: Props) {
   const { style, ...rest } = props;
   return <Text {...rest} style={[styles.body, style]} />;
@@ -32,5 +32,6 @@ const styles = StyleSheet.create({
   body: {
     fontFamily: fonts.body,
     color: colors.onSurface,
+    letterSpacing: -0.1,
   },
 });

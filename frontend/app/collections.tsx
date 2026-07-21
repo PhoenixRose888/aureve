@@ -125,5 +125,5 @@ const styles = StyleSheet.create({
   cancel: { flex: 1, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   cancelTxt: { fontSize: 15, color: colors.onSurface, fontFamily: fonts.displayMedium },
   save: { flex: 1, height: 48, borderRadius: radius.md, backgroundColor: colors.sage, alignItems: "center", justifyContent: "center" },
-  saveTxt: { fontSize: 15, color: colors.onSage, fontFamily: fonts.displayMedium },
+  saveTxt: { fontSize: 15, color: colors.onSage, fontFamily: fonts.displayBold },
 });

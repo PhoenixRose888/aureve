@@ -235,5 +235,5 @@ const styles = StyleSheet.create({
   chipTxtActive: { color: colors.onBrandPrimary },
   footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border, backgroundColor: colors.surface },
   saveBtn: { backgroundColor: colors.brandPrimary, height: 54, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  saveTxt: { color: colors.onBrandPrimary, fontSize: 16 },
+  saveTxt: { color: colors.onBrandPrimary, fontSize: 16, fontFamily: fonts.displayBold },
 });
