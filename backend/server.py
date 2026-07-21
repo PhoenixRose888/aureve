@@ -1061,7 +1061,10 @@ STYLIST_SYSTEM = (
     "confidence_score (integer 0-100 rating the outfit on colour harmony, style cohesion, occasion + weather "
     "suitability, proportion/silhouette and use of existing wardrobe), "
     "score_reasons (array of 3-5 short bullet strings justifying the score), "
-    "styling_notes (string), hair (string), makeup (string), confidence_tip (string), summary (string). "
+    "styling_notes (string), hair (string), makeup (string), confidence_tip (string), "
+    "summary (ONE short editorial styling line, max ~12 words, describing the vibe and how it "
+    "suits the occasion/weather — e.g. \"Clean, smart casual and ideal for today's cool drizzle.\" "
+    "Do NOT list the garment names in the summary). "
     "slot values should be human labels like Top, Bottom, Dress, Outerwear, Shoes, Bag, Belt, Scarf, Sunglasses, "
     "Jewellery, Accessory. Only include item_id values that exist in the provided wardrobe. Return ONLY JSON."
 )

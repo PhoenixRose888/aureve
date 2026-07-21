@@ -169,6 +169,18 @@ frontend:
         -agent: "main"
         -comment: "Global font swap to Inter. Verify typography renders across all tabs, empty states, navigation, spacing, no broken routes/console errors/visual overflow."
 
+  - task: "Dress Me — concise editorial summary + separate piece list"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/dressme.tsx, backend/server.py (STYLIST_SYSTEM)"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Replaced the long AI paragraph with a concise editorial one-line summary (backend STYLIST_SYSTEM 'summary' now ~12 words, vibe/occasion/weather, no garment names) + added an editorial piece list (SLOT + item name rows). Verified via curl: summary='Polished neutrals with a modern edge, perfect for cool drizzle.' + 6 pieces."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"

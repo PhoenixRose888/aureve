@@ -183,6 +183,17 @@ export default function DressMe() {
               </View>
             ) : null}
 
+            {items.length ? (
+              <View style={styles.pieceList}>
+                {items.map((r: any, i: number) => (
+                  <View key={i} style={styles.pieceRow}>
+                    <Txt style={styles.pieceSlot}>{(r.slot || r.item.category || "").toUpperCase()}</Txt>
+                    <Txt style={styles.pieceName} numberOfLines={1}>{r.item.name}</Txt>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             <View style={styles.actions}>
               <Pressable style={[styles.primaryBtn, saved && styles.primaryDone]} onPress={saveLook} disabled={saved} testID="dressme-save">
                 {saved ? <Feather name="check" size={18} color={colors.onSage} /> : null}
@@ -254,7 +265,11 @@ const styles = StyleSheet.create({
   stackImg: { width: 230, height: 170, backgroundColor: "transparent" },
   tapHint: { textAlign: "center", fontSize: 13, color: colors.onSurfaceTertiary, marginTop: spacing.sm },
   explainWrap: { paddingHorizontal: spacing["2xl"], marginTop: spacing.xl },
-  explain: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 22, textAlign: "center" },
+  explain: { fontSize: 15, color: colors.onSurface, lineHeight: 22, textAlign: "center", fontFamily: fonts.displayMedium },
+  pieceList: { marginTop: spacing.xl, marginHorizontal: spacing.xl, borderTopWidth: 0.5, borderTopColor: colors.divider },
+  pieceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.divider },
+  pieceSlot: { fontSize: 11, letterSpacing: 1.2, color: colors.onSurfaceTertiary, fontFamily: fonts.displayMedium },
+  pieceName: { flex: 1, fontSize: 14, color: colors.onSurface, textAlign: "right" },
   actions: { paddingHorizontal: spacing.lg, marginTop: spacing["2xl"], gap: spacing.md },
   primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.sage, height: 52, borderRadius: radius.md },
   primaryDone: { backgroundColor: colors.sagePressed },
