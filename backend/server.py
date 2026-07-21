@@ -790,6 +790,47 @@ class CaptureRequest(BaseModel):
     clean: bool = True
 
 
+def _norm(v) -> str:
+    return str(v or "").strip().lower()
+
+
+def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> List[dict]:
+    """Flag pieces in the wardrobe that look like the one just captured, so users
+    don't unknowingly re-add something they already own. Category must match; colour,
+    style, fabric and pattern add to a confidence score."""
+    cat = _norm(analysis.get("category"))
+    if not cat:
+        return []
+    colour, style = _norm(analysis.get("colour")), _norm(analysis.get("style"))
+    fabric, pattern = _norm(analysis.get("fabric")), _norm(analysis.get("pattern"))
+    scored = []
+    for it in items:
+        if _norm(it.get("category")) != cat:
+            continue
+        score = 0
+        if colour and _norm(it.get("colour")) == colour:
+            score += 2
+        if style and _norm(it.get("style")) == style:
+            score += 2
+        if fabric and _norm(it.get("fabric")) == fabric:
+            score += 1
+        if pattern and _norm(it.get("pattern")) == pattern:
+            score += 1
+        if score >= 3:
+            scored.append((score, it))
+    scored.sort(key=lambda s: s[0], reverse=True)
+    return [
+        {
+            "id": it["id"],
+            "name": it.get("name", ""),
+            "category": it.get("category", ""),
+            "colour": it.get("colour", ""),
+            "photo": it.get("photo"),
+        }
+        for _, it in scored[:limit]
+    ]
+
+
 @api_router.post("/capture")
 async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope)):
     """One-shot capture: auto-tag the garment AND clean its background in parallel,
@@ -811,7 +852,11 @@ async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope))
             logger.warning("capture clean failed: %s", cr)
         else:
             clean_img = cr
-    return {"analysis": analysis, "clean_image": clean_img}
+    duplicates = []
+    if analysis:
+        existing = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+        duplicates = find_similar_items(analysis, existing)
+    return {"analysis": analysis, "clean_image": clean_img, "duplicates": duplicates}
 
 
 # ----------------------------- AI: Stylist Suggest -----------------------------

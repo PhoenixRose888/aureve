@@ -9,7 +9,7 @@ import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { pickMultipleFromLibrary, openSettings } from "@/src/utils/image";
 
-type Row = { thumb: string; name: string; category: string; status: "done" | "failed" };
+type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; dupe?: boolean };
 
 export default function BulkAdd() {
   const insets = useSafeAreaInsets();
@@ -49,6 +49,7 @@ export default function BulkAdd() {
         const photo = res.clean_image || base64;
         const name = a.name || "New piece";
         const category = a.category || "Tops";
+        const dupe = Array.isArray(res.duplicates) && res.duplicates.length > 0;
         await api("/items", {
           method: "POST",
           body: {
@@ -67,7 +68,7 @@ export default function BulkAdd() {
             tone: a.tone || "",
           },
         });
-        setRows((r) => [...r, { thumb: photo, name, category, status: "done" }]);
+        setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe }]);
       } catch {
         setRows((r) => [...r, { thumb: base64, name: "Couldn't add", category: "", status: "failed" }]);
       }
@@ -81,6 +82,7 @@ export default function BulkAdd() {
   React.useEffect(() => { run(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const added = rows.filter((r) => r.status === "done").length;
+  const dupes = rows.filter((r) => r.status === "done" && r.dupe).length;
 
   return (
     <View style={styles.container}>
@@ -105,7 +107,7 @@ export default function BulkAdd() {
         ) : phase === "done" ? (
           <>
             <Display weight="medium" style={styles.title}>{added} {added === 1 ? "piece" : "pieces"} added</Display>
-            <Txt style={styles.sub}>All set — they&apos;re in your wardrobe now.</Txt>
+            <Txt style={styles.sub}>{dupes > 0 ? `All set — ${dupes} may be a duplicate of something you own (flagged below). Review and delete any you don't need.` : "All set — they're in your wardrobe now."}</Txt>
           </>
         ) : (
           <Display weight="medium" style={styles.title}>Choose photos…</Display>
@@ -123,11 +125,15 @@ export default function BulkAdd() {
             <View key={i} style={styles.cell}>
               <Image source={{ uri: `data:image/jpeg;base64,${r.thumb}` }} style={[styles.cellImg, r.status === "failed" && styles.cellFailed]} contentFit="cover" />
               {r.status === "done" ? (
-                <View style={styles.tick}><Feather name="check" size={11} color={colors.onBrandPrimary} /></View>
+                r.dupe ? (
+                  <View style={styles.dupeBadge}><Feather name="copy" size={10} color={colors.onSurface} /></View>
+                ) : (
+                  <View style={styles.tick}><Feather name="check" size={11} color={colors.onBrandPrimary} /></View>
+                )
               ) : (
                 <View style={styles.cross}><Feather name="x" size={11} color={colors.onSurfaceInverse} /></View>
               )}
-              <Txt style={styles.cellName} numberOfLines={1}>{r.name}</Txt>
+              <Txt style={styles.cellName} numberOfLines={1}>{r.dupe ? "Possible dupe" : r.name}</Txt>
             </View>
           ))}
         </View>
@@ -165,6 +171,7 @@ const styles = StyleSheet.create({
   cellImg: { width: "100%", aspectRatio: 0.8, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   cellFailed: { opacity: 0.4 },
   tick: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
+  dupeBadge: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.warning, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   cellName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
   footer: { flexDirection: "row", gap: spacing.md, padding: spacing.xl, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border },

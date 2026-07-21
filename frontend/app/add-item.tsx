@@ -39,6 +39,7 @@ export default function AddItem() {
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [duplicates, setDuplicates] = useState<any[]>([]);
 
   useEffect(() => {
     if (!editing) return;
@@ -88,6 +89,7 @@ export default function AddItem() {
         if (r.condition) setCondition(r.condition);
         if (r.estimated_value && !price) setPrice(String(r.estimated_value));
         setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
+        setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
       } catch {
         setError("Couldn't auto-detect. Fill details manually.");
       }
@@ -213,6 +215,31 @@ export default function AddItem() {
         </View>
 
         {error ? <Txt style={styles.error} testID="add-item-error">{error}</Txt> : null}
+
+        {duplicates.length > 0 ? (
+          <View style={styles.dupBanner} testID="add-item-duplicates">
+            <View style={styles.dupHeader}>
+              <Feather name="copy" size={15} color={colors.onSurface} />
+              <Txt style={styles.dupTitle}>You may already own this</Txt>
+              <Pressable onPress={() => setDuplicates([])} testID="dup-dismiss" hitSlop={10}>
+                <Feather name="x" size={16} color={colors.onSurfaceTertiary} />
+              </Pressable>
+            </View>
+            <Txt style={styles.dupSub}>Similar pieces in your wardrobe — add anyway or skip to avoid a duplicate.</Txt>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dupRow}>
+              {duplicates.map((d) => (
+                <Pressable key={d.id} style={styles.dupCard} testID={`dup-${d.id}`} onPress={() => router.replace({ pathname: "/item/[id]", params: { id: d.id } })}>
+                  {d.photo ? (
+                    <Image source={{ uri: `data:image/jpeg;base64,${d.photo}` }} style={styles.dupImg} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.dupImg, styles.dupImgEmpty]}><Feather name="image" size={18} color={colors.onSurfaceTertiary} /></View>
+                  )}
+                  <Txt style={styles.dupName} numberOfLines={1}>{d.name || d.category}</Txt>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
         <Field label="Name (optional — AI fills it)" value={name} onChangeText={setName} placeholder="e.g. Cream linen blazer" testID="field-name" />
 
@@ -363,6 +390,15 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22 },
   bulkLink: { fontSize: 14, color: colors.brand },
+  dupBanner: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 0.5, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.lg },
+  dupHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  dupTitle: { flex: 1, fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium },
+  dupSub: { fontSize: 12, color: colors.onSurfaceSecondary, marginTop: 4, lineHeight: 17 },
+  dupRow: { gap: spacing.md, paddingTop: spacing.md },
+  dupCard: { width: 72 },
+  dupImg: { width: 72, height: 90, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary },
+  dupImgEmpty: { alignItems: "center", justifyContent: "center" },
+  dupName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   photoRow: { flexDirection: "row", gap: spacing.md },
   photoBox: {
