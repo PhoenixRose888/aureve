@@ -475,6 +475,7 @@ async def delete_profile(profile_id: str, account: dict = Depends(get_current_us
     # Remove the profile and its wardrobe data
     for coll in (db.items, db.outfits, db.wear_logs, db.plans):
         await coll.delete_many({"user_id": profile_id})
+    await db.body_photos.delete_one({"profile_id": profile_id})
     await db.profiles.delete_one({"id": profile_id, "user_id": account["user_id"]})
     return {"ok": True}
 
@@ -564,7 +565,8 @@ class OutfitCreate(BaseModel):
     item_ids: List[str]
     occasion: Optional[str] = ""
     notes: Optional[str] = ""
-    source: Optional[str] = "manual"  # manual | ai
+    source: Optional[str] = "manual"  # manual | ai | tryon | capsule
+    preview_image: Optional[str] = None  # base64 (e.g. a saved virtual try-on render)
 
 
 # ----------------------------- Wardrobe Items -----------------------------
@@ -922,6 +924,33 @@ async def virtual_tryon(payload: TryOnRequest, user: dict = Depends(get_scope)):
     if not images:
         raise HTTPException(status_code=502, detail="Couldn't generate a try-on image. Try a clearer full-body photo.")
     return {"image": images[0]["data"], "mime_type": images[0].get("mime_type", "image/png")}
+
+
+class BodyPhoto(BaseModel):
+    photo: str  # base64 (no data-uri prefix)
+
+
+@api_router.get("/tryon/photo")
+async def get_body_photo(user: dict = Depends(get_scope)):
+    """The remembered full-body photo for the active profile (so try-on doesn't re-upload)."""
+    doc = await db.body_photos.find_one({"profile_id": user["profile_id"]}, {"_id": 0})
+    return {"photo": (doc or {}).get("photo")}
+
+
+@api_router.put("/tryon/photo")
+async def set_body_photo(payload: BodyPhoto, user: dict = Depends(get_scope)):
+    await db.body_photos.update_one(
+        {"profile_id": user["profile_id"]},
+        {"$set": {"profile_id": user["profile_id"], "photo": payload.photo, "updated_at": now_utc().isoformat()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.delete("/tryon/photo")
+async def delete_body_photo(user: dict = Depends(get_scope)):
+    await db.body_photos.delete_one({"profile_id": user["profile_id"]})
+    return {"ok": True}
 
 
 # ----------------------------- AI: Compatibility / Wardrobe Intelligence -----------------------------

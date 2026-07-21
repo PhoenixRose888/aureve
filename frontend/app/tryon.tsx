@@ -21,11 +21,16 @@ export default function TryOn() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [savedIds, setSavedIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const all = await api<any[]>("/items");
+      const [all, bp] = await Promise.all([
+        api<any[]>("/items"),
+        api<{ photo: string | null }>("/tryon/photo").catch(() => ({ photo: null })),
+      ]);
       setItems(all.filter((i) => i.photo));
+      if (bp?.photo) setPerson((p) => p ?? bp.photo);
     } catch {}
   }, []);
 
@@ -34,6 +39,12 @@ export default function TryOn() {
   useEffect(() => {
     if (params.items) setSelected(String(params.items).split(",").filter(Boolean));
   }, [params.items]);
+
+  const onPickedPhoto = useCallback((b64: string) => {
+    setPerson(b64);
+    setResult(null);
+    api("/tryon/photo", { method: "PUT", body: { photo: b64 } }).catch(() => {});
+  }, []);
 
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -52,6 +63,23 @@ export default function TryOn() {
       else setError(e.message || "Couldn't generate your try-on. Try a clearer full-body photo.");
     }
     setLoading(false);
+  };
+
+  const saveToLooks = async () => {
+    if (!result) return;
+    const key = selected.join(",");
+    try {
+      await api("/outfits", {
+        method: "POST",
+        body: {
+          name: "Try-on look",
+          item_ids: selected,
+          source: "tryon",
+          preview_image: result,
+        },
+      });
+      setSavedIds((s) => [...s, key]);
+    } catch {}
   };
 
   return (
@@ -122,6 +150,10 @@ export default function TryOn() {
           <View style={styles.resultWrap} testID="tryon-result">
             <Image source={{ uri: `data:image/png;base64,${result}` }} style={styles.resultImg} contentFit="contain" />
             <Txt style={styles.resultNote}>AI-generated preview — fit and detail may vary.</Txt>
+            <Pressable style={styles.saveBtn} testID="tryon-save" onPress={saveToLooks} disabled={savedIds.includes(selected.join(","))}>
+              <Feather name={savedIds.includes(selected.join(",")) ? "check" : "bookmark"} size={16} color={colors.onSurface} />
+              <Txt style={styles.saveTxt}>{savedIds.includes(selected.join(",")) ? "Saved to Looks" : "Save to Looks"}</Txt>
+            </Pressable>
           </View>
         ) : null}
       </ScrollView>
@@ -129,7 +161,7 @@ export default function TryOn() {
       <PhotoPickerModal
         visible={picker}
         onClose={() => setPicker(false)}
-        onPicked={(b64) => { setPerson(b64); setResult(null); }}
+        onPicked={onPickedPhoto}
         title="Add your photo"
       />
     </View>
@@ -164,4 +196,6 @@ const styles = StyleSheet.create({
   resultWrap: { marginTop: spacing.xl },
   resultImg: { width: "100%", height: 460, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary },
   resultNote: { fontSize: 12, color: colors.onSurfaceTertiary, textAlign: "center", marginTop: spacing.sm },
+  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 50, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, marginTop: spacing.lg },
+  saveTxt: { color: colors.onSurface, fontSize: 15 },
 });

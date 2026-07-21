@@ -16,7 +16,7 @@ function fmtDate(iso: string) {
   }
 }
 
-const sourceLabel: Record<string, string> = { ai: "AI STYLED", manual: "SAVED", capsule: "CAPSULE" };
+const sourceLabel: Record<string, string> = { ai: "AI STYLED", manual: "SAVED", capsule: "CAPSULE", tryon: "TRY-ON" };
 
 export default function Looks() {
   const insets = useSafeAreaInsets();
@@ -103,6 +103,9 @@ export default function Looks() {
                     <Feather name="trash-2" size={18} color={colors.onSurfaceTertiary} />
                   </Pressable>
                 </View>
+                {o.preview_image ? (
+                  <Image source={{ uri: `data:image/png;base64,${o.preview_image}` }} style={styles.preview} contentFit="cover" />
+                ) : null}
                 <Thumbs items={o.items || []} />
               </View>
             ))}
@@ -183,6 +186,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 20, lineHeight: 24 },
   cardMeta: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   thumbs: { flexDirection: "row", gap: spacing.sm },
+  preview: { width: "100%", height: 300, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, marginBottom: spacing.md },
   thumb: { width: 54, height: 68, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   placeholder: { alignItems: "center", justifyContent: "center" },
   more: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceTertiary },

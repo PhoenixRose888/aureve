@@ -1,5 +1,11 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21e) — Try-On stickiness
+- ✅ **Remembered body photo** — the try-on photo is saved per profile (`GET/PUT/DELETE /api/tryon/photo`, `body_photos` collection) and auto-loads, so users don't re-upload each session.
+- ✅ **Save Try-On to Looks** — try-on results save as an outfit (`source:'tryon'`, `preview_image` base64) via the existing `/outfits`; the Looks "Saved" tab shows the generated image as a full cover with a TRY-ON badge. Verified via curl; frontend lint-clean.
+
+
+
 ## Implemented (2026-07-21d) — Virtual Try-On (Nano Banana)
 - ✅ **Virtual Try-On** (Premium) — `POST /api/tryon {person_image, item_ids[], outfit_id?}` sends your photo + garment photos to Gemini `gemini-3.1-flash-image-preview` and returns a photorealistic image of you wearing the outfit. New `app/tryon.tsx` (pick your photo → select wardrobe pieces → generate). Entry points: Home CTA + "See it on me" from a Dress Me result (prefills the items). Premium-gated; validates photo/items. Verified iteration 9 (7/7, real generation ~8s).
 
