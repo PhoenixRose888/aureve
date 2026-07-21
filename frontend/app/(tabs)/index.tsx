@@ -29,6 +29,24 @@ function greeting() {
   return "Good evening";
 }
 
+// Short, weather-aware styling nudge shown under the greeting.
+function weatherSuggestion(w: any): string {
+  const t = Math.round(w.temperature);
+  const c = w.code ?? 3;
+  const place = w.city ? ` in ${w.city}` : "";
+  const cond = (w.description || "").toLowerCase();
+  let tip: string;
+  if (c >= 95) tip = "stay covered — stormy out there";
+  else if (c >= 71 && c <= 77) tip = "layer up and keep it cosy";
+  else if (c >= 51 && c <= 82) tip = "grab a jacket and closed shoes";
+  else if (t <= 6) tip = "bundle up with a warm coat";
+  else if (t <= 14) tip = "a light layer will feel just right";
+  else if (t <= 22) tip = "perfect for smart-casual layers";
+  else if (t <= 28) tip = "keep it light and breathable";
+  else tip = "go for airy, breathable pieces";
+  return `${t}°C · ${cond || "clear"}${place} — ${tip}.`;
+}
+
 function timeAgo(iso?: string) {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
@@ -104,7 +122,14 @@ export default function Home() {
           </Pressable>
         </View>
 
-        <Txt style={styles.greeting}>{greeting()}</Txt>
+        <View style={styles.greetBlock}>
+          <Display weight="semibold" style={styles.greeting}>{greeting()}</Display>
+          {status === "done" && weather ? (
+            <Txt style={styles.suggestion} testID="home-weather-suggestion">{weatherSuggestion(weather)}</Txt>
+          ) : status === "loading" ? (
+            <Txt style={styles.suggestion}>Checking today&rsquo;s weather…</Txt>
+          ) : null}
+        </View>
 
         {/* Wardrobe growing banner */}
         {showGrowing && (
@@ -187,13 +212,15 @@ const styles = StyleSheet.create({
   weatherCluster: { flexDirection: "row", alignItems: "center" },
   temp: { fontSize: 18, color: colors.onSurface, fontFamily: fonts.displayMedium },
   weatherDesc: { fontSize: 12, color: colors.onSurfaceTertiary },
-  greeting: { fontSize: 15, color: colors.onSurfaceSecondary, paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
+  greetBlock: { paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
+  greeting: { fontSize: 22, color: colors.onSurface },
+  suggestion: { fontSize: 13.5, color: colors.onSurfaceSecondary, marginTop: 3, lineHeight: 19 },
   growBanner: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginHorizontal: spacing.lg, marginBottom: spacing.md },
   growTitle: { fontSize: 14, color: colors.onBrandTertiary, fontFamily: fonts.displayMedium },
   growSub: { fontSize: 12, color: colors.onBrandTertiary, opacity: 0.85, marginTop: 1 },
-  dressBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceSecondary, marginHorizontal: spacing.lg, height: 64, borderRadius: radius.lg, paddingHorizontal: spacing.xl, marginBottom: spacing["2xl"], borderWidth: 1, borderColor: colors.border, shadowColor: "#2F2F2F", shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
-  dressTxt: { color: colors.onSurface, fontSize: 22 },
-  dressArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.sage, alignItems: "center", justifyContent: "center" },
+  dressBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.sage, marginHorizontal: spacing.lg, height: 64, borderRadius: radius.lg, paddingHorizontal: spacing.xl, marginBottom: spacing["2xl"] },
+  dressTxt: { color: colors.onSage, fontSize: 22 },
+  dressArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { fontSize: 16, color: colors.onSurface, fontFamily: fonts.display, letterSpacing: -0.3 },
   seeAll: { fontSize: 13, color: colors.sage },
@@ -205,9 +232,9 @@ const styles = StyleSheet.create({
   recentCell: { width: "50%", height: "50%", alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceTertiary },
   recentName: { fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium, marginTop: spacing.sm },
   recentTime: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
-  emptyOutfits: { alignItems: "center", marginHorizontal: spacing.lg, paddingVertical: spacing["2xl"], borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: "dashed", gap: spacing.md },
-  emptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  emptyTxt: { fontSize: 13, color: colors.onSurfaceSecondary, textAlign: "center", paddingHorizontal: spacing.xl, lineHeight: 19 },
+  emptyOutfits: { flexDirection: "row", alignItems: "center", marginHorizontal: spacing.lg, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: "dashed", gap: spacing.md },
+  emptyIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
+  emptyTxt: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, textAlign: "left", lineHeight: 18 },
   quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg },
   quickCard: { width: "47.6%", flexGrow: 1, height: 96, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   quickLabel: { fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium },

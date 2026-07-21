@@ -1,38 +1,38 @@
-// Aureve design tokens — editorial luxury. Celine × COS × Aesop.
-// Warm ivory + charcoal, muted-sage accent (~10-15%), champagne gold whisper.
+// Aureve design tokens — calm, timeless, inclusive. Apple × COS × Aesop.
+// Charcoal + soft ivory, muted-emerald accent. Elegance through restraint.
 export const colors = {
-  surface: "#FCFBF8",          // soft white
-  onSurface: "#2F2F2F",        // charcoal
-  surfaceSecondary: "#F8F6F2", // warm ivory
-  onSurfaceSecondary: "#5A5852",
-  surfaceTertiary: "#ECEAE2",  // light warm stone
-  onSurfaceTertiary: "#8C8983",
-  surfaceInverse: "#2F2F2F",
-  onSurfaceInverse: "#FCFBF8",
-  brand: "#5C7264",            // muted deep sage (rare deep accent)
-  brandPrimary: "#2F2F2F",     // charcoal — primary/inverse surfaces
-  onBrandPrimary: "#FCFBF8",
-  brandSecondary: "#5C7264",
-  onBrandSecondary: "#FCFBF8",
-  brandTertiary: "#E9ECE3",    // whisper of sage on stone (banners/badges)
-  onBrandTertiary: "#3C4A40",
-  sage: "#A8B594",             // muted sage — signature accent
-  sagePressed: "#96A67E",
-  sageDeep: "#6E8264",         // deeper muted sage — active nav
-  onSage: "#2F2F2F",           // charcoal on sage (legible, understated)
+  surface: "#FAF9F6",
+  onSurface: "#232323",
+  surfaceSecondary: "#F1EFEA",
+  onSurfaceSecondary: "#54524D",
+  surfaceTertiary: "#E7E4DE",
+  onSurfaceTertiary: "#8A8781",
+  surfaceInverse: "#232323",
+  onSurfaceInverse: "#FAF9F6",
+  brand: "#3F6B5B",
+  brandPrimary: "#232323",
+  onBrandPrimary: "#FAF9F6",
+  brandSecondary: "#3F6B5B",
+  onBrandSecondary: "#FAF9F6",
+  brandTertiary: "#DCE5DF",
+  onBrandTertiary: "#2E4E42",
+  sage: "#97AC87",
+  sagePressed: "#8AA079",
+  sageDeep: "#6E8264",
+  onSage: "#FFFFFF",
   success: "#7A9E7E",
   warning: "#C9A25A",
   error: "#C46A5C",
   info: "#4B6587",
-  border: "#E8E4DC",
-  borderStrong: "#2F2F2F",
-  divider: "#EDEAE2",
-  // Aureve brand mark — champagne gold on ink (splash / logo lockups)
+  border: "#E5E2DB",
+  borderStrong: "#232323",
+  divider: "#EAE7E0",
+  // Aureve brand mark — gold on ink (splash / logo lockups)
   ink: "#1C1C1C",
   inkSoft: "#3A3A3A",
-  gold: "#C9B27E",             // champagne gold (subtle)
-  goldDeep: "#B39A63",
-  goldSoft: "#DDC896",
+  gold: "#D4AF37",
+  goldDeep: "#B88A3C",
+  goldSoft: "#E9C87A",
   cream: "#F5F1E8",
   creamDim: "#E9E2D6",
 };
