@@ -14,7 +14,7 @@ import base64 as _b64
 from PIL import Image
 import httpx
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
@@ -523,6 +523,13 @@ class ItemCreate(BaseModel):
     worn_photo: Optional[str] = None   # base64 (worn)
     flatters: Optional[bool] = None
 
+    @field_validator("price", mode="before")
+    @classmethod
+    def _empty_price_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
+
 
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
@@ -544,6 +551,13 @@ class ItemUpdate(BaseModel):
     photo: Optional[str] = None
     worn_photo: Optional[str] = None
     flatters: Optional[bool] = None
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _empty_price_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
 
 
 class AnalyzeRequest(BaseModel):
