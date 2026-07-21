@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +7,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
+import ConfirmModal from "@/src/components/ConfirmModal";
 import * as haptics from "@/src/utils/haptics";
 
 function today() {
@@ -21,6 +22,8 @@ export default function OutfitDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [setToday, setSetToday] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -57,18 +60,12 @@ export default function OutfitDetail() {
     setBusy(false);
   };
 
-  const confirmDelete = () => {
-    Alert.alert("Delete outfit", "This outfit will be removed from your saved looks.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try { await api(`/outfits/${id}`, { method: "DELETE" }); } catch {}
-          router.back();
-        },
-      },
-    ]);
+  const doDelete = async () => {
+    setDeleting(true);
+    try { await api(`/outfits/${id}`, { method: "DELETE" }); } catch {}
+    setDeleting(false);
+    setConfirmDel(false);
+    router.back();
   };
 
   if (loading) {
@@ -90,7 +87,7 @@ export default function OutfitDetail() {
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} hitSlop={10} testID="outfit-back"><Feather name="chevron-left" size={26} color={colors.onSurface} /></Pressable>
         <Display weight="medium" style={styles.topTitle} numberOfLines={1}>{outfit.name || "Outfit"}</Display>
-        <Pressable onPress={confirmDelete} hitSlop={10} testID="outfit-menu"><Feather name="more-horizontal" size={24} color={colors.onSurface} /></Pressable>
+        <Pressable onPress={() => setConfirmDel(true)} hitSlop={10} testID="outfit-menu"><Feather name="more-horizontal" size={24} color={colors.onSurface} /></Pressable>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing["3xl"] }}>
@@ -130,6 +127,17 @@ export default function OutfitDetail() {
           </Pressable>
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={confirmDel}
+        title="Delete outfit"
+        message="This outfit will be removed from your saved looks."
+        confirmLabel="Delete"
+        destructive
+        busy={deleting}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDel(false)}
+      />
     </View>
   );
 }

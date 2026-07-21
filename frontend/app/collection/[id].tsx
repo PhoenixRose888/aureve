@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, Alert, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, Dimensions } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +7,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
+import ConfirmModal from "@/src/components/ConfirmModal";
 import * as haptics from "@/src/utils/haptics";
 
 const { width } = Dimensions.get("window");
@@ -20,6 +21,8 @@ export default function CollectionDetail() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [allOutfits, setAllOutfits] = useState<any[]>([]);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try { setColl(await api<any>(`/collections/${id}`)); }
@@ -40,11 +43,12 @@ export default function CollectionDetail() {
     try { setColl(await api<any>(`/collections/${id}`, { method: "PATCH", body })); } catch {}
   };
 
-  const confirmDelete = () => {
-    Alert.alert("Delete collection", "This won't delete the outfits inside — just the collection.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { try { await api(`/collections/${id}`, { method: "DELETE" }); } catch {} router.back(); } },
-    ]);
+  const doDelete = async () => {
+    setDeleting(true);
+    try { await api(`/collections/${id}`, { method: "DELETE" }); } catch {}
+    setDeleting(false);
+    setConfirmDel(false);
+    router.back();
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.sage} /></View>;
@@ -63,7 +67,7 @@ export default function CollectionDetail() {
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} hitSlop={12} testID="collection-back"><Feather name="chevron-left" size={26} color={colors.onSurface} /></Pressable>
         <Display weight="medium" style={styles.topTitle} numberOfLines={1}>{coll.name}</Display>
-        <Pressable onPress={confirmDelete} hitSlop={12} testID="collection-menu"><Feather name="trash-2" size={20} color={colors.onSurface} /></Pressable>
+        <Pressable onPress={() => setConfirmDel(true)} hitSlop={12} testID="collection-menu"><Feather name="trash-2" size={20} color={colors.onSurface} /></Pressable>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing["3xl"] }}>
@@ -123,6 +127,17 @@ export default function CollectionDetail() {
           </View>
         </View>
       </Modal>
+
+      <ConfirmModal
+        visible={confirmDel}
+        title="Delete collection"
+        message="This won't delete the outfits inside — just the collection."
+        confirmLabel="Delete"
+        destructive
+        busy={deleting}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDel(false)}
+      />
     </View>
   );
 }
