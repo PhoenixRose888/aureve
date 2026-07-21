@@ -951,6 +951,67 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
     return await _build_outfit(user, payload.occasion, payload.temperature, payload.weather, payload.notes)
 
 
+STYLIST_CHAT_SYSTEM = (
+    "You are Aureve, a warm, expert personal stylist chatting with the user about their own wardrobe. "
+    "Reply conversationally and concisely — like a knowledgeable, encouraging friend, never robotic or list-heavy "
+    "unless the user asks for options. You may ONLY reference items that exist in the user's wardrobe (by exact id). "
+    "Never invent items. Consider occasion, weather, colour, proportion and what flatters them. "
+    "When (and only when) you are recommending a specific complete outfit to wear, append at the very END of your "
+    "message a fenced JSON block exactly like ```json{\"outfit\": {\"name\": \"<short name>\", \"item_ids\": [\"<id>\", \"<id>\"]}}``` "
+    "using real ids from the wardrobe. Keep the conversational text natural and free of raw ids or JSON."
+)
+
+
+class StylistChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class StylistChatRequest(BaseModel):
+    messages: List[StylistChatMessage]
+    temperature: Optional[float] = None
+    weather: Optional[str] = None
+
+
+@api_router.post("/stylist/chat")
+async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_scope)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "stylist")
+    all_items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = available_items(all_items)
+    wardrobe = summarize_items_for_ai(items) if items else "No items yet."
+    weather_line = ""
+    if payload.temperature is not None:
+        weather_line = f"Current weather: {payload.temperature}°C, {payload.weather or 'n/a'}.\n"
+    convo = "\n".join(f"{m.role.upper()}: {m.content}" for m in payload.messages[-12:])
+    prompt = (
+        f"{profile_context(user)}\n{weather_line}"
+        f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
+        f"Conversation so far:\n{convo}\n\n"
+        "Reply as Aureve to the user's most recent message."
+    )
+    chat = await ai_chat(f"stylistchat-{user['user_id']}-{uuid.uuid4().hex[:6]}", STYLIST_CHAT_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("stylist chat failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    outfit = None
+    reply = resp or ""
+    block = parse_json_block(resp)
+    if block and isinstance(block.get("outfit"), dict):
+        o = block["outfit"]
+        by_id = {it["id"]: it for it in items}
+        resolved = [by_id[i] for i in o.get("item_ids", []) if i in by_id]
+        if resolved:
+            outfit = {"name": o.get("name", "Outfit"), "item_ids": [r["id"] for r in resolved], "items": resolved}
+        reply = re.sub(r"```(?:json)?\s*\{.*?\}\s*```", "", resp, flags=re.DOTALL).strip()
+    if not reply:
+        reply = "Here's what I'd suggest from your wardrobe."
+    return {"reply": reply, "outfit": outfit}
+
+
 async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
                         weather: Optional[str], notes: Optional[str]):
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)

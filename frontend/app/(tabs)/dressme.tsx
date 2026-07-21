@@ -10,6 +10,7 @@ import { useWeather } from "@/src/hooks/useWeather";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
 import GarmentImage from "@/src/components/GarmentImage";
+import FlatlayItem from "@/src/components/FlatlayItem";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -162,7 +163,7 @@ export default function DressMe() {
             <View style={styles.flatlay}>
               {items.map((r: any, i: number) => (
                 <Pressable key={i} onPress={() => { setSwapIndex(i); setSearch(""); }} testID={`dressme-item-${i}`}>
-                  <GarmentImage photo={r.item.photo} category={r.item.category} style={styles.stackImg} contentFit="contain" iconSize={38} />
+                  <FlatlayItem photo={r.item.photo} category={r.item.category} index={i} style={styles.stackImg} iconSize={38} />
                 </Pressable>
               ))}
             </View>
