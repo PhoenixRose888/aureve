@@ -766,6 +766,11 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "stylist")
+    return await _build_outfit(user, payload.occasion, payload.temperature, payload.weather, payload.notes)
+
+
+async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
+                        weather: Optional[str], notes: Optional[str]):
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 2:
@@ -773,11 +778,11 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
     prefs = await learned_prefs(user["user_id"])
     wardrobe = summarize_items_for_ai(items)
     weather_line = ""
-    if payload.temperature is not None:
-        weather_line = f"Temperature: {payload.temperature}°C. Conditions: {payload.weather or 'n/a'}."
+    if temperature is not None:
+        weather_line = f"Temperature: {temperature}°C. Conditions: {weather or 'n/a'}."
     prompt = (
-        f"Occasion: {payload.occasion}\n{weather_line}\n"
-        f"Extra notes: {payload.notes or 'none'}\n"
+        f"Occasion: {occasion}\n{weather_line}\n"
+        f"Extra notes: {notes or 'none'}\n"
         f"{profile_context(user)}\n"
         f"Learned preferences: {prefs}\n\n"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
@@ -792,7 +797,6 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
     result = parse_json_block(resp)
     if not result or "items" not in result:
         raise HTTPException(status_code=502, detail="Could not build an outfit")
-    # Attach full item objects for valid ids
     by_id = {it["id"]: it for it in items}
     enriched = []
     for slot in result.get("items", []):
@@ -800,6 +804,36 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
         if it:
             enriched.append({"slot": slot.get("slot", it.get("category")), "reason": slot.get("reason", ""), "item": it})
     result["resolved_items"] = enriched
+    return result
+
+
+class DressMeRequest(BaseModel):
+    temperature: Optional[float] = None
+    weather: Optional[str] = None
+    occasion: Optional[str] = None  # override; otherwise inferred from today's plan
+
+
+@api_router.post("/dressme")
+async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
+    """Flagship one-tap daily outfit — infers today's occasion from the planner
+    (falls back to a normal day) and styles from the ready wardrobe + weather."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "dressme")
+    today = now_utc().strftime("%Y-%m-%d")
+    occasion = (payload.occasion or "").strip()
+    plan_title = None
+    if not occasion:
+        plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
+        if plan:
+            occasion = (plan.get("occasion") or plan.get("title") or "").strip()
+            plan_title = plan.get("title") or plan.get("occasion")
+    if not occasion:
+        occasion = "a normal day — versatile, put-together, easy to wear"
+    result = await _build_outfit(user, occasion, payload.temperature, payload.weather,
+                                 "Dress me for today — one confident, ready-to-wear look.")
+    result["occasion_used"] = occasion
+    result["from_plan"] = plan_title
     return result
 
 

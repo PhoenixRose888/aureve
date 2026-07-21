@@ -110,8 +110,28 @@ export default function Home() {
           </View>
         </View>
 
-        {/* Primary CTA */}
+        {/* Primary CTA — flagship Dress Me */}
         <View style={styles.body}>
+          <Pressable
+            style={styles.dressCta}
+            testID="home-dress-me-button"
+            onPress={() => go("/dressme", true)}
+          >
+            <View style={styles.dressIcon}>
+              <Feather name="sun" size={20} color={colors.onBrandTertiary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.dressKicker}>DRESS ME</Txt>
+              <Display weight="medium" style={styles.dressTitle}>My outfit for today</Display>
+              <Txt style={styles.dressSub}>One tap. Weather, plans and your wardrobe — sorted.</Txt>
+            </View>
+            {!premium ? (
+              <Feather name="lock" size={18} color="rgba(250,249,246,0.6)" />
+            ) : (
+              <Feather name="arrow-up-right" size={22} color={colors.onBrandPrimary} />
+            )}
+          </Pressable>
+
           <Pressable
             style={styles.styleCta}
             testID="home-style-me-button"
@@ -119,9 +139,9 @@ export default function Home() {
           >
             <View style={{ flex: 1 }}>
               <Txt style={styles.ctaKicker}>AI STYLIST</Txt>
-              <Display weight="medium" style={styles.ctaTitle}>Style me for today</Display>
+              <Txt style={styles.ctaTitleSm}>Style me for a specific occasion</Txt>
             </View>
-            <Feather name="arrow-up-right" size={22} color={colors.onBrandPrimary} />
+            <Feather name="arrow-up-right" size={20} color={colors.onSurface} />
           </Pressable>
 
           {/* Quick actions */}
@@ -255,15 +275,30 @@ const styles = StyleSheet.create({
   heroTitle: { color: colors.onSurfaceInverse, fontSize: 44, lineHeight: 46 },
   weatherLine: { color: "rgba(250,250,250,0.75)", fontSize: 13, marginTop: spacing.sm },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  styleCta: {
+  dressCta: {
     backgroundColor: colors.brandPrimary,
     borderRadius: radius.md,
     padding: spacing.xl,
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing.lg,
   },
-  ctaKicker: { color: "rgba(250,250,250,0.6)", fontSize: 11, letterSpacing: 2, marginBottom: 4 },
+  dressIcon: { width: 46, height: 46, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  dressKicker: { color: colors.brandTertiary, fontSize: 11, letterSpacing: 2, marginBottom: 3 },
+  dressTitle: { color: colors.onBrandPrimary, fontSize: 24 },
+  dressSub: { color: "rgba(250,249,246,0.6)", fontSize: 12, marginTop: 3, lineHeight: 17 },
+  styleCta: {
+    borderWidth: 0.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: spacing.md,
+  },
+  ctaKicker: { color: colors.onSurfaceTertiary, fontSize: 10, letterSpacing: 2, marginBottom: 3 },
   ctaTitle: { color: colors.onBrandPrimary, fontSize: 26 },
+  ctaTitleSm: { color: colors.onSurface, fontSize: 16 },
   quickRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.md },
   quickCard: {
     flex: 1,

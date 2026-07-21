@@ -1,27 +1,28 @@
-// Aureve design tokens — "Editorial Mobile LIGHT" personality.
+// Aureve design tokens — calm, timeless, inclusive. Apple × COS × Aesop.
+// Charcoal + soft ivory, muted-emerald accent. Elegance through restraint.
 export const colors = {
-  surface: "#FAFAFA",
-  onSurface: "#1A1A1A",
-  surfaceSecondary: "#F2F2F2",
-  onSurfaceSecondary: "#4A4A4A",
-  surfaceTertiary: "#EAEAEA",
-  onSurfaceTertiary: "#6B6B6B",
-  surfaceInverse: "#1A1A1A",
-  onSurfaceInverse: "#FAFAFA",
-  brand: "#9A6A55",
-  brandPrimary: "#1A1A1A",
-  onBrandPrimary: "#FAFAFA",
-  brandSecondary: "#9A6A55",
-  onBrandSecondary: "#FAFAFA",
-  brandTertiary: "#E8DFD8",
-  onBrandTertiary: "#5C3D31",
-  success: "#3C5A45",
-  warning: "#C48E4B",
-  error: "#8E3B3B",
-  info: "#4A5D75",
-  border: "#E3E3E3",
-  borderStrong: "#1A1A1A",
-  divider: "#EAEAEA",
+  surface: "#FAF9F6",
+  onSurface: "#232323",
+  surfaceSecondary: "#F1EFEA",
+  onSurfaceSecondary: "#54524D",
+  surfaceTertiary: "#E7E4DE",
+  onSurfaceTertiary: "#8A8781",
+  surfaceInverse: "#232323",
+  onSurfaceInverse: "#FAF9F6",
+  brand: "#3F6B5B",
+  brandPrimary: "#232323",
+  onBrandPrimary: "#FAF9F6",
+  brandSecondary: "#3F6B5B",
+  onBrandSecondary: "#FAF9F6",
+  brandTertiary: "#DCE5DF",
+  onBrandTertiary: "#2E4E42",
+  success: "#7A9E7E",
+  warning: "#C9A25A",
+  error: "#C46A5C",
+  info: "#4B6587",
+  border: "#E5E2DB",
+  borderStrong: "#232323",
+  divider: "#EAE7E0",
 };
 
 export const spacing = {
@@ -42,10 +43,10 @@ export const radius = {
 };
 
 export const fonts = {
-  display: "CormorantGaramond-SemiBold",
-  displayBold: "CormorantGaramond-Bold",
-  displayMedium: "CormorantGaramond-Medium",
-  displayRegular: "CormorantGaramond-Regular",
+  display: "PlusJakartaSans-SemiBold",
+  displayBold: "PlusJakartaSans-Bold",
+  displayMedium: "PlusJakartaSans-Medium",
+  displayRegular: "PlusJakartaSans-Regular",
   body: "Geist",
 };
 

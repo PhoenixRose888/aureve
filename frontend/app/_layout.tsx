@@ -26,10 +26,10 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [iconsLoaded, iconsError] = useIconFonts();
   const [fontsLoaded, fontsError] = useFonts({
-    "CormorantGaramond-Regular": require("../assets/fonts/CormorantGaramond-Regular.ttf"),
-    "CormorantGaramond-Medium": require("../assets/fonts/CormorantGaramond-Medium.ttf"),
-    "CormorantGaramond-SemiBold": require("../assets/fonts/CormorantGaramond-SemiBold.ttf"),
-    "CormorantGaramond-Bold": require("../assets/fonts/CormorantGaramond-Bold.ttf"),
+    "PlusJakartaSans-Regular": require("../assets/fonts/PlusJakartaSans-Regular.ttf"),
+    "PlusJakartaSans-Medium": require("../assets/fonts/PlusJakartaSans-Medium.ttf"),
+    "PlusJakartaSans-SemiBold": require("../assets/fonts/PlusJakartaSans-SemiBold.ttf"),
+    "PlusJakartaSans-Bold": require("../assets/fonts/PlusJakartaSans-Bold.ttf"),
     Geist: require("../assets/fonts/Geist-Regular.ttf"),
   });
 

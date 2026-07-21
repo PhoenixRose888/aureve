@@ -4,7 +4,7 @@ import { colors, fonts } from "@/src/theme";
 
 type Props = TextProps & { children: React.ReactNode };
 
-// Serif display headings (Cormorant Garamond)
+// Display headings (Plus Jakarta Sans) — modern, readable, timeless.
 export function Display(props: Props & { weight?: "regular" | "medium" | "semibold" | "bold" }) {
   const { style, weight = "semibold", ...rest } = props;
   const family =
@@ -27,6 +27,7 @@ export function Txt(props: Props) {
 const styles = StyleSheet.create({
   display: {
     color: colors.onSurface,
+    letterSpacing: -0.4,
   },
   body: {
     fontFamily: fonts.body,
