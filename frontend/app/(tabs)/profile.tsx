@@ -81,6 +81,11 @@ export default function Profile() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.onSurface} />}
       >
         <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+          <View style={styles.titleBlock}>
+            <Txt style={styles.kicker}>YOUR ACCOUNT</Txt>
+            <Display weight="semibold" style={styles.pageTitle}>Profile</Display>
+            <Txt style={styles.pageSub}>Your wardrobe, insights and preferences — all in one place.</Txt>
+          </View>
           <View style={styles.accountCard}>
             <View style={styles.avatarLg}>
               <Txt style={styles.avatarInitials}>{initials}</Txt>
@@ -431,6 +436,10 @@ function RankList({ title, items, router }: { title: string; items: any[]; route
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.border },
+  titleBlock: { marginBottom: spacing.lg },
+  kicker: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, fontFamily: fonts.displayMedium, marginBottom: spacing.xs },
+  pageTitle: { fontSize: 30, letterSpacing: -0.5, color: colors.onSurface },
+  pageSub: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: spacing.xs },
   accountCard: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   avatarLg: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.sage, alignItems: "center", justifyContent: "center" },
   avatarInitials: { fontSize: 22, color: colors.onSage, fontFamily: fonts.displayMedium },

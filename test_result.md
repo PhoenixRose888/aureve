@@ -101,3 +101,95 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Aureve — AI personal wardrobe & styling app (Expo RN + FastAPI + Mongo). Final UI consistency
+  sweep for the Emergent Builder Competition. Editorial "Apple/COS/Linear" aesthetic: Inter font
+  globally, Semibold headers, warm ivory surfaces, charcoal text, muted sage (#97AC87) as a
+  restrained accent. Recent bug fixes need verification + no regressions from global Inter swap.
+
+frontend:
+  - task: "Profile screen editorial header (lighter touch)"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/profile.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added editorial title block (kicker + Inter Semibold 'Profile' title + subtle supporting copy) above the account card, consistent with Home/Dress Me/Collections. No other redesign."
+
+  - task: "Responsive grids via useWindowDimensions"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/collections.tsx, frontend/app/(tabs)/*.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Previous session replaced module-level Dimensions.get('window') with useWindowDimensions() to fix broken grids on wide screens/tablets. Verify grids render correctly across widths, no overflow/clipping."
+
+  - task: "Weather-based location + Dress Me suggestion"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/hooks/useWeather.ts, frontend/app/(tabs)/dressme.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Weather hook resolves location (falls back to IP approximation). Dress Me passes temperature/description into /dressme. Verify weather chip renders and outfit generates."
+
+  - task: "Photoless-item guard"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/add-item (item add flow)"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Previous session blocked saving items without a photo and cleaned corrupted DB records. Verify add-item requires a photo."
+
+  - task: "Global Inter typography — no regressions"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/theme/index.ts, all tabs"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Global font swap to Inter. Verify typography renders across all tabs, empty states, navigation, spacing, no broken routes/console errors/visual overflow."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Profile screen editorial header (lighter touch)"
+    - "Responsive grids via useWindowDimensions"
+    - "Global Inter typography — no regressions"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: |
+      Final UI consistency sweep. Just added the Profile editorial header. Please run a full frontend
+      UI pass (Guest mode is fine): verify Home, Dress Me, Collections, Profile for consistent Inter
+      Semibold hierarchy, spacing, empty states, and responsiveness (resize width to check grids use
+      useWindowDimensions correctly — no overflow/clipping). Confirm weather chip + Dress Me generation,
+      photoless-item guard on add-item, and no broken routes/console errors. Guest auth: POST /api/auth/guest
+      auto-seeds a 16-item demo wardrobe. Backend seeded bearer for API checks: test-session-token-aura-123.
