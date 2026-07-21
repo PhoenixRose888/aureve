@@ -80,7 +80,7 @@ export default function Home() {
     { key: "add", label: "Add Item", icon: <Feather name="camera" size={22} color={colors.onSurface} />, onPress: () => router.push("/add-item") },
     { key: "create", label: "Create Outfit", icon: <MaterialCommunityIcons name="hanger" size={24} color={colors.onSurface} />, onPress: () => router.push("/outfit-builder") },
     { key: "stylist", label: "AI Stylist", icon: <Feather name="star" size={22} color={colors.onSurface} />, onPress: () => router.push("/(tabs)/stylist") },
-    { key: "collections", label: "My Collections", icon: <Feather name="folder" size={22} color={colors.onSurface} />, onPress: () => router.push("/(tabs)/outfits") },
+    { key: "collections", label: "My Collections", icon: <Feather name="folder" size={22} color={colors.onSurface} />, onPress: () => router.push("/collections") },
   ];
 
   const showGrowing = itemCount > 0 && !growDismissed;

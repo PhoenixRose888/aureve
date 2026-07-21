@@ -1458,6 +1458,100 @@ async def list_outfits(user: dict = Depends(get_scope)):
 @api_router.delete("/outfits/{outfit_id}")
 async def delete_outfit(outfit_id: str, user: dict = Depends(get_scope)):
     await db.outfits.delete_one({"id": outfit_id, "user_id": user["user_id"]})
+    # keep collections tidy — drop the removed outfit from any collection
+    await db.collections.update_many(
+        {"user_id": user["user_id"]}, {"$pull": {"outfit_ids": outfit_id}}
+    )
+    return {"ok": True}
+
+
+# ----------------------------- Collections -----------------------------
+class CollectionCreate(BaseModel):
+    name: str
+
+
+class CollectionUpdate(BaseModel):
+    name: Optional[str] = None
+    add_outfit: Optional[str] = None
+    remove_outfit: Optional[str] = None
+
+
+async def _resolve_collection(coll: dict, user: dict, with_outfits: bool = False):
+    """Attach a small cover (up to 4 item photos) and the outfit count. When
+    with_outfits is set, also return each outfit resolved with its items."""
+    outfit_ids = coll.get("outfit_ids", [])
+    outfits = await db.outfits.find(
+        {"id": {"$in": outfit_ids}, "user_id": user["user_id"]}, {"_id": 0}
+    ).to_list(500)
+    order = {oid: i for i, oid in enumerate(outfit_ids)}
+    outfits.sort(key=lambda o: order.get(o["id"], 999))
+    items_by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    cover: List[dict] = []
+    for o in outfits:
+        for iid in o.get("item_ids", []):
+            it = items_by_id.get(iid)
+            if it and len(cover) < 4:
+                cover.append({"photo": it.get("photo"), "category": it.get("category")})
+        if len(cover) >= 4:
+            break
+    coll["count"] = len(outfit_ids)
+    coll["cover"] = cover
+    if with_outfits:
+        for o in outfits:
+            o["items"] = [items_by_id[i] for i in o.get("item_ids", []) if i in items_by_id]
+        coll["outfits"] = outfits
+    return coll
+
+
+@api_router.post("/collections")
+async def create_collection(payload: CollectionCreate, user: dict = Depends(get_scope)):
+    coll = {
+        "id": new_id("coll"),
+        "user_id": user["user_id"],
+        "name": payload.name.strip() or "Collection",
+        "outfit_ids": [],
+        "created_at": now_utc().isoformat(),
+    }
+    await db.collections.insert_one({**coll})
+    coll.pop("_id", None)
+    return await _resolve_collection(coll, user)
+
+
+@api_router.get("/collections")
+async def list_collections(user: dict = Depends(get_scope)):
+    colls = await db.collections.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [await _resolve_collection(c, user) for c in colls]
+
+
+@api_router.get("/collections/{collection_id}")
+async def get_collection(collection_id: str, user: dict = Depends(get_scope)):
+    coll = await db.collections.find_one({"id": collection_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not coll:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return await _resolve_collection(coll, user, with_outfits=True)
+
+
+@api_router.patch("/collections/{collection_id}")
+async def update_collection(collection_id: str, payload: CollectionUpdate, user: dict = Depends(get_scope)):
+    coll = await db.collections.find_one({"id": collection_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not coll:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    sets: dict = {}
+    if payload.name is not None and payload.name.strip():
+        sets["name"] = payload.name.strip()
+    if sets:
+        await db.collections.update_one({"id": collection_id, "user_id": user["user_id"]}, {"$set": sets})
+    if payload.add_outfit:
+        await db.collections.update_one({"id": collection_id, "user_id": user["user_id"]}, {"$addToSet": {"outfit_ids": payload.add_outfit}})
+    if payload.remove_outfit:
+        await db.collections.update_one({"id": collection_id, "user_id": user["user_id"]}, {"$pull": {"outfit_ids": payload.remove_outfit}})
+    coll = await db.collections.find_one({"id": collection_id, "user_id": user["user_id"]}, {"_id": 0})
+    return await _resolve_collection(coll, user, with_outfits=True)
+
+
+@api_router.delete("/collections/{collection_id}")
+async def delete_collection(collection_id: str, user: dict = Depends(get_scope)):
+    await db.collections.delete_one({"id": collection_id, "user_id": user["user_id"]})
     return {"ok": True}
 
 
