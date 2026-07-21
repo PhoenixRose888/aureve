@@ -1,5 +1,10 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21f) — Share your look
+- ✅ **Share/download Try-On looks** — new `src/utils/shareImage.ts` (expo-sharing on native, direct download on web). "Share" button on the Try-On result and a "Share this look" pill on saved Try-On looks in the Looks gallery. Added dep `expo-sharing` (+ expo-file-system/legacy). Bundle compiles clean.
+
+
+
 ## Implemented (2026-07-21e) — Try-On stickiness
 - ✅ **Remembered body photo** — the try-on photo is saved per profile (`GET/PUT/DELETE /api/tryon/photo`, `body_photos` collection) and auto-loads, so users don't re-upload each session.
 - ✅ **Save Try-On to Looks** — try-on results save as an outfit (`source:'tryon'`, `preview_image` base64) via the existing `/outfits`; the Looks "Saved" tab shows the generated image as a full cover with a TRY-ON badge. Verified via curl; frontend lint-clean.

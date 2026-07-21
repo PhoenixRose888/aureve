@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { shareImage } from "@/src/utils/shareImage";
 
 function fmtDate(iso: string) {
   try {
@@ -104,7 +105,13 @@ export default function Looks() {
                   </Pressable>
                 </View>
                 {o.preview_image ? (
-                  <Image source={{ uri: `data:image/png;base64,${o.preview_image}` }} style={styles.preview} contentFit="cover" />
+                  <>
+                    <Image source={{ uri: `data:image/png;base64,${o.preview_image}` }} style={styles.preview} contentFit="cover" />
+                    <Pressable style={styles.shareRow} testID={`share-look-${o.id}`} onPress={() => shareImage(o.preview_image, "image/png")}>
+                      <Feather name="share-2" size={15} color={colors.onSurface} />
+                      <Txt style={styles.shareTxt}>Share this look</Txt>
+                    </Pressable>
+                  </>
                 ) : null}
                 <Thumbs items={o.items || []} />
               </View>
@@ -187,6 +194,8 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   thumbs: { flexDirection: "row", gap: spacing.sm },
   preview: { width: "100%", height: 300, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, marginBottom: spacing.md },
+  shareRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderWidth: 0.5, borderColor: colors.borderStrong, borderRadius: radius.pill, marginBottom: spacing.md },
+  shareTxt: { fontSize: 13, color: colors.onSurface },
   thumb: { width: 54, height: 68, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   placeholder: { alignItems: "center", justifyContent: "center" },
   more: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceTertiary },

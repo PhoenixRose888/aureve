@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { shareImage } from "@/src/utils/shareImage";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
 
 export default function TryOn() {
@@ -150,10 +151,16 @@ export default function TryOn() {
           <View style={styles.resultWrap} testID="tryon-result">
             <Image source={{ uri: `data:image/png;base64,${result}` }} style={styles.resultImg} contentFit="contain" />
             <Txt style={styles.resultNote}>AI-generated preview — fit and detail may vary.</Txt>
-            <Pressable style={styles.saveBtn} testID="tryon-save" onPress={saveToLooks} disabled={savedIds.includes(selected.join(","))}>
-              <Feather name={savedIds.includes(selected.join(",")) ? "check" : "bookmark"} size={16} color={colors.onSurface} />
-              <Txt style={styles.saveTxt}>{savedIds.includes(selected.join(",")) ? "Saved to Looks" : "Save to Looks"}</Txt>
-            </Pressable>
+            <View style={styles.resultActions}>
+              <Pressable style={styles.saveBtn} testID="tryon-save" onPress={saveToLooks} disabled={savedIds.includes(selected.join(","))}>
+                <Feather name={savedIds.includes(selected.join(",")) ? "check" : "bookmark"} size={16} color={colors.onSurface} />
+                <Txt style={styles.saveTxt}>{savedIds.includes(selected.join(",")) ? "Saved" : "Save to Looks"}</Txt>
+              </Pressable>
+              <Pressable style={styles.saveBtn} testID="tryon-share" onPress={() => shareImage(result, "image/png")}>
+                <Feather name="share-2" size={16} color={colors.onSurface} />
+                <Txt style={styles.saveTxt}>Share</Txt>
+              </Pressable>
+            </View>
           </View>
         ) : null}
       </ScrollView>
@@ -196,6 +203,7 @@ const styles = StyleSheet.create({
   resultWrap: { marginTop: spacing.xl },
   resultImg: { width: "100%", height: 460, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary },
   resultNote: { fontSize: 12, color: colors.onSurfaceTertiary, textAlign: "center", marginTop: spacing.sm },
-  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 50, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, marginTop: spacing.lg },
+  saveBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 50, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong },
+  resultActions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
   saveTxt: { color: colors.onSurface, fontSize: 15 },
 });
