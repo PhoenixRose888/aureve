@@ -133,7 +133,7 @@ export default function BulkAdd() {
               ) : (
                 <View style={styles.cross}><Feather name="x" size={11} color={colors.onSurfaceInverse} /></View>
               )}
-              <Txt style={styles.cellName} numberOfLines={1}>{r.dupe ? "Possible dupe" : r.name}</Txt>
+              <Txt style={[styles.cellName, r.dupe && styles.cellNameDupe]} numberOfLines={1}>{r.dupe ? `⚠ ${r.name}` : r.name}</Txt>
             </View>
           ))}
         </View>
@@ -174,6 +174,7 @@ const styles = StyleSheet.create({
   dupeBadge: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.warning, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   cellName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
+  cellNameDupe: { color: colors.warning },
   footer: { flexDirection: "row", gap: spacing.md, padding: spacing.xl, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border },
   secondaryBtn: { flex: 1, height: 52, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   secondaryTxt: { fontSize: 15, color: colors.onSurface },

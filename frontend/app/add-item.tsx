@@ -228,7 +228,7 @@ export default function AddItem() {
             <Txt style={styles.dupSub}>Similar pieces in your wardrobe — add anyway or skip to avoid a duplicate.</Txt>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dupRow}>
               {duplicates.map((d) => (
-                <Pressable key={d.id} style={styles.dupCard} testID={`dup-${d.id}`} onPress={() => router.replace({ pathname: "/item/[id]", params: { id: d.id } })}>
+                <Pressable key={d.id} style={styles.dupCard} testID={`dup-${d.id}`} onPress={() => router.push({ pathname: "/item/[id]", params: { id: d.id } })}>
                   {d.photo ? (
                     <Image source={{ uri: `data:image/jpeg;base64,${d.photo}` }} style={styles.dupImg} contentFit="cover" />
                   ) : (
