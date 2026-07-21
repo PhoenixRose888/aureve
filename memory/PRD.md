@@ -1,5 +1,10 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21d) — Virtual Try-On (Nano Banana)
+- ✅ **Virtual Try-On** (Premium) — `POST /api/tryon {person_image, item_ids[], outfit_id?}` sends your photo + garment photos to Gemini `gemini-3.1-flash-image-preview` and returns a photorealistic image of you wearing the outfit. New `app/tryon.tsx` (pick your photo → select wardrobe pieces → generate). Entry points: Home CTA + "See it on me" from a Dress Me result (prefills the items). Premium-gated; validates photo/items. Verified iteration 9 (7/7, real generation ~8s).
+
+
+
 ## Implemented (2026-07-21c) — 7-day free trial + conversion ribbon
 - ✅ **App-managed 7-day free trial** (no card, once per account). `POST /api/membership/trial` grants 7 days Premium instantly (premium_source='trial', trial_used=true). `/membership/plans` + `/auth/me` expose trial_used / trial_eligible / trial_days / premium_source; paid grants tagged premium_source='paid'. Paywall shows a "Start 7 days free" hero when eligible; Home shows a "Try Premium free for 7 days" ribbon (gift icon) that swaps to "Unlock your AI stylist" after the trial. Verified iteration 8 (9/9): grant, no-reuse, expiry lapse → 402, regression.
 - 🔜 Next: Virtual Try-On (Gemini Nano Banana) → then Calendar integration.
