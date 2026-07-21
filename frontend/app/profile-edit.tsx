@@ -72,8 +72,8 @@ export default function ProfileEdit() {
 
       <KeyboardAwareScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} bottomOffset={90} showsVerticalScrollIndicator={false}>
         <Txt style={styles.intro}>
-          Add as much or as little as you like. Aura uses this to pick cuts, lengths and colours that flatter
-          you — tall or petite, and your skin tone. Everything's optional.
+          Add as much or as little as you like. Aureve uses this to pick cuts, lengths and colours that flatter
+          you — tall or petite, and your skin tone. All fields optional.
         </Txt>
 
         <Txt style={styles.groupLabel}>MEASUREMENTS</Txt>

@@ -35,7 +35,7 @@ export default function Login() {
           Wear everything{"\n"}you own.
         </Display>
         <Txt style={styles.subtitle}>
-          Catalogue your wardrobe, build outfits from what you actually own, and let Aura learn what
+          Catalogue your wardrobe, build outfits from what you actually own, and let Aureve learn what
           truly flatters you.
         </Txt>
 

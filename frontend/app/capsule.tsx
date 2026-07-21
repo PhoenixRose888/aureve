@@ -28,7 +28,8 @@ export default function Capsule() {
     try {
       setResult(await api<any>("/capsule/build", { method: "POST", body: { theme, occasion } }));
     } catch (e: any) {
-      setError(e.message || "Couldn't build a capsule");
+      if (e.status === 402) router.push("/premium");
+      else setError(e.message || "Couldn't build a capsule");
     }
     setLoading(false);
   };
@@ -61,7 +62,7 @@ export default function Capsule() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Txt style={styles.intro}>
-          Aura curates a lean, mix-and-match capsule from your wardrobe for any season or purpose.
+          Aureve curates a lean, mix-and-match capsule from your wardrobe for any season or purpose.
         </Txt>
 
         <Txt style={styles.groupLabel}>CHOOSE A THEME</Txt>

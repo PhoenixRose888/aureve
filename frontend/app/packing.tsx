@@ -39,7 +39,8 @@ export default function Packing() {
       });
       setResult(r);
     } catch (e: any) {
-      setError(e.message || "Couldn't build a capsule");
+      if (e.status === 402) router.push("/premium");
+      else setError(e.message || "Couldn't build a capsule");
     }
     setLoading(false);
   };
@@ -77,7 +78,7 @@ export default function Packing() {
         showsVerticalScrollIndicator={false}
       >
         <Txt style={styles.intro}>
-          Tell Aura where and how long. It builds a lean carry-on capsule from your wardrobe, matched to the
+          Tell Aureve where and how long. It builds a lean carry-on capsule from your wardrobe, matched to the
           destination forecast.
         </Txt>
 
@@ -102,7 +103,7 @@ export default function Packing() {
           </Pressable>
         </View>
 
-        <Txt style={styles.groupLabel}>WHEN'S THE TRIP?</Txt>
+        <Txt style={styles.groupLabel}>WHEN IS THE TRIP?</Txt>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.whenRow}>
           {[
             { label: "Today", v: 0 },
@@ -122,7 +123,7 @@ export default function Packing() {
         </ScrollView>
         <Txt style={styles.whenHint}>Forecast is checked for your actual travel dates (up to ~2 weeks ahead).</Txt>
 
-        <Txt style={styles.groupLabel}>WHAT'S THE TRIP FOR?</Txt>
+        <Txt style={styles.groupLabel}>WHAT IS THE TRIP FOR?</Txt>
         <TextInput
           testID="occasions-input"
           style={styles.input}

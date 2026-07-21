@@ -277,7 +277,7 @@ export default function ItemDetail() {
 
           {showLaundryPrompt && (
             <View style={styles.laundryPrompt} testID="laundry-prompt">
-              <Txt style={styles.laundryPromptTxt}>Add this to the laundry so it's hidden from suggestions?</Txt>
+              <Txt style={styles.laundryPromptTxt}>Add this to the laundry so it is hidden from suggestions?</Txt>
               <View style={styles.laundryPromptRow}>
                 <Pressable
                   style={styles.laundryPromptBtn}

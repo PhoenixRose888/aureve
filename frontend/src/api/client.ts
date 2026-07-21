@@ -47,7 +47,9 @@ export async function api<T = any>(path: string, opts: Options = {}): Promise<T>
     // Don't wipe the stored token here — a transient 401 on one call
     // shouldn't log the user out of the whole app. Auth bootstrap
     // (/auth/me) handles genuine invalid sessions.
-    throw new Error("Unauthorized");
+    const e = new Error("Unauthorized") as any;
+    e.status = 401;
+    throw e;
   }
   if (!res.ok) {
     let detail = "Request failed";
@@ -55,7 +57,9 @@ export async function api<T = any>(path: string, opts: Options = {}): Promise<T>
       const j = await res.json();
       detail = j.detail || detail;
     } catch {}
-    throw new Error(detail);
+    const e = new Error(detail) as any;
+    e.status = res.status;
+    throw e;
   }
   return (await res.json()) as T;
 }

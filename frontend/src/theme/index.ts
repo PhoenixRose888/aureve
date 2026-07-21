@@ -1,4 +1,4 @@
-// Aura design tokens — "Editorial Mobile LIGHT" personality.
+// Aureve design tokens — "Editorial Mobile LIGHT" personality.
 export const colors = {
   surface: "#FAFAFA",
   onSurface: "#1A1A1A",

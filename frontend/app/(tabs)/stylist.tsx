@@ -45,7 +45,7 @@ export default function Stylist() {
 
   const generate = async () => {
     if (!occasion.trim()) {
-      setError("Tell Aura what you're dressing for.");
+      setError("Tell Aureve what you're dressing for.");
       return;
     }
     setLoading(true);
@@ -63,7 +63,11 @@ export default function Stylist() {
       const r = await api<any>("/stylist/suggest", { method: "POST", body });
       setResult(r);
     } catch (e: any) {
-      setError(e.message || "Couldn't build an outfit");
+      if (e.status === 402) {
+        router.push("/premium");
+      } else {
+        setError(e.message || "Couldn't build an outfit");
+      }
     }
     setLoading(false);
   };
@@ -253,7 +257,7 @@ export default function Stylist() {
 
             {showRate && !logged && (
               <View style={styles.rateCard} testID="rate-card">
-                <Txt style={styles.rateHead}>How did it feel? This teaches Aura your style.</Txt>
+                <Txt style={styles.rateHead}>How did it feel? This teaches Aureve your style.</Txt>
                 <Rating label="Flattering" value={flattering} onChange={setFlattering} />
                 <Rating label="Comfort" value={comfort} onChange={setComfort} />
                 <Rating label="Confidence" value={confidence} onChange={setConfidence} />

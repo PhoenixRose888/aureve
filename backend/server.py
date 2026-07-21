@@ -14,6 +14,10 @@ from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout,
+    CheckoutSessionRequest,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -24,6 +28,20 @@ db = client[os.environ['DB_NAME']]
 
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 AI_MODEL = ("openai", "gpt-5.4")
+
+STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
+
+# Premium membership — one-time payment grants a time-boxed entitlement (whole household).
+PREMIUM_PLANS = {
+    "monthly": {"amount": 9.99, "days": 30, "label": "Premium Monthly"},
+    "annual": {"amount": 79.99, "days": 365, "label": "Premium Annual"},
+}
+# Free tier: unlimited wardrobe + a taste of AI. Metered features:
+FREE_LIMITS = {
+    "stylist": {"period": "day", "max": 5},
+    "beauty": {"period": "month", "max": 1},
+}
+# Everything not in FREE_LIMITS is Premium-only (packing, capsule, shop, missing, health, compatibility, dressme).
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -130,7 +148,59 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
         "profile_id": prof["id"],
         "profile_name": prof.get("name"),
         "profile": prof.get("profile") or {},
+        "premium": is_premium(account),
     }
+
+
+def is_premium(account: dict) -> bool:
+    """Whole-household premium — driven by the account's premium_until timestamp."""
+    pu = (account or {}).get("premium_until")
+    if not pu:
+        return False
+    try:
+        dt = datetime.fromisoformat(pu)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt > now_utc()
+    except Exception:
+        return False
+
+
+PREMIUM_MESSAGES = {
+    "stylist": "You've used your 5 free AI outfits today. Go Premium for unlimited styling.",
+    "beauty": "Colour analysis is 1/month on Free. Go Premium for unlimited analyses.",
+    "packing": "The Packing Assistant is a Premium feature.",
+    "capsule": "Capsule wardrobes are a Premium feature.",
+    "shop": "Shopping Intelligence is a Premium feature.",
+    "missing": "The Missing Piece analysis is a Premium feature.",
+    "health": "The Wardrobe Health Report is a Premium feature.",
+    "compatibility": "Wardrobe compatibility is a Premium feature.",
+    "dressme": "Dress Me is a Premium feature.",
+    "household": "Household wardrobes are a Premium feature — one subscription covers everyone.",
+}
+
+
+async def enforce_limit(scope: dict, feature: str):
+    """Gate a feature for free accounts. Metered features count usage per period;
+    all others are Premium-only. Premium accounts always pass."""
+    if scope.get("premium"):
+        return
+    cfg = FREE_LIMITS.get(feature)
+    msg = PREMIUM_MESSAGES.get(feature, "This is a Premium feature.")
+    if cfg is None:
+        raise HTTPException(status_code=402, detail=msg)
+    now = now_utc()
+    key = now.strftime("%Y-%m-%d") if cfg["period"] == "day" else now.strftime("%Y-%m")
+    doc = await db.usage.find_one(
+        {"account_id": scope["account_id"], "feature": feature, "period": key}, {"_id": 0}
+    )
+    used = doc["count"] if doc else 0
+    if used >= cfg["max"]:
+        raise HTTPException(status_code=402, detail=msg)
+    await db.usage.update_one(
+        {"account_id": scope["account_id"], "feature": feature, "period": key},
+        {"$inc": {"count": 1}}, upsert=True,
+    )
 
 
 class SessionRequest(BaseModel):
@@ -186,7 +256,7 @@ async def create_session(payload: SessionRequest):
 
 @api_router.get("/auth/me")
 async def auth_me(user: dict = Depends(get_current_user)):
-    return user
+    return {**user, "premium": is_premium(user), "premium_until": user.get("premium_until")}
 
 
 @api_router.post("/auth/logout")
@@ -195,6 +265,112 @@ async def logout(authorization: Optional[str] = Header(None)):
         token = authorization.split(" ", 1)[1].strip()
         await db.user_sessions.delete_one({"session_token": token})
     return {"ok": True}
+
+
+# ----------------------------- Membership / Payments -----------------------------
+class CheckoutRequest(BaseModel):
+    plan: str          # "monthly" | "annual"
+    origin_url: str    # web origin the app is served from (for return URLs)
+
+
+@api_router.get("/membership/plans")
+async def membership_plans(user: dict = Depends(get_current_user)):
+    return {
+        "premium": is_premium(user),
+        "premium_until": user.get("premium_until"),
+        "plans": [
+            {"id": k, "amount": v["amount"], "days": v["days"], "label": v["label"], "currency": "usd"}
+            for k, v in PREMIUM_PLANS.items()
+        ],
+    }
+
+
+@api_router.post("/payments/checkout")
+async def create_checkout(payload: CheckoutRequest, account: dict = Depends(get_current_user)):
+    plan = PREMIUM_PLANS.get(payload.plan)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=500, detail="Payments not configured")
+    host = payload.origin_url.rstrip("/")
+    success_url = f"{host}/premium-success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{host}/premium"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY)
+    req = CheckoutSessionRequest(
+        amount=float(plan["amount"]),
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"account_id": account["user_id"], "plan": payload.plan, "kind": "premium"},
+    )
+    try:
+        session = await stripe_checkout.create_checkout_session(req)
+    except Exception as e:
+        logger.exception("checkout create failed")
+        raise HTTPException(status_code=502, detail=f"Payment error: {e}")
+    await db.payment_transactions.insert_one({
+        "session_id": session.session_id,
+        "account_id": account["user_id"],
+        "plan": payload.plan,
+        "amount": plan["amount"],
+        "currency": "usd",
+        "payment_status": "initiated",
+        "status": "open",
+        "processed": False,
+        "created_at": now_utc().isoformat(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
+
+
+async def _grant_premium(account_id: str, plan_key: str):
+    """Idempotently extend an account's premium entitlement by the plan's period."""
+    plan = PREMIUM_PLANS.get(plan_key) or PREMIUM_PLANS["monthly"]
+    acct = await db.users.find_one({"user_id": account_id}, {"_id": 0})
+    base = now_utc()
+    cur = (acct or {}).get("premium_until")
+    if cur:
+        try:
+            curdt = datetime.fromisoformat(cur)
+            if curdt.tzinfo is None:
+                curdt = curdt.replace(tzinfo=timezone.utc)
+            if curdt > base:
+                base = curdt
+        except Exception:
+            pass
+    until = base + timedelta(days=plan["days"])
+    await db.users.update_one({"user_id": account_id}, {"$set": {"premium_until": until.isoformat()}})
+    return until.isoformat()
+
+
+@api_router.get("/payments/status/{session_id}")
+async def payment_status_check(session_id: str, account: dict = Depends(get_current_user)):
+    tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY)
+    try:
+        st = await stripe_checkout.get_checkout_status(session_id)
+    except Exception as e:
+        logger.exception("checkout status failed")
+        raise HTTPException(status_code=502, detail=f"Payment error: {e}")
+    await db.payment_transactions.update_one(
+        {"session_id": session_id},
+        {"$set": {"payment_status": st.payment_status, "status": st.status}},
+    )
+    # Grant entitlement exactly once when paid.
+    if st.payment_status == "paid" and not tx.get("processed"):
+        await _grant_premium(tx["account_id"], tx["plan"])
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"processed": True, "processed_at": now_utc().isoformat()}},
+        )
+    acct = await db.users.find_one({"user_id": tx["account_id"]}, {"_id": 0})
+    return {
+        "payment_status": st.payment_status,
+        "status": st.status,
+        "premium": is_premium(acct),
+        "premium_until": acct.get("premium_until"),
+    }
 
 
 class ProfileUpdate(BaseModel):
@@ -231,6 +407,11 @@ async def list_profiles(account: dict = Depends(get_current_user)):
 @api_router.post("/profiles")
 async def create_profile(payload: ProfileCreate, account: dict = Depends(get_current_user)):
     await ensure_default_profile(account["user_id"], account.get("name"))
+    count = await db.profiles.count_documents({"user_id": account["user_id"]})
+    if not is_premium(account) and count >= 1:
+        raise HTTPException(status_code=402, detail=PREMIUM_MESSAGES["household"])
+    if count >= 6:
+        raise HTTPException(status_code=400, detail="A household can have up to 6 members.")
     prof = {
         "id": new_id("prof"),
         "user_id": account["user_id"],
@@ -562,7 +743,7 @@ async def learned_prefs(user_id: str) -> str:
 
 
 STYLIST_SYSTEM = (
-    "You are Aura, an expert personal stylist who thinks about balance, proportion, layering, contrast, colour "
+    "You are Aureve, an expert personal stylist who thinks about balance, proportion, layering, contrast, colour "
     "theory, texture and silhouette — not just colour matching. You build outfits using ONLY the items in the "
     "user's wardrobe (referenced by their exact id). Never invent items that are not in the list. "
     "Actively include styling accessories (belts, scarves, bags, sunglasses, jewellery) when they improve the look. "
@@ -582,6 +763,7 @@ STYLIST_SYSTEM = (
 async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "stylist")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 2:
@@ -621,7 +803,7 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
 
 # ----------------------------- AI: Compatibility / Wardrobe Intelligence -----------------------------
 COMPAT_SYSTEM = (
-    "You are Aura's compatibility engine. Given ONE focus item and the rest of the user's wardrobe, rate how "
+    "You are Aureve's compatibility engine. Given ONE focus item and the rest of the user's wardrobe, rate how "
     "well each OTHER item pairs with the focus item, thinking like a stylist (colour harmony, tone, formality, "
     "proportion, texture, season). Return STRICT JSON with keys: "
     "versatility_score (integer 0-100 for how versatile the focus item is across the wardrobe), "
@@ -635,6 +817,7 @@ COMPAT_SYSTEM = (
 async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "compatibility")
     focus = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
     if not focus:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -677,7 +860,7 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
 
 # ----------------------------- AI: Shop Check -----------------------------
 SHOP_SYSTEM = (
-    "You are Aura's shopping-restraint advisor. The user is considering buying the item in the photo. "
+    "You are Aureve's shopping-restraint advisor. The user is considering buying the item in the photo. "
     "You are given their existing wardrobe. Decide if they should buy it. Be honest and help them avoid "
     "duplicate purchases. Return STRICT JSON with keys: "
     "item_summary (short description of the item in the photo), "
@@ -695,6 +878,7 @@ SHOP_SYSTEM = (
 async def shop_check(payload: AnalyzeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "shop")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
     wardrobe = summarize_items_for_ai(items) if items else "The wardrobe is currently empty."
     chat = await ai_chat(f"shop-{user['user_id']}-{uuid.uuid4().hex[:6]}", SHOP_SYSTEM)
@@ -870,7 +1054,7 @@ async def insights(user: dict = Depends(get_scope)):
 
 # ----------------------------- AI: The Missing Piece -----------------------------
 MISSING_SYSTEM = (
-    "You are Aura's brutally honest wardrobe-gap analyst. Given the user's full wardrobe, identify the ONE "
+    "You are Aureve's brutally honest wardrobe-gap analyst. Given the user's full wardrobe, identify the ONE "
     "item that would most increase the number of workable outfits — a genuine gap, not another duplicate. "
     "Be honest: if they already own many of something, say so. Prefer versatile, foundational pieces. "
     "Return STRICT JSON with keys: "
@@ -885,6 +1069,7 @@ MISSING_SYSTEM = (
 async def missing_piece(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "missing")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Add a few more pieces to analyze your wardrobe gaps")
@@ -972,7 +1157,7 @@ async def forecast_summary(lat: float, lon: float, days: int, start_offset: int 
 
 
 PACKING_SYSTEM = (
-    "You are Aura's packing assistant. Build a smart CAPSULE wardrobe for a trip using ONLY the items in the "
+    "You are Aureve's packing assistant. Build a smart CAPSULE wardrobe for a trip using ONLY the items in the "
     "user's wardrobe (by exact id). Maximise outfit combinations while minimising the number of pieces so it "
     "fits in a carry-on. Match the destination weather and the occasions. "
     "Return STRICT JSON with keys: "
@@ -989,6 +1174,7 @@ PACKING_SYSTEM = (
 async def packing_plan(payload: PackingRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "packing")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 3:
@@ -1042,7 +1228,7 @@ class CapsuleRequest(BaseModel):
 
 
 CAPSULE_SYSTEM = (
-    "You are Aura's capsule wardrobe builder. Given a theme (a season or a purpose like Work or Weekend) and the "
+    "You are Aureve's capsule wardrobe builder. Given a theme (a season or a purpose like Work or Weekend) and the "
     "user's wardrobe, curate a lean, cohesive capsule using ONLY the items in the wardrobe (by exact id) that "
     "maximises mix-and-match outfit combinations for that theme. "
     "Return STRICT JSON with keys: "
@@ -1059,6 +1245,7 @@ CAPSULE_SYSTEM = (
 async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "capsule")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 3:
@@ -1094,7 +1281,7 @@ async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_scope)
 
 # ----------------------------- AI: Wardrobe Health Report -----------------------------
 HEALTH_SYSTEM = (
-    "You are Aura's wardrobe health analyst. You are given wardrobe stats and the raw numbers. Write an honest, "
+    "You are Aureve's wardrobe health analyst. You are given wardrobe stats and the raw numbers. Write an honest, "
     "encouraging monthly report. Return STRICT JSON with keys: "
     "headline (one punchy sentence summarising the month), "
     "wasted_summary (2-3 sentences about money tied up in unworn/rarely-worn items, using the numbers given), "
@@ -1110,6 +1297,7 @@ HEALTH_SYSTEM = (
 async def health_report(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "health")
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Add a few more pieces to generate your report")
@@ -1164,7 +1352,7 @@ class BeautyRequest(BaseModel):
 
 
 BEAUTY_SYSTEM = (
-    "You are Aura's professional colour analyst and beauty stylist. Using the person's skin tone, undertone and "
+    "You are Aureve's professional colour analyst and beauty stylist. Using the person's skin tone, undertone and "
     "any personal notes, recommend hair and makeup that flatter THEM — grounded in colour theory (warm vs cool "
     "undertones, contrast levels), never generic. Be confident, calm and specific; explain the reasoning briefly, "
     "like a stylist, and stay inclusive of all genders and presentations. "
@@ -1194,6 +1382,7 @@ async def beauty_suggest(payload: BeautyRequest, user: dict = Depends(get_scope)
             status_code=400,
             detail="Add your skin tone and undertone in your style profile for personalised beauty advice.",
         )
+    await enforce_limit(user, "beauty")
     profile_line = "; ".join(
         f"{k}: {v}" for k, v in [
             ("skin tone", skin), ("undertone", undertone), ("notes", notes),
@@ -1251,7 +1440,7 @@ async def weather(lat: float, lon: float):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Aura API"}
+    return {"message": "Aureve API"}
 
 
 app.include_router(api_router)

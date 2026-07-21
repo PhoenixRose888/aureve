@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Dimensions, RefreshControl } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -10,8 +10,6 @@ import { colors, spacing, radius, fonts } from "@/src/theme";
 import { useAuth } from "@/src/context/AuthContext";
 import { useWeather } from "@/src/hooks/useWeather";
 import { api } from "@/src/api/client";
-
-const { width } = Dimensions.get("window");
 
 const HERO =
   "https://images.unsplash.com/photo-1578102718171-ec1f91680562?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaGljJTIwc3RyZWV0JTIwc3R5bGUlMjBvdXRmaXR8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
@@ -42,6 +40,9 @@ export default function Home() {
   const { weather, status, reload } = useWeather();
   const [recent, setRecent] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const premium = !!user?.premium;
+  const go = (path: string, premiumOnly?: boolean) =>
+    premiumOnly && !premium ? router.push("/premium") : router.push(path as any);
 
   const loadRecent = useCallback(async () => {
     try {
@@ -80,7 +81,7 @@ export default function Home() {
             style={StyleSheet.absoluteFill}
           />
           <View style={[styles.heroTop, { paddingTop: insets.top + spacing.md }]}>
-            <Txt style={styles.brandMark}>AURA</Txt>
+            <Txt style={styles.brandMark}>AUREVE</Txt>
             <View style={styles.weatherPill} testID="weather-pill">
               <Feather name={weatherIcon(weather?.code) as any} size={14} color={colors.onSurfaceInverse} />
               <Txt style={styles.weatherPillTxt}>
@@ -130,21 +131,33 @@ export default function Home() {
               <Txt style={styles.quickTxt}>Add item</Txt>
               <Txt style={styles.quickSub}>Catalogue a piece</Txt>
             </Pressable>
-            <Pressable style={styles.quickCard} testID="home-shop-check-button" onPress={() => router.push("/(tabs)/shop")}>
+            <Pressable style={styles.quickCard} testID="home-shop-check-button" onPress={() => go("/(tabs)/shop", true)}>
               <Feather name="shopping-bag" size={20} color={colors.onSurface} />
               <Txt style={styles.quickTxt}>Shop check</Txt>
               <Txt style={styles.quickSub}>Buy or skip?</Txt>
+              {!premium && <View style={styles.lockDot}><Feather name="lock" size={10} color={colors.onSurfaceInverse} /></View>}
             </Pressable>
           </View>
 
+          {!premium && (
+            <Pressable style={styles.premiumBanner} testID="home-premium-banner" onPress={() => router.push("/premium")}>
+              <Feather name="award" size={20} color={colors.brandTertiary} />
+              <View style={{ flex: 1 }}>
+                <Txt style={styles.premiumBannerTitle}>Unlock your AI stylist</Txt>
+                <Txt style={styles.premiumBannerSub}>Dress Me, packing, colour analysis & more</Txt>
+              </View>
+              <Feather name="arrow-up-right" size={18} color={colors.brandTertiary} />
+            </Pressable>
+          )}
+
           {/* Pack a trip */}
-          <Pressable style={styles.tripCta} testID="home-packing-button" onPress={() => router.push("/packing")}>
+          <Pressable style={styles.tripCta} testID="home-packing-button" onPress={() => go("/packing", true)}>
             <Feather name="briefcase" size={20} color={colors.onSurface} />
             <View style={{ flex: 1 }}>
               <Txt style={styles.tripTitle}>Pack for a trip</Txt>
               <Txt style={styles.tripSub}>A carry-on capsule from your wardrobe</Txt>
             </View>
-            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+            {!premium ? <Feather name="lock" size={15} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
           {/* My looks */}
@@ -168,13 +181,13 @@ export default function Home() {
           </Pressable>
 
           {/* Capsule builder */}
-          <Pressable style={styles.tripCta} testID="home-capsule-button" onPress={() => router.push("/capsule")}>
+          <Pressable style={styles.tripCta} testID="home-capsule-button" onPress={() => go("/capsule", true)}>
             <Feather name="layers" size={20} color={colors.onSurface} />
             <View style={{ flex: 1 }}>
               <Txt style={styles.tripTitle}>Build a capsule</Txt>
               <Txt style={styles.tripSub}>A season or work capsule from your closet</Txt>
             </View>
-            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+            {!premium ? <Feather name="lock" size={15} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
           {/* Recent items */}
@@ -263,6 +276,10 @@ const styles = StyleSheet.create({
   },
   quickTxt: { fontSize: 15, color: colors.onSurface, marginTop: spacing.xs },
   quickSub: { fontSize: 12, color: colors.onSurfaceTertiary },
+  lockDot: { position: "absolute", top: spacing.md, right: spacing.md, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  premiumBanner: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, backgroundColor: colors.surfaceInverse, borderRadius: radius.md, padding: spacing.lg },
+  premiumBannerTitle: { fontSize: 15, color: colors.onSurfaceInverse },
+  premiumBannerSub: { fontSize: 12, color: "rgba(250,250,250,0.6)", marginTop: 1 },
   tripCta: {
     flexDirection: "row",
     alignItems: "center",

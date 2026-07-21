@@ -15,6 +15,7 @@ export default function Profile() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
+  const premium = !!user?.premium;
   const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [missing, setMissing] = useState<any>(null);
@@ -42,12 +43,18 @@ export default function Profile() {
   };
 
   const findMissing = async () => {
+    if (!premium) {
+      router.push("/premium");
+      return;
+    }
     setMissingLoading(true);
     setMissing(null);
     try {
       const r = await api<any>("/insights/missing-piece", { method: "POST" });
       setMissing(r);
-    } catch {}
+    } catch (e: any) {
+      if (e.status === 402) router.push("/premium");
+    }
     setMissingLoading(false);
   };
 
@@ -98,7 +105,7 @@ export default function Profile() {
           </Pressable>
 
           {/* Hair & makeup */}
-          <Pressable style={styles.beautyCta} testID="open-beauty" onPress={() => router.push("/beauty")}>
+          <Pressable style={styles.beautyCta} testID="open-beauty" onPress={() => (premium ? router.push("/beauty") : router.push("/premium"))}>
             <View style={styles.beautyIcon}>
               <Feather name="feather" size={18} color={colors.onBrandTertiary} />
             </View>
@@ -106,7 +113,23 @@ export default function Profile() {
               <Txt style={styles.spTitle}>Hair & makeup for your colouring</Txt>
               <Txt style={styles.spSub}>AI colour analysis from your skin tone & undertone</Txt>
             </View>
-            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+            {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
+          </Pressable>
+
+          {/* Premium status */}
+          <Pressable style={premium ? styles.premiumActiveCta : styles.premiumUpsell} testID="profile-premium-cta" onPress={() => router.push("/premium")}>
+            <Feather name="award" size={18} color={premium ? colors.brand : colors.brandTertiary} />
+            <View style={{ flex: 1 }}>
+              <Txt style={premium ? styles.spTitle : styles.premiumUpsellTitle}>
+                {premium ? "Premium active" : "Go Premium"}
+              </Txt>
+              <Txt style={premium ? styles.spSub : styles.premiumUpsellSub}>
+                {premium
+                  ? (user?.premium_until ? `Until ${new Date(user.premium_until).toLocaleDateString()}` : "Full AI stylist unlocked")
+                  : "Unlock the full AI stylist for your household"}
+              </Txt>
+            </View>
+            <Feather name="chevron-right" size={20} color={premium ? colors.onSurfaceTertiary : colors.brandTertiary} />
           </Pressable>
 
           <View style={styles.metricRow}>
@@ -118,7 +141,7 @@ export default function Profile() {
           </View>
 
           {/* Monthly wardrobe health report */}
-          <Pressable style={styles.reportCta} testID="open-health-report" onPress={() => router.push("/health-report")}>
+          <Pressable style={styles.reportCta} testID="open-health-report" onPress={() => (premium ? router.push("/health-report") : router.push("/premium"))}>
             <View style={styles.reportIcon}>
               <Feather name="activity" size={18} color={colors.onSurfaceInverse} />
             </View>
@@ -126,7 +149,7 @@ export default function Profile() {
               <Txt style={styles.reportTitle}>Monthly wardrobe health report</Txt>
               <Txt style={styles.reportSub}>Wasted money + your #1 unlocking buy</Txt>
             </View>
-            <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
+            {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
           {/* Missing Piece — the honest gap analyzer */}
@@ -233,7 +256,9 @@ export default function Profile() {
         <Pressable style={styles.backdrop} onPress={() => setShowSwitcher(false)}>
           <Pressable style={styles.switchSheet} onPress={(e) => e.stopPropagation()}>
             <Display weight="medium" style={styles.switchTitle}>Wardrobes</Display>
-            <Txt style={styles.switchSub}>One account, a wardrobe for everyone in the household.</Txt>
+            <Txt style={styles.switchSub}>
+              {premium ? "One account, a wardrobe for everyone in the household." : "Add family wardrobes with Premium."}
+            </Txt>
             {profiles.map((p) => (
               <View key={p.id} style={styles.profRow}>
                 <Pressable
@@ -267,14 +292,27 @@ export default function Profile() {
                 style={styles.addBtn}
                 testID="add-profile-button"
                 onPress={async () => {
+                  if (!premium) {
+                    setShowSwitcher(false);
+                    router.push("/premium");
+                    return;
+                  }
                   if (!newName.trim()) return;
-                  await createProfile(newName.trim(), "👤", "individual");
+                  try {
+                    await createProfile(newName.trim(), "👤", "individual");
+                  } catch (e: any) {
+                    if (e.status === 402) {
+                      setShowSwitcher(false);
+                      router.push("/premium");
+                      return;
+                    }
+                  }
                   setNewName("");
                   setShowSwitcher(false);
                   load();
                 }}
               >
-                <Feather name="plus" size={18} color={colors.onBrandPrimary} />
+                <Feather name={premium ? "plus" : "lock"} size={18} color={colors.onBrandPrimary} />
               </Pressable>
             </View>
           </Pressable>
@@ -357,6 +395,10 @@ const styles = StyleSheet.create({
   spSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   beautyCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   beautyIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  premiumUpsell: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg, backgroundColor: colors.surfaceInverse },
+  premiumUpsellTitle: { fontSize: 15, color: colors.onSurfaceInverse },
+  premiumUpsellSub: { fontSize: 12, color: "rgba(250,250,250,0.6)", marginTop: 1 },
+  premiumActiveCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   metricRow: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.lg, borderBottomWidth: 0.5, borderColor: colors.divider },
   metric: { flex: 1, alignItems: "center", gap: 4 },
   mDiv: { width: 0.5, height: 40, backgroundColor: colors.divider },

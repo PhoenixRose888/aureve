@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { useAuth } from "@/src/context/AuthContext";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
 
 const verdictColor = (v: string) =>
@@ -15,11 +16,21 @@ const verdictColor = (v: string) =>
 export default function Shop() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
+  const premium = !!user?.premium;
   const [picker, setPicker] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
+
+  const openPicker = () => {
+    if (!premium) {
+      router.push("/premium");
+      return;
+    }
+    setPicker(true);
+  };
 
   const onPicked = async (base64: string) => {
     setImage(base64);
@@ -30,7 +41,11 @@ export default function Shop() {
       const r = await api<any>("/shop-check", { method: "POST", body: { image: base64 } });
       setResult(r);
     } catch (e: any) {
-      setError(e.message || "Couldn't analyze the item");
+      if (e.status === 402) {
+        router.push("/premium");
+      } else {
+        setError(e.message || "Couldn't analyze the item");
+      }
     }
     setLoading(false);
   };
@@ -50,17 +65,17 @@ export default function Shop() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {!image ? (
-          <Pressable style={styles.dropzone} testID="shop-upload-button" onPress={() => setPicker(true)}>
+          <Pressable style={styles.dropzone} testID="shop-upload-button" onPress={openPicker}>
             <View style={styles.dropIcon}>
               <Feather name="shopping-bag" size={28} color={colors.onSurface} />
             </View>
             <Display weight="medium" style={styles.dropTitle}>Eyeing something new?</Display>
             <Txt style={styles.dropSub}>
-              Upload a photo of the item and Aura tells you if it fills a real gap — or if it's just Black Jacket Number Eight in disguise.
+              Upload a photo of the item and Aureve tells you if it fills a real gap — or if it is just Black Jacket Number Eight in disguise.
             </Txt>
             <View style={styles.dropBtn}>
-              <Feather name="upload" size={16} color={colors.onBrandPrimary} />
-              <Txt style={styles.dropBtnTxt}>Upload item photo</Txt>
+              <Feather name={premium ? "upload" : "lock"} size={16} color={colors.onBrandPrimary} />
+              <Txt style={styles.dropBtnTxt}>{premium ? "Upload item photo" : "Unlock with Premium"}</Txt>
             </View>
           </Pressable>
         ) : (

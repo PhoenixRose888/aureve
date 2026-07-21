@@ -28,11 +28,16 @@ export default function Beauty() {
       setResult(r);
     } catch (e: any) {
       const msg = e.message || "Couldn't generate recommendations";
+      if (e.status === 402) {
+        router.push("/premium");
+        setLoading(false);
+        return;
+      }
       if (msg.toLowerCase().includes("skin tone")) setNeedsProfile(true);
       setError(msg);
     }
     setLoading(false);
-  }, [occasion]);
+  }, [occasion, router]);
 
   return (
     <View style={styles.container}>

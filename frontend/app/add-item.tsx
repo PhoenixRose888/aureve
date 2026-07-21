@@ -180,7 +180,7 @@ export default function AddItem() {
               <View style={styles.photoEmpty}>
                 <Feather name="user" size={22} color={colors.onSurfaceTertiary} />
                 <Txt style={styles.photoLabel}>Worn photo</Txt>
-                <Txt style={styles.photoHint}>Helps Aura learn what flatters you</Txt>
+                <Txt style={styles.photoHint}>Helps Aureve learn what flatters you</Txt>
               </View>
             )}
           </Pressable>
@@ -266,7 +266,7 @@ export default function AddItem() {
           <View style={styles.hintSheet}>
             <Display weight="medium" style={styles.hintTitle}>Which piece is this?</Display>
             <Txt style={styles.hintSub}>
-              Wearing more than one thing? Tell Aura which garment to focus on for an accurate read.
+              Wearing more than one thing? Tell Aureve which garment to focus on for an accurate read.
             </Txt>
             <View style={styles.hintChips}>
               {CATEGORIES.map((c) => (
