@@ -1,10 +1,9 @@
-import { Tabs, useRouter } from "expo-router";
+import { Tabs } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Platform } from "react-native";
 import { colors, fonts } from "@/src/theme";
 
 export default function TabsLayout() {
-  const router = useRouter();
   return (
     <Tabs
       screenOptions={{
@@ -46,12 +45,6 @@ export default function TabsLayout() {
         options={{
           title: "Dress Me",
           tabBarIcon: ({ color }) => <Feather name="star" size={20} color={color} />,
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            router.push("/dressme");
-          },
         }}
       />
       <Tabs.Screen

@@ -87,7 +87,7 @@ export default function OutfitsHub() {
             <Txt style={styles.emptySub}>
               Tap &lsquo;Dress Me&rsquo; to create your first look in seconds, or build one by hand.
             </Txt>
-            <Pressable style={styles.emptyCta} testID="outfits-empty-dressme" onPress={() => router.push("/dressme")}>
+            <Pressable style={styles.emptyCta} testID="outfits-empty-dressme" onPress={() => router.push("/(tabs)/dressme")}>
               <Txt style={styles.emptyCtaTxt}>Dress Me</Txt>
             </Pressable>
           </View>

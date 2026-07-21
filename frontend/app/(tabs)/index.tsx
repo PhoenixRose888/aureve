@@ -73,7 +73,7 @@ export default function Home() {
   const openDressMe = () => {
     haptics.tap();
     if (!premium) { router.push("/premium"); return; }
-    router.push("/dressme");
+    router.push("/(tabs)/dressme");
   };
 
   const quickActions = [

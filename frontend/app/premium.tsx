@@ -37,7 +37,7 @@ export default function Premium() {
     try {
       await api("/membership/trial", { method: "POST" });
       await refreshUser();
-      router.replace("/dressme");
+      router.replace("/(tabs)/dressme");
     } catch (e: any) {
       setError(e.message || "Couldn't start your trial");
     }
