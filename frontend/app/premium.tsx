@@ -25,9 +25,24 @@ export default function Premium() {
   const { user, refreshUser } = useAuth();
   const [plan, setPlan] = useState<"annual" | "monthly">("annual");
   const [loading, setLoading] = useState(false);
+  const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState("");
 
   const alreadyPremium = !!user?.premium;
+  const trialEligible = !!user?.trial_eligible;
+
+  const startTrial = async () => {
+    setTrialLoading(true);
+    setError("");
+    try {
+      await api("/membership/trial", { method: "POST" });
+      await refreshUser();
+      router.replace("/dressme");
+    } catch (e: any) {
+      setError(e.message || "Couldn't start your trial");
+    }
+    setTrialLoading(false);
+  };
 
   const start = async () => {
     setLoading(true);
@@ -92,6 +107,25 @@ export default function Premium() {
           </View>
         ) : null}
 
+        {trialEligible && !alreadyPremium ? (
+          <Pressable style={styles.trialCta} testID="start-trial-button" onPress={startTrial} disabled={trialLoading}>
+            {trialLoading ? (
+              <ActivityIndicator color={colors.onBrandTertiary} />
+            ) : (
+              <>
+                <Feather name="gift" size={18} color={colors.onBrandTertiary} />
+                <View>
+                  <Txt style={styles.trialTitle}>Start 7 days free</Txt>
+                  <Txt style={styles.trialSub}>Full access. No card required.</Txt>
+                </View>
+              </>
+            )}
+          </Pressable>
+        ) : null}
+
+        <Txt style={styles.plansHeading}>
+          {trialEligible && !alreadyPremium ? "OR CHOOSE A PLAN" : "CHOOSE A PLAN"}
+        </Txt>
         <View style={styles.plans}>
           <Pressable
             style={[styles.planCard, plan === "annual" && styles.planActive]}
@@ -155,7 +189,11 @@ const styles = StyleSheet.create({
   activeCard: { marginTop: spacing["2xl"], borderWidth: 0.5, borderColor: colors.brand, borderRadius: radius.md, padding: spacing.lg, alignItems: "center", gap: 4 },
   activeTxt: { fontSize: 16, color: colors.onSurfaceInverse },
   activeSub: { fontSize: 12, color: "rgba(250,250,250,0.6)" },
-  plans: { marginTop: spacing["2xl"], gap: spacing.md },
+  plans: { marginTop: spacing.md, gap: spacing.md },
+  trialCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing["2xl"], minHeight: 64, justifyContent: "center" },
+  trialTitle: { fontSize: 16, color: colors.onBrandTertiary },
+  trialSub: { fontSize: 12, color: colors.onBrandTertiary, opacity: 0.75, marginTop: 1 },
+  plansHeading: { fontSize: 11, letterSpacing: 2, color: "rgba(250,249,246,0.5)", marginTop: spacing["2xl"], marginBottom: spacing.xs },
   planCard: { borderWidth: 1, borderColor: "rgba(250,250,250,0.2)", borderRadius: radius.md, padding: spacing.lg },
   planActive: { borderColor: colors.brandTertiary, backgroundColor: "rgba(232,223,216,0.08)" },
   popular: { alignSelf: "flex-start", backgroundColor: colors.brandTertiary, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 3, marginBottom: spacing.sm },

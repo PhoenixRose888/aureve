@@ -6,7 +6,17 @@ import { api, setToken, clearToken, getToken } from "@/src/api/client";
 
 WebBrowser.maybeCompleteAuthSession();
 
-type User = { user_id: string; email: string; name?: string; picture?: string; premium?: boolean; premium_until?: string } | null;
+type User = {
+  user_id: string;
+  email: string;
+  name?: string;
+  picture?: string;
+  premium?: boolean;
+  premium_until?: string;
+  premium_source?: string;
+  trial_used?: boolean;
+  trial_eligible?: boolean;
+} | null;
 
 type AuthCtx = {
   user: User;

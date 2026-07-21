@@ -41,6 +41,7 @@ export default function Home() {
   const [recent, setRecent] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const premium = !!user?.premium;
+  const trialEligible = !!user?.trial_eligible;
   const go = (path: string, premiumOnly?: boolean) =>
     premiumOnly && !premium ? router.push("/premium") : router.push(path as any);
 
@@ -161,10 +162,10 @@ export default function Home() {
 
           {!premium && (
             <Pressable style={styles.premiumBanner} testID="home-premium-banner" onPress={() => router.push("/premium")}>
-              <Feather name="award" size={20} color={colors.brandTertiary} />
+              <Feather name={trialEligible ? "gift" : "award"} size={20} color={colors.brandTertiary} />
               <View style={{ flex: 1 }}>
-                <Txt style={styles.premiumBannerTitle}>Unlock your AI stylist</Txt>
-                <Txt style={styles.premiumBannerSub}>Dress Me, packing, colour analysis & more</Txt>
+                <Txt style={styles.premiumBannerTitle}>{trialEligible ? "Try Premium free for 7 days" : "Unlock your AI stylist"}</Txt>
+                <Txt style={styles.premiumBannerSub}>{trialEligible ? "Dress Me, packing & colour analysis — on us" : "Dress Me, packing, colour analysis & more"}</Txt>
               </View>
               <Feather name="arrow-up-right" size={18} color={colors.brandTertiary} />
             </Pressable>

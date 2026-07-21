@@ -256,7 +256,15 @@ async def create_session(payload: SessionRequest):
 
 @api_router.get("/auth/me")
 async def auth_me(user: dict = Depends(get_current_user)):
-    return {**user, "premium": is_premium(user), "premium_until": user.get("premium_until")}
+    prem = is_premium(user)
+    return {
+        **user,
+        "premium": prem,
+        "premium_until": user.get("premium_until"),
+        "premium_source": user.get("premium_source"),
+        "trial_used": bool(user.get("trial_used")),
+        "trial_eligible": (not prem) and (not user.get("trial_used")),
+    }
 
 
 @api_router.post("/auth/logout")
@@ -275,14 +283,34 @@ class CheckoutRequest(BaseModel):
 
 @api_router.get("/membership/plans")
 async def membership_plans(user: dict = Depends(get_current_user)):
+    prem = is_premium(user)
     return {
-        "premium": is_premium(user),
+        "premium": prem,
         "premium_until": user.get("premium_until"),
+        "premium_source": user.get("premium_source"),
+        "trial_used": bool(user.get("trial_used")),
+        "trial_eligible": (not prem) and (not user.get("trial_used")),
+        "trial_days": 7,
         "plans": [
             {"id": k, "amount": v["amount"], "days": v["days"], "label": v["label"], "currency": "usd"}
             for k, v in PREMIUM_PLANS.items()
         ],
     }
+
+
+@api_router.post("/membership/trial")
+async def start_trial(account: dict = Depends(get_current_user)):
+    """App-managed 7-day free trial — instant Premium, no card, once per account."""
+    if account.get("trial_used"):
+        raise HTTPException(status_code=400, detail="You've already used your free trial.")
+    if is_premium(account):
+        raise HTTPException(status_code=400, detail="You're already on Premium.")
+    until = (now_utc() + timedelta(days=7)).isoformat()
+    await db.users.update_one(
+        {"user_id": account["user_id"]},
+        {"$set": {"premium_until": until, "premium_source": "trial", "trial_used": True}},
+    )
+    return {"premium": True, "premium_until": until, "premium_source": "trial", "trial_used": True}
 
 
 @api_router.post("/payments/checkout")
@@ -338,7 +366,7 @@ async def _grant_premium(account_id: str, plan_key: str):
         except Exception:
             pass
     until = base + timedelta(days=plan["days"])
-    await db.users.update_one({"user_id": account_id}, {"$set": {"premium_until": until.isoformat()}})
+    await db.users.update_one({"user_id": account_id}, {"$set": {"premium_until": until.isoformat(), "premium_source": "paid"}})
     return until.isoformat()
 
 
