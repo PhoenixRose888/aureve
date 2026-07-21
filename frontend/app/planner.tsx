@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Modal } from "react-native";
-import { Image } from "expo-image";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
+import GarmentImage from "@/src/components/GarmentImage";
 
 function dateKey(d: Date) {
   const y = d.getFullYear();
@@ -141,13 +141,9 @@ export default function Planner() {
                         </Pressable>
                       </View>
                       <View style={styles.thumbs}>
-                        {(plan.items || []).slice(0, 5).map((it: any) =>
-                          it.photo ? (
-                            <Image key={it.id} source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.thumb} contentFit="cover" />
-                          ) : (
-                            <View key={it.id} style={[styles.thumb, styles.ph]}><Feather name="image" size={11} color={colors.onSurfaceTertiary} /></View>
-                          )
-                        )}
+                        {(plan.items || []).slice(0, 5).map((it: any) => (
+                          <GarmentImage key={it.id} photo={it.photo} category={it.category} style={styles.thumb} iconSize={11} />
+                        ))}
                       </View>
                     </View>
                   ) : (
@@ -197,13 +193,9 @@ export default function Planner() {
                 outfits.map((o) => (
                   <Pressable key={o.id} style={styles.lookRow} testID={`assign-${o.id}`} onPress={() => assignSavedLook(o)}>
                     <View style={styles.lookThumbs}>
-                      {(o.items || []).slice(0, 3).map((it: any) =>
-                        it.photo ? (
-                          <Image key={it.id} source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.lookThumb} contentFit="cover" />
-                        ) : (
-                          <View key={it.id} style={[styles.lookThumb, styles.ph]} />
-                        )
-                      )}
+                      {(o.items || []).slice(0, 3).map((it: any) => (
+                        <GarmentImage key={it.id} photo={it.photo} category={it.category} style={styles.lookThumb} iconSize={11} />
+                      ))}
                     </View>
                     <Txt style={styles.lookName} numberOfLines={1}>{o.name}</Txt>
                     <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -11,6 +10,7 @@ import { api } from "@/src/api/client";
 import { useWeather } from "@/src/hooks/useWeather";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -216,13 +216,7 @@ export default function DressMe() {
             <View style={styles.collage}>
               {result.resolved_items?.map((r: any, i: number) => (
                 <Pressable key={i} style={styles.collageItem} onPress={() => router.push(`/item/${r.item.id}`)}>
-                  {r.item.photo ? (
-                    <Image source={{ uri: `data:image/jpeg;base64,${r.item.photo}` }} style={styles.collageImg} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.collageImg, styles.placeholder]}>
-                      <Feather name="image" size={20} color={colors.onSurfaceTertiary} />
-                    </View>
-                  )}
+                  <GarmentImage photo={r.item.photo} category={r.item.category} style={styles.collageImg} iconSize={22} />
                   <Txt style={styles.slot}>{r.slot}</Txt>
                   <Txt style={styles.itemName} numberOfLines={1}>{r.item.name}</Txt>
                 </Pressable>

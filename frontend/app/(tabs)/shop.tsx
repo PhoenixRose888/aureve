@@ -9,6 +9,7 @@ import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const verdictColor = (v: string) =>
   v === "Buy" ? colors.success : v === "Skip" ? colors.error : colors.warning;
@@ -168,13 +169,7 @@ function Section({ title, items, router }: { title: string; items: any[]; router
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.xl }}>
         {items.map((it) => (
           <Pressable key={it.id} style={styles.simCard} onPress={() => router.push(`/item/${it.id}`)}>
-            {it.photo ? (
-              <Image source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.simImg} contentFit="cover" />
-            ) : (
-              <View style={[styles.simImg, styles.simPlaceholder]}>
-                <Feather name="image" size={18} color={colors.onSurfaceTertiary} />
-              </View>
-            )}
+            <GarmentImage photo={it.photo} category={it.category} style={styles.simImg} iconSize={20} />
             <Txt style={styles.simName} numberOfLines={1}>{it.name}</Txt>
           </Pressable>
         ))}

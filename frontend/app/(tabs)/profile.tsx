@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, TextInput } from "react-native";
-import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -10,6 +9,7 @@ import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
+import GarmentImage from "@/src/components/GarmentImage";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
@@ -264,11 +264,7 @@ export default function Profile() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.xl, marginTop: spacing.md }}>
                 {unworn.map((it: any) => (
                   <Pressable key={it.id} style={styles.simCard} onPress={() => router.push(`/item/${it.id}`)}>
-                    {it.photo ? (
-                      <Image source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.simImg} contentFit="cover" />
-                    ) : (
-                      <View style={[styles.simImg, styles.simPlaceholder]}><Feather name="image" size={16} color={colors.onSurfaceTertiary} /></View>
-                    )}
+                    <GarmentImage photo={it.photo} category={it.category} style={styles.simImg} iconSize={18} />
                     <Txt style={styles.simName} numberOfLines={1}>{it.name}</Txt>
                   </Pressable>
                 ))}
@@ -383,11 +379,7 @@ function RankList({ title, items, router }: { title: string; items: any[]; route
       {items.map((it, i) => (
         <Pressable key={it.id} style={styles.rankRow} onPress={() => router.push(`/item/${it.id}`)}>
           <Txt style={styles.rankNum}>{i + 1}</Txt>
-          {it.photo ? (
-            <Image source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.rankImg} contentFit="cover" />
-          ) : (
-            <View style={[styles.rankImg, styles.simPlaceholder]}><Feather name="image" size={14} color={colors.onSurfaceTertiary} /></View>
-          )}
+          <GarmentImage photo={it.photo} category={it.category} style={styles.rankImg} iconSize={16} />
           <View style={{ flex: 1 }}>
             <Txt style={styles.rankName} numberOfLines={1}>{it.name}</Txt>
             <Txt style={styles.rankMeta}>{it.wear_count} wears{it.price ? ` · $${(it.price / it.wear_count).toFixed(2)}/wear` : ""}</Txt>

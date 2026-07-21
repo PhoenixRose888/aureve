@@ -8,6 +8,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { shareImage } from "@/src/utils/shareImage";
+import GarmentImage from "@/src/components/GarmentImage";
 
 function fmtDate(iso: string) {
   try {
@@ -53,15 +54,9 @@ export default function Looks() {
 
   const Thumbs = ({ items }: { items: any[] }) => (
     <View style={styles.thumbs}>
-      {items.slice(0, 5).map((it) =>
-        it.photo ? (
-          <Image key={it.id} source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.thumb} contentFit="cover" />
-        ) : (
-          <View key={it.id} style={[styles.thumb, styles.placeholder]}>
-            <Feather name="image" size={12} color={colors.onSurfaceTertiary} />
-          </View>
-        )
-      )}
+      {items.slice(0, 5).map((it) => (
+        <GarmentImage key={it.id} photo={it.photo} category={it.category} style={styles.thumb} iconSize={14} />
+      ))}
       {items.length > 5 ? <View style={[styles.thumb, styles.more]}><Txt style={styles.moreTxt}>+{items.length - 5}</Txt></View> : null}
     </View>
   );

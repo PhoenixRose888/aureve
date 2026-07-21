@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, TextInput } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const THEMES = ["Autumn", "Winter", "Spring", "Summer", "Work", "Weekend", "Travel", "Evening"];
 
@@ -112,11 +112,7 @@ export default function Capsule() {
             <View style={styles.grid}>
               {result.capsule_items?.map((it: any) => (
                 <Pressable key={it.id} style={styles.gItem} onPress={() => router.push(`/item/${it.id}`)}>
-                  {it.photo ? (
-                    <Image source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.gImg} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.gImg, styles.ph]}><Feather name="image" size={16} color={colors.onSurfaceTertiary} /></View>
-                  )}
+                  <GarmentImage photo={it.photo} category={it.category} style={styles.gImg} iconSize={18} />
                   <Txt style={styles.gName} numberOfLines={1}>{it.name}</Txt>
                 </Pressable>
               ))}
@@ -129,13 +125,9 @@ export default function Capsule() {
                   <View key={i} style={styles.outfitRow}>
                     <Txt style={styles.outfitName}>{o.name}</Txt>
                     <View style={styles.oThumbs}>
-                      {o.items.map((it: any) =>
-                        it.photo ? (
-                          <Image key={it.id} source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.oThumb} contentFit="cover" />
-                        ) : (
-                          <View key={it.id} style={[styles.oThumb, styles.ph]} />
-                        )
-                      )}
+                      {o.items.map((it: any) => (
+                        <GarmentImage key={it.id} photo={it.photo} category={it.category} style={styles.oThumb} iconSize={14} />
+                      ))}
                     </View>
                   </View>
                 ))}

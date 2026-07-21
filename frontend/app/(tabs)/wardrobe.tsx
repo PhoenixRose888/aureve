@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, CATEGORIES } from "@/src/theme";
 import { api } from "@/src/api/client";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const { width } = Dimensions.get("window");
 const GUTTER = spacing.md;
@@ -52,13 +53,7 @@ export default function Wardrobe() {
       style={[styles.card, { marginRight: index % 2 === 0 ? GUTTER : 0 }]}
       onPress={() => router.push(`/item/${item.id}`)}
     >
-      {item.photo ? (
-        <Image source={{ uri: `data:image/jpeg;base64,${item.photo}` }} style={styles.cardImg} contentFit="cover" transition={200} />
-      ) : (
-        <View style={[styles.cardImg, styles.placeholder]}>
-          <Feather name="image" size={24} color={colors.onSurfaceTertiary} />
-        </View>
-      )}
+      <GarmentImage photo={item.photo} category={item.category} style={styles.cardImg} iconSize={28} testID={`wardrobe-img-${item.id}`} />
       {status !== "Ready" && (
         <View style={styles.laundryBadge}>
           <Feather name="droplet" size={11} color={colors.onSurfaceInverse} />

@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Dimensions, ActivityIndicator, Modal } from "react-native";
-import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const { width } = Dimensions.get("window");
 
@@ -111,7 +111,7 @@ export default function ItemDetail() {
               onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
             >
               {photos.map((p: string, i: number) => (
-                <Image key={i} source={{ uri: `data:image/jpeg;base64,${p}` }} style={styles.galleryImg} contentFit="cover" />
+                <GarmentImage key={i} photo={p} category={item.category} style={styles.galleryImg} iconSize={40} />
               ))}
             </ScrollView>
           ) : (
@@ -252,11 +252,7 @@ export default function ItemDetail() {
                 <Txt style={styles.pairsLabel}>PAIRS BEST WITH</Txt>
                 {compat.resolved_matches?.slice(0, 8).map((m: any) => (
                   <Pressable key={m.item.id} style={styles.pairRow} onPress={() => router.push(`/item/${m.item.id}`)}>
-                    {m.item.photo ? (
-                      <Image source={{ uri: `data:image/jpeg;base64,${m.item.photo}` }} style={styles.pairImg} contentFit="cover" />
-                    ) : (
-                      <View style={[styles.pairImg, styles.placeholder]}><Feather name="image" size={14} color={colors.onSurfaceTertiary} /></View>
-                    )}
+                    <GarmentImage photo={m.item.photo} category={m.item.category} style={styles.pairImg} iconSize={16} />
                     <View style={{ flex: 1 }}>
                       <View style={styles.pairTop}>
                         <Txt style={styles.pairName} numberOfLines={1}>{m.item.name}</Txt>

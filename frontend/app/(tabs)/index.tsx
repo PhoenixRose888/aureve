@@ -10,6 +10,7 @@ import { colors, spacing, radius, fonts } from "@/src/theme";
 import { useAuth } from "@/src/context/AuthContext";
 import { useWeather } from "@/src/hooks/useWeather";
 import { api } from "@/src/api/client";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const HERO =
   "https://images.unsplash.com/photo-1578102718171-ec1f91680562?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaGljJTIwc3RyZWV0JTIwc3R5bGUlMjBvdXRmaXR8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
@@ -242,13 +243,7 @@ export default function Home() {
             >
               {recent.map((it) => (
                 <Pressable key={it.id} style={styles.recentCard} onPress={() => router.push(`/item/${it.id}`)}>
-                  {it.photo ? (
-                    <Image source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.recentImg} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.recentImg, styles.recentPlaceholder]}>
-                      <Feather name="image" size={20} color={colors.onSurfaceTertiary} />
-                    </View>
-                  )}
+                  <GarmentImage photo={it.photo} category={it.category} style={styles.recentImg} iconSize={22} />
                   <Txt style={styles.recentName} numberOfLines={1}>{it.name}</Txt>
                   <Txt style={styles.recentCat}>{it.category}</Txt>
                 </Pressable>

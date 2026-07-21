@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView } from "react-native";
-import { Image } from "expo-image";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -8,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
+import GarmentImage from "@/src/components/GarmentImage";
 
 const OCCASION_PRESETS = ["Business trip", "Beach holiday", "City break", "Wedding away", "Family visit"];
 
@@ -181,11 +181,7 @@ export default function Packing() {
             <View style={styles.capsuleGrid}>
               {result.capsule_items?.map((it: any) => (
                 <Pressable key={it.id} style={styles.capItem} onPress={() => router.push(`/item/${it.id}`)}>
-                  {it.photo ? (
-                    <Image source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.capImg} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.capImg, styles.placeholder]}><Feather name="image" size={16} color={colors.onSurfaceTertiary} /></View>
-                  )}
+                  <GarmentImage photo={it.photo} category={it.category} style={styles.capImg} iconSize={18} />
                   <Txt style={styles.capName} numberOfLines={1}>{it.name}</Txt>
                 </Pressable>
               ))}
@@ -200,11 +196,7 @@ export default function Packing() {
                     <Txt style={styles.outfitName}>{o.name}</Txt>
                     <View style={styles.outfitThumbs}>
                       {o.items.map((it: any) => (
-                        it.photo ? (
-                          <Image key={it.id} source={{ uri: `data:image/jpeg;base64,${it.photo}` }} style={styles.thumb} contentFit="cover" />
-                        ) : (
-                          <View key={it.id} style={[styles.thumb, styles.placeholder]}><Feather name="image" size={12} color={colors.onSurfaceTertiary} /></View>
-                        )
+                        <GarmentImage key={it.id} photo={it.photo} category={it.category} style={styles.thumb} iconSize={12} />
                       ))}
                     </View>
                   </View>
