@@ -1,5 +1,11 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21c) — 7-day free trial + conversion ribbon
+- ✅ **App-managed 7-day free trial** (no card, once per account). `POST /api/membership/trial` grants 7 days Premium instantly (premium_source='trial', trial_used=true). `/membership/plans` + `/auth/me` expose trial_used / trial_eligible / trial_days / premium_source; paid grants tagged premium_source='paid'. Paywall shows a "Start 7 days free" hero when eligible; Home shows a "Try Premium free for 7 days" ribbon (gift icon) that swaps to "Unlock your AI stylist" after the trial. Verified iteration 8 (9/9): grant, no-reuse, expiry lapse → 402, regression.
+- 🔜 Next: Virtual Try-On (Gemini Nano Banana) → then Calendar integration.
+
+
+
 ## Implemented (2026-07-21b) — Dress Me + calm brand identity
 - ✅ **Flagship "Dress Me"** (Premium) — one-tap daily outfit. `POST /api/dressme` infers today's occasion from the planner (else "a normal day"), uses live weather + the ready wardrobe via the shared `_build_outfit` engine, returns confidence score + reasoning. New `app/dressme.tsx` (charcoal, auto-runs on open) and it's now the **primary Home CTA**; custom-occasion Stylist demoted to secondary. Verified iteration 7 (6/6).
 - ✅ **Brand identity refresh** to the "calm, timeless, inclusive" direction: palette → soft ivory `#FAF9F6` + deep charcoal `#232323`, muted-emerald accent `#3F6B5B`, sage success `#7A9E7E`, terracotta error `#C46A5C`, sapphire info `#4B6587`. Typography switched from ornate serif (Cormorant) to **Plus Jakarta Sans** (local static TTFs) — modern, readable, timeless. Voice stays never-judgemental ("Wear everything you own").

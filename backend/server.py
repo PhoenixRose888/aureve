@@ -176,6 +176,7 @@ PREMIUM_MESSAGES = {
     "health": "The Wardrobe Health Report is a Premium feature.",
     "compatibility": "Wardrobe compatibility is a Premium feature.",
     "dressme": "Dress Me is a Premium feature.",
+    "tryon": "Virtual Try-On is a Premium feature.",
     "household": "Household wardrobes are a Premium feature — one subscription covers everyone.",
 }
 
@@ -863,6 +864,64 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     result["occasion_used"] = occasion
     result["from_plan"] = plan_title
     return result
+
+
+# ----------------------------- AI: Virtual Try-On (Nano Banana) -----------------------------
+class TryOnRequest(BaseModel):
+    person_image: str            # base64 (no data-uri prefix) of the user
+    item_ids: List[str] = []     # garments to render onto the person
+    outfit_id: Optional[str] = None
+
+
+@api_router.post("/tryon")
+async def virtual_tryon(payload: TryOnRequest, user: dict = Depends(get_scope)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "tryon")
+    if not payload.person_image:
+        raise HTTPException(status_code=400, detail="A photo of you is required.")
+    item_ids = list(payload.item_ids)
+    if payload.outfit_id and not item_ids:
+        outfit = await db.outfits.find_one({"id": payload.outfit_id, "user_id": user["user_id"]}, {"_id": 0})
+        if outfit:
+            item_ids = outfit.get("item_ids", [])
+    if not item_ids:
+        raise HTTPException(status_code=400, detail="Pick at least one item to try on.")
+    items = await db.items.find(
+        {"id": {"$in": item_ids}, "user_id": user["user_id"]}, {"_id": 0}
+    ).to_list(20)
+    garments = [it for it in items if it.get("photo")][:5]
+    if not garments:
+        raise HTTPException(status_code=400, detail="Those items don't have photos to try on.")
+
+    contents = [ImageContent(payload.person_image)]
+    labels = []
+    for it in garments:
+        contents.append(ImageContent(it["photo"]))
+        labels.append(f"- {it.get('name', 'item')} ({it.get('category', '')}, {it.get('colour', '')})")
+    instruction = (
+        "This is a virtual try-on. The FIRST image is a photo of a person. Each following image is one "
+        "clothing item they own:\n" + "\n".join(labels) + "\n\n"
+        "Generate ONE photorealistic image of the SAME person — keep their face, skin tone, hair and body "
+        "shape identical — now wearing ALL of these garments together as a single coherent, well-fitted "
+        "outfit. Natural pose, clean neutral studio-style background, flattering full-body framing, realistic "
+        "fabric drape and lighting. Do not change the person's identity."
+    )
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"tryon-{user['user_id']}-{uuid.uuid4().hex[:6]}",
+        system_message="You are a photorealistic virtual try-on image generator.",
+    ).with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+    try:
+        _text, images = await chat.send_message_multimodal_response(
+            UserMessage(text=instruction, file_contents=contents)
+        )
+    except Exception as e:
+        logger.exception("tryon failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    if not images:
+        raise HTTPException(status_code=502, detail="Couldn't generate a try-on image. Try a clearer full-body photo.")
+    return {"image": images[0]["data"], "mime_type": images[0].get("mime_type", "image/png")}
 
 
 # ----------------------------- AI: Compatibility / Wardrobe Intelligence -----------------------------

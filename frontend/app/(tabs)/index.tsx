@@ -211,6 +211,16 @@ export default function Home() {
             {!premium ? <Feather name="lock" size={15} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
+          {/* Virtual try-on */}
+          <Pressable style={styles.tripCta} testID="home-tryon-button" onPress={() => go("/tryon", true)}>
+            <Feather name="user" size={20} color={colors.onSurface} />
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.tripTitle}>Virtual try-on</Txt>
+              <Txt style={styles.tripSub}>See your clothes on you before you wear them</Txt>
+            </View>
+            {!premium ? <Feather name="lock" size={15} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
+          </Pressable>
+
           {/* Recent items */}
           <View style={styles.sectionHead}>
             <Display weight="medium" style={styles.sectionTitle}>Recently added</Display>

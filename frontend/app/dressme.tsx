@@ -181,6 +181,19 @@ export default function DressMe() {
               <Feather name={logged ? "check" : "heart"} size={17} color={colors.onBrandTertiary} />
               <Txt style={styles.wearTxt}>{logged ? "Logged for today" : "Wear this today"}</Txt>
             </Pressable>
+            <Pressable
+              style={styles.seeOnMe}
+              testID="dressme-tryon"
+              onPress={() =>
+                router.push({
+                  pathname: "/tryon",
+                  params: { items: result.resolved_items.map((r: any) => r.item.id).join(",") },
+                })
+              }
+            >
+              <Feather name="user" size={16} color={colors.onSurfaceInverse} />
+              <Txt style={styles.seeOnMeTxt}>See it on me</Txt>
+            </Pressable>
           </View>
         ) : null}
       </ScrollView>
@@ -222,4 +235,6 @@ const styles = StyleSheet.create({
   actGhostTxt: { color: colors.onSurfaceInverse, fontSize: 14 },
   wearBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 54, borderRadius: radius.sm, backgroundColor: colors.brandTertiary, marginTop: spacing.md },
   wearTxt: { color: colors.onBrandTertiary, fontSize: 16 },
+  seeOnMe: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 50, borderRadius: radius.sm, borderWidth: 0.5, borderColor: "rgba(250,249,246,0.3)", marginTop: spacing.md },
+  seeOnMeTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
 });
