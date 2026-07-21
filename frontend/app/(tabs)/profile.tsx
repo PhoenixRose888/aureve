@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, TextInput } from "react-native";
 import { Image } from "expo-image";
+import * as WebBrowser from "expo-web-browser";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,11 +23,16 @@ export default function Profile() {
   const [missingLoading, setMissingLoading] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [newName, setNewName] = useState("");
+  const [calConnected, setCalConnected] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const d = await api<any>("/insights");
       setData(d);
+    } catch {}
+    try {
+      const s = await api<any>("/calendar/status");
+      setCalConnected(!!s.connected);
     } catch {}
   }, []);
 
@@ -114,6 +120,32 @@ export default function Profile() {
               <Txt style={styles.spSub}>AI colour analysis from your skin tone & undertone</Txt>
             </View>
             {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
+          </Pressable>
+
+          {/* Google Calendar */}
+          <Pressable
+            style={styles.premiumActiveCta}
+            testID="profile-calendar-cta"
+            onPress={async () => {
+              if (calConnected) {
+                await api("/calendar/disconnect", { method: "DELETE" }).catch(() => {});
+                setCalConnected(false);
+              } else {
+                try {
+                  const { url } = await api<any>("/calendar/authorize");
+                  await WebBrowser.openBrowserAsync(url);
+                  const s = await api<any>("/calendar/status");
+                  setCalConnected(!!s.connected);
+                } catch {}
+              }
+            }}
+          >
+            <Feather name="calendar" size={18} color={colors.brand} />
+            <View style={{ flex: 1 }}>
+              <Txt style={styles.spTitle}>Google Calendar</Txt>
+              <Txt style={styles.spSub}>{calConnected ? "Connected — Dress Me uses your schedule. Tap to disconnect." : "Connect so Dress Me styles for your day"}</Txt>
+            </View>
+            <Feather name={calConnected ? "check" : "chevron-right"} size={20} color={colors.onSurfaceTertiary} />
           </Pressable>
 
           {/* Premium status */}

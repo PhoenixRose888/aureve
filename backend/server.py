@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header, Request
+from fastapi.responses import HTMLResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -30,6 +31,11 @@ EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 AI_MODEL = ("openai", "gpt-5.4")
 
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
+
+GCAL_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '')
+GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '')
+GCAL_REDIRECT_URI = os.environ.get('GOOGLE_CALENDAR_REDIRECT_URI', '')
+GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 
 # Premium membership — one-time payment grants a time-boxed entitlement (whole household).
 PREMIUM_PLANS = {
@@ -854,17 +860,22 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     today = now_utc().strftime("%Y-%m-%d")
     occasion = (payload.occasion or "").strip()
     plan_title = None
+    cal_events = await _gcal_events(user["account_id"], today)
     if not occasion:
         plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
         if plan:
             occasion = (plan.get("occasion") or plan.get("title") or "").strip()
             plan_title = plan.get("title") or plan.get("occasion")
+    cal_line = _fmt_events_for_ai(cal_events) if cal_events else ""
     if not occasion:
-        occasion = "a normal day — versatile, put-together, easy to wear"
-    result = await _build_outfit(user, occasion, payload.temperature, payload.weather,
-                                 "Dress me for today — one confident, ready-to-wear look.")
+        occasion = f"today's schedule — {cal_line}" if cal_line else "a normal day — versatile, put-together, easy to wear"
+    notes = "Dress me for today — one confident, ready-to-wear look."
+    if cal_line:
+        notes += f" My schedule today: {cal_line}. Pick something that works across these."
+    result = await _build_outfit(user, occasion, payload.temperature, payload.weather, notes)
     result["occasion_used"] = occasion
     result["from_plan"] = plan_title
+    result["calendar_events"] = cal_events
     return result
 
 
@@ -950,6 +961,171 @@ async def set_body_photo(payload: BodyPhoto, user: dict = Depends(get_scope)):
 @api_router.delete("/tryon/photo")
 async def delete_body_photo(user: dict = Depends(get_scope)):
     await db.body_photos.delete_one({"profile_id": user["profile_id"]})
+    return {"ok": True}
+
+
+# ----------------------------- Google Calendar (read-only) -----------------------------
+import urllib.parse as _urlparse
+
+
+async def _gcal_valid_token(account_id: str) -> Optional[str]:
+    """Return a valid access token for the account, refreshing if needed. None if not connected."""
+    doc = await db.calendar_tokens.find_one({"account_id": account_id}, {"_id": 0})
+    if not doc:
+        return None
+    exp = doc.get("expiry")
+    still_valid = False
+    if exp:
+        try:
+            still_valid = datetime.fromisoformat(exp) > now_utc() + timedelta(seconds=60)
+        except Exception:
+            still_valid = False
+    if still_valid and doc.get("access_token"):
+        return doc["access_token"]
+    refresh = doc.get("refresh_token")
+    if not refresh:
+        return doc.get("access_token")
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post("https://oauth2.googleapis.com/token", data={
+            "client_id": GCAL_CLIENT_ID,
+            "client_secret": GCAL_CLIENT_SECRET,
+            "refresh_token": refresh,
+            "grant_type": "refresh_token",
+        })
+    if r.status_code != 200:
+        return None
+    tok = r.json()
+    new_exp = (now_utc() + timedelta(seconds=tok.get("expires_in", 3600))).isoformat()
+    await db.calendar_tokens.update_one(
+        {"account_id": account_id},
+        {"$set": {"access_token": tok["access_token"], "expiry": new_exp}},
+    )
+    return tok["access_token"]
+
+
+async def _gcal_events(account_id: str, date_str: str) -> List[dict]:
+    token = await _gcal_valid_token(account_id)
+    if not token:
+        return []
+    try:
+        day = datetime.fromisoformat(date_str)
+    except Exception:
+        day = now_utc()
+    start = day.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    params = {
+        "timeMin": start.isoformat(), "timeMax": end.isoformat(),
+        "singleEvents": "true", "orderBy": "startTime", "maxResults": "20",
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+            params=params, headers={"Authorization": f"Bearer {token}"},
+        )
+    if r.status_code != 200:
+        return []
+    out = []
+    for ev in r.json().get("items", []):
+        start_obj = ev.get("start", {})
+        out.append({
+            "summary": ev.get("summary", "Busy"),
+            "start": start_obj.get("dateTime") or start_obj.get("date"),
+            "all_day": "date" in start_obj and "dateTime" not in start_obj,
+            "location": ev.get("location"),
+        })
+    return out
+
+
+def _fmt_events_for_ai(events: List[dict]) -> str:
+    lines = []
+    for e in events:
+        t = ""
+        if e.get("start") and not e.get("all_day"):
+            try:
+                t = datetime.fromisoformat(e["start"].replace("Z", "+00:00")).strftime("%H:%M") + " "
+            except Exception:
+                t = ""
+        loc = f" @ {e['location']}" if e.get("location") else ""
+        lines.append(f"{t}{e['summary']}{loc}")
+    return "; ".join(lines)
+
+
+@api_router.get("/calendar/status")
+async def calendar_status(account: dict = Depends(get_current_user)):
+    doc = await db.calendar_tokens.find_one({"account_id": account["user_id"]}, {"_id": 0})
+    return {"connected": bool(doc), "configured": bool(GCAL_CLIENT_ID)}
+
+
+@api_router.get("/calendar/authorize")
+async def calendar_authorize(account: dict = Depends(get_current_user)):
+    if not GCAL_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Calendar is not configured.")
+    state = uuid.uuid4().hex
+    await db.calendar_oauth_states.update_one(
+        {"state": state},
+        {"$set": {"state": state, "account_id": account["user_id"], "created_at": now_utc().isoformat()}},
+        upsert=True,
+    )
+    params = {
+        "client_id": GCAL_CLIENT_ID,
+        "redirect_uri": GCAL_REDIRECT_URI,
+        "response_type": "code",
+        "scope": GCAL_SCOPE,
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+        "prompt": "consent",
+        "state": state,
+    }
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + _urlparse.urlencode(params)
+    return {"url": url}
+
+
+@app.get("/api/calendar/callback")
+async def calendar_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    def _page(msg: str) -> HTMLResponse:
+        return HTMLResponse(
+            f"<html><body style='font-family:-apple-system,sans-serif;background:#232323;color:#FAF9F6;"
+            f"display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center'>"
+            f"<div><h2 style='font-weight:600'>{msg}</h2>"
+            f"<p style='color:#DCE5DF'>You can close this window and return to Aureve.</p></div>"
+            f"<script>setTimeout(function(){{window.close()}},1500)</script></body></html>"
+        )
+    if error or not code or not state:
+        return _page("Calendar connection cancelled")
+    st = await db.calendar_oauth_states.find_one({"state": state})
+    if not st:
+        return _page("Link expired — please try again")
+    account_id = st["account_id"]
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post("https://oauth2.googleapis.com/token", data={
+            "code": code,
+            "client_id": GCAL_CLIENT_ID,
+            "client_secret": GCAL_CLIENT_SECRET,
+            "redirect_uri": GCAL_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        })
+    await db.calendar_oauth_states.delete_one({"state": state})
+    if r.status_code != 200:
+        logger.error("gcal token exchange failed: %s", r.text[:200])
+        return _page("Couldn't connect calendar")
+    tok = r.json()
+    expiry = (now_utc() + timedelta(seconds=tok.get("expires_in", 3600))).isoformat()
+    update = {"account_id": account_id, "access_token": tok.get("access_token"), "expiry": expiry}
+    if tok.get("refresh_token"):
+        update["refresh_token"] = tok["refresh_token"]
+    await db.calendar_tokens.update_one({"account_id": account_id}, {"$set": update}, upsert=True)
+    return _page("Calendar connected ✓")
+
+
+@api_router.get("/calendar/events")
+async def calendar_events(date: Optional[str] = None, account: dict = Depends(get_current_user)):
+    d = date or now_utc().strftime("%Y-%m-%d")
+    return {"events": await _gcal_events(account["user_id"], d)}
+
+
+@api_router.delete("/calendar/disconnect")
+async def calendar_disconnect(account: dict = Depends(get_current_user)):
+    await db.calendar_tokens.delete_one({"account_id": account["user_id"]})
     return {"ok": True}
 
 

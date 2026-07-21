@@ -1,5 +1,10 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21g) — Google Calendar integration
+- ✅ **Calendar-aware Dress Me** — custom Google OAuth (read-only `calendar.readonly`, own client). Endpoints: `/calendar/status`, `/calendar/authorize`, `/api/calendar/callback` (public, state-keyed), `/calendar/events`, `/calendar/disconnect`; tokens per-account in `calendar_tokens` (auto-refresh). `POST /api/dressme` now pulls today's events and styles for the real schedule (returns `calendar_events`). UI: connect/schedule on the Dress Me screen + a Google Calendar row in Profile. Creds in backend/.env (GOOGLE_CALENDAR_*). Redirect URI is the preview URL — must add the production URL to the same OAuth client after deploy.
+
+
+
 ## Implemented (2026-07-21f) — Share your look
 - ✅ **Share/download Try-On looks** — new `src/utils/shareImage.ts` (expo-sharing on native, direct download on web). "Share" button on the Try-On result and a "Share this look" pill on saved Try-On looks in the Looks gallery. Added dep `expo-sharing` (+ expo-file-system/legacy). Bundle compiles clean.
 

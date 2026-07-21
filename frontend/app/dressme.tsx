@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { Image } from "expo-image";
+import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,10 +23,37 @@ export default function DressMe() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [logged, setLogged] = useState(false);
+  const [cal, setCal] = useState<{ connected: boolean; events: any[] }>({ connected: false, events: [] });
   const started = React.useRef(false);
 
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+
+  const loadCal = useCallback(async () => {
+    try {
+      const s = await api<any>("/calendar/status");
+      if (s.connected) {
+        const e = await api<any>("/calendar/events");
+        setCal({ connected: true, events: e.events || [] });
+      } else {
+        setCal({ connected: false, events: [] });
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadCal(); }, [loadCal]);
+
+  const connectCal = useCallback(async () => {
+    try {
+      const { url } = await api<any>("/calendar/authorize");
+      await WebBrowser.openBrowserAsync(url);
+      await loadCal();
+      started.current = false;
+      generateRef.current?.();
+    } catch {}
+  }, [loadCal]);
+
+  const generateRef = React.useRef<null | (() => void)>(null);
 
   const generate = useCallback(async () => {
     setLoading(true);
@@ -47,6 +75,8 @@ export default function DressMe() {
     }
     setLoading(false);
   }, [weather, status, router]);
+
+  generateRef.current = generate;
 
   // Auto-run once weather has settled (done/denied/error), so the outfit is weather-aware.
   useEffect(() => {
@@ -117,6 +147,25 @@ export default function DressMe() {
             </Txt>
           ) : null}
         </View>
+
+        {cal.connected && cal.events.length > 0 ? (
+          <View style={styles.calBlock}>
+            <Txt style={styles.calHead}>TODAY&apos;S SCHEDULE</Txt>
+            {cal.events.slice(0, 4).map((e, i) => (
+              <View key={i} style={styles.calRow}>
+                <Txt style={styles.calTime}>
+                  {e.all_day || !e.start ? "All day" : new Date(e.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </Txt>
+                <Txt style={styles.calEvent} numberOfLines={1}>{e.summary}</Txt>
+              </View>
+            ))}
+          </View>
+        ) : !cal.connected ? (
+          <Pressable style={styles.calConnect} testID="dressme-connect-calendar" onPress={connectCal}>
+            <Feather name="calendar" size={15} color={colors.brandTertiary} />
+            <Txt style={styles.calConnectTxt}>Connect Google Calendar — dress for your actual day</Txt>
+          </Pressable>
+        ) : null}
 
         {loading && (
           <View style={styles.loadingWrap}>
@@ -211,6 +260,13 @@ const styles = StyleSheet.create({
   weatherRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.xs },
   weatherTxt: { fontSize: 13, color: "rgba(250,249,246,0.7)" },
   occasionTxt: { fontSize: 13, color: colors.brandTertiary, marginTop: spacing.sm },
+  calBlock: { borderWidth: 0.5, borderColor: "rgba(250,249,246,0.15)", borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.xl },
+  calHead: { fontSize: 10, letterSpacing: 1.5, color: "rgba(250,249,246,0.5)", marginBottom: spacing.sm },
+  calRow: { flexDirection: "row", gap: spacing.md, paddingVertical: 3 },
+  calTime: { fontSize: 13, color: colors.brandTertiary, width: 66 },
+  calEvent: { flex: 1, fontSize: 13, color: colors.onSurfaceInverse },
+  calConnect: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 0.5, borderColor: "rgba(250,249,246,0.2)", borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.xl },
+  calConnectTxt: { flex: 1, fontSize: 13, color: "rgba(250,249,246,0.85)" },
   loadingWrap: { alignItems: "center", paddingVertical: spacing["3xl"], gap: spacing.lg },
   loadingTxt: { color: "rgba(250,249,246,0.7)", fontSize: 14, fontStyle: "italic", textAlign: "center" },
   errorWrap: { alignItems: "center", paddingVertical: spacing["2xl"], gap: spacing.lg },
