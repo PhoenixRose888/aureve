@@ -1,5 +1,10 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21h) — Exceptional wardrobe capture
+- ✅ **One-shot capture with AI background removal** — new `POST /api/capture` runs auto-tagging (GPT vision) + background removal (Gemini `gemini-3.1-flash-image-preview`) in parallel, returning `{analysis, clean_image}`. Add-item now calls it: pieces are auto-filled AND get a clean, catalogue-style photo on a neutral background (with a one-tap "Original" revert). `/analyze-item` kept for compat. Free (capture is core). Verified iteration 10 (11/11).
+
+
+
 ## Implemented (2026-07-21g) — Google Calendar integration
 - ✅ **Calendar-aware Dress Me** — custom Google OAuth (read-only `calendar.readonly`, own client). Endpoints: `/calendar/status`, `/calendar/authorize`, `/api/calendar/callback` (public, state-keyed), `/calendar/events`, `/calendar/disconnect`; tokens per-account in `calendar_tokens` (auto-refresh). `POST /api/dressme` now pulls today's events and styles for the real schedule (returns `calendar_events`). UI: connect/schedule on the Dress Me screen + a Google Calendar row in Profile. Creds in backend/.env (GOOGLE_CALENDAR_*). Redirect URI is the preview URL — must add the production URL to the same OAuth client after deploy.
 
