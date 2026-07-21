@@ -779,6 +779,8 @@ def compress_b64(b64: Optional[str], max_side: int = 1024, quality: int = 72) ->
 
 @api_router.post("/items")
 async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
+    if not (payload.photo and payload.photo.strip()):
+        raise HTTPException(status_code=400, detail="A photo is required to add an item.")
     item = payload.dict()
     item["photo"] = compress_b64(item.get("photo"))
     item["worn_photo"] = compress_b64(item.get("worn_photo"))

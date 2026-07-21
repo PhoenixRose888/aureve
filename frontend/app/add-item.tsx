@@ -124,6 +124,11 @@ export default function AddItem() {
   );
 
   const save = async () => {
+    if (!photos.photo) {
+      setError("Add a photo of the item before saving.");
+      haptics.warn();
+      return;
+    }
     setSaving(true);
     setError("");
     const finalName = name.trim() || (colour ? `${colour} ${category.toLowerCase()}` : `New ${category.toLowerCase()}`);
