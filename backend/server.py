@@ -347,6 +347,8 @@ async def payment_status_check(session_id: str, account: dict = Depends(get_curr
     tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
     if not tx:
         raise HTTPException(status_code=404, detail="Unknown session")
+    if tx["account_id"] != account["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your session")
     stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY)
     try:
         st = await stripe_checkout.get_checkout_status(session_id)

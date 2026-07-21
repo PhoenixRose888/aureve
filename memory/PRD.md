@@ -1,4 +1,12 @@
-# Aura — Smart AI Wardrobe & Personal Stylist
+# Aureve — Your AI Personal Stylist
+
+## Implemented (2026-07-21) — Rebrand + Premium membership
+- ✅ **Rebrand to "Aureve — Your AI Personal Stylist."** across app UI + AI persona (backend prompts). Storage keys unchanged.
+- ✅ **Premium membership (per-account / whole household)** via Stripe Checkout (emergentintegrations one-time payment → time-boxed `users.premium_until`; $9.99/30d monthly, $79.99/365d annual). Endpoints: `GET /api/membership/plans`, `POST /api/payments/checkout`, `GET /api/payments/status/{id}` (idempotent grant, owner-scoped). Paywall `app/premium.tsx` + `app/premium-success.tsx` (polls status).
+- ✅ **Gating philosophy — wardrobe always free, AI gated.** Free: unlimited wardrobe/insights + 5 AI stylist outfits/day + 1 colour analysis/month + 1 profile. Premium-only (HTTP 402 on free): packing, capsule, shop-check, missing-piece, health-report, item compatibility, and extra household profiles (up to 6). `enforce_limit` + `usage` collection meter free calls. FE routes 402 → paywall and shows lock badges + upsell banners.
+- ✅ Verified: testing agent iteration 6 — 37/37 backend passing (gating, metering, payments, household cap, regression). FE lint clean.
+- 🔮 Deferred (future premium): flagship **Dress Me** one-tap daily outfit, Virtual Try-On, Calendar integration, AI style-evolution tracking, 7-day Premium trial.
+
 
 ## Original Problem Statement
 A digital wardrobe app that solves three problems: (1) cataloguing what you own (photo + tags: category, colour, fabric, season, fit, brand, size, wear frequency, flatter), (2) building outfits using ONLY items you own based on weather + occasion + what suits you, and (3) shopping restraint — checking a potential purchase against what you already have. The killer feature is a feedback loop where users rate worn outfits (flattering/comfort/confidence) so the AI learns their real style. Also framed as reducing decision overload (helpful for ADHD users).
