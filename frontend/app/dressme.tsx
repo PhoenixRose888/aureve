@@ -9,6 +9,8 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useWeather } from "@/src/hooks/useWeather";
+import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
+import * as haptics from "@/src/utils/haptics";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -69,6 +71,7 @@ export default function DressMe() {
       }
       const r = await api<any>("/dressme", { method: "POST", body });
       setResult(r);
+      haptics.success();
     } catch (e: any) {
       if (e.status === 402) router.push("/premium");
       else setError(e.message || "Couldn't put a look together.");
@@ -124,6 +127,18 @@ export default function DressMe() {
     status === "done" && weather ? `${Math.round(weather.temperature)}°C · ${weather.description}` : "Styling without live weather";
   const cityStr = status === "done" && weather?.city ? weather.city : null;
 
+  const loadingMsg = useRotatingMessage(loading, [
+    "Reading today's weather…",
+    "Checking your schedule…",
+    "Pulling from your wardrobe…",
+    "Pairing pieces that flatter you…",
+    "Adding the finishing touches…",
+  ]);
+
+  const saveLookH = () => { haptics.tap(); saveLook(); };
+  const wearThisH = () => { haptics.success(); wearThis(); };
+  const generateH = () => { haptics.tap(); generate(); };
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -170,14 +185,19 @@ export default function DressMe() {
         {loading && (
           <View style={styles.loadingWrap}>
             <ActivityIndicator color={colors.brandTertiary} size="large" />
-            <Txt style={styles.loadingTxt}>Reading the weather and your wardrobe…</Txt>
+            <Txt style={styles.loadingTxt}>{loadingMsg}</Txt>
+            <View style={styles.skeletonGrid}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={styles.skeletonCell} />
+              ))}
+            </View>
           </View>
         )}
 
         {error && !loading ? (
           <View style={styles.errorWrap}>
             <Txt style={styles.errorTxt} testID="dressme-error">{error}</Txt>
-            <Pressable style={styles.retry} onPress={generate} testID="dressme-retry">
+            <Pressable style={styles.retry} onPress={generateH} testID="dressme-retry">
               <Txt style={styles.retryTxt}>Try again</Txt>
             </Pressable>
           </View>
@@ -217,16 +237,16 @@ export default function DressMe() {
             ) : null}
 
             <View style={styles.actions}>
-              <Pressable style={[styles.actBtn, styles.actGhost]} testID="dressme-save" onPress={saveLook} disabled={saved}>
+              <Pressable style={[styles.actBtn, styles.actGhost]} testID="dressme-save" onPress={saveLookH} disabled={saved}>
                 <Feather name={saved ? "check" : "bookmark"} size={16} color={colors.onSurfaceInverse} />
                 <Txt style={styles.actGhostTxt}>{saved ? "Saved" : "Save"}</Txt>
               </Pressable>
-              <Pressable style={[styles.actBtn, styles.actGhost]} testID="dressme-retry-2" onPress={generate}>
+              <Pressable style={[styles.actBtn, styles.actGhost]} testID="dressme-retry-2" onPress={generateH}>
                 <Feather name="refresh-cw" size={16} color={colors.onSurfaceInverse} />
                 <Txt style={styles.actGhostTxt}>Try another</Txt>
               </Pressable>
             </View>
-            <Pressable style={styles.wearBtn} testID="dressme-wear" onPress={wearThis} disabled={logged}>
+            <Pressable style={styles.wearBtn} testID="dressme-wear" onPress={wearThisH} disabled={logged}>
               <Feather name={logged ? "check" : "heart"} size={17} color={colors.onBrandTertiary} />
               <Txt style={styles.wearTxt}>{logged ? "Logged for today" : "Wear this today"}</Txt>
             </Pressable>
@@ -267,8 +287,10 @@ const styles = StyleSheet.create({
   calEvent: { flex: 1, fontSize: 13, color: colors.onSurfaceInverse },
   calConnect: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 0.5, borderColor: "rgba(250,249,246,0.2)", borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.xl },
   calConnectTxt: { flex: 1, fontSize: 13, color: "rgba(250,249,246,0.85)" },
-  loadingWrap: { alignItems: "center", paddingVertical: spacing["3xl"], gap: spacing.lg },
+  loadingWrap: { alignItems: "center", paddingVertical: spacing["2xl"], gap: spacing.lg },
   loadingTxt: { color: "rgba(250,249,246,0.7)", fontSize: 14, fontStyle: "italic", textAlign: "center" },
+  skeletonGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, width: "100%", marginTop: spacing.md },
+  skeletonCell: { width: "47%", aspectRatio: 0.8, borderRadius: radius.sm, backgroundColor: "rgba(250,249,246,0.06)" },
   errorWrap: { alignItems: "center", paddingVertical: spacing["2xl"], gap: spacing.lg },
   errorTxt: { color: "rgba(250,249,246,0.8)", fontSize: 14, textAlign: "center" },
   retry: { borderWidth: 0.5, borderColor: colors.brandTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.xl, height: 46, alignItems: "center", justifyContent: "center" },

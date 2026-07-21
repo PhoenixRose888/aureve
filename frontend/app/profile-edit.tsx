@@ -12,6 +12,8 @@ import { useProfiles } from "@/src/context/ProfileContext";
 const BODY_SHAPES = ["Hourglass", "Pear", "Apple", "Rectangle", "Inverted triangle", "Athletic"];
 const SKIN_TONES = ["Fair", "Light", "Medium", "Olive", "Tan", "Deep", "Dark"];
 const UNDERTONES = ["Warm", "Cool", "Neutral"];
+const FIT_PREFS = ["Fitted", "Tailored", "Regular", "Relaxed", "Oversized"];
+const STYLE_PREFS = ["Minimal", "Classic", "Casual", "Smart casual", "Streetwear", "Bohemian", "Sporty", "Edgy", "Romantic", "Business"];
 const MEAS = [
   { key: "height", label: "Height", unit: "cm" },
   { key: "weight", label: "Weight", unit: "kg" },
@@ -34,9 +36,16 @@ export default function ProfileEdit() {
   const [bodyShape, setBodyShape] = useState(existing.body_shape || "");
   const [skinTone, setSkinTone] = useState(existing.skin_tone || "");
   const [undertone, setUndertone] = useState(existing.undertone || "");
+  const [fitPref, setFitPref] = useState(existing.fit_pref || "");
+  const [sizesTop, setSizesTop] = useState(existing.sizes_top || "");
+  const [sizesBottom, setSizesBottom] = useState(existing.sizes_bottom || "");
+  const [stylePrefs, setStylePrefs] = useState<string[]>(existing.style_prefs || []);
   const [notes, setNotes] = useState(existing.notes || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const toggleStyle = (s: string) =>
+    setStylePrefs((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
   const save = async () => {
     setSaving(true);
@@ -49,6 +58,10 @@ export default function ProfileEdit() {
           body_shape: bodyShape,
           skin_tone: skinTone,
           undertone,
+          fit_pref: fitPref,
+          sizes_top: sizesTop,
+          sizes_bottom: sizesBottom,
+          style_prefs: stylePrefs,
           notes,
         },
       });
@@ -72,9 +85,50 @@ export default function ProfileEdit() {
 
       <KeyboardAwareScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} bottomOffset={90} showsVerticalScrollIndicator={false}>
         <Txt style={styles.intro}>
-          Add as much or as little as you like. Aureve uses this to pick cuts, lengths and colours that flatter
-          you — tall or petite, and your skin tone. All fields optional.
+          A few quick taps help Aureve dress you better — fit, sizes and the styles you love.
+          Everything is optional, and you can add more detail below.
         </Txt>
+
+        <Txt style={styles.groupLabel}>FIT PREFERENCE</Txt>
+        <ChipRow options={FIT_PREFS} value={fitPref} onChange={setFitPref} prefix="fit" />
+
+        <Txt style={styles.groupLabel}>CLOTHING SIZES</Txt>
+        <View style={styles.sizeRow}>
+          <View style={styles.sizeField}>
+            <Txt style={styles.measLabel}>Tops</Txt>
+            <TextInput
+              testID="size-top"
+              style={styles.input}
+              value={sizesTop}
+              onChangeText={setSizesTop}
+              placeholder="e.g. M / 10"
+              placeholderTextColor={colors.onSurfaceTertiary}
+            />
+          </View>
+          <View style={styles.sizeField}>
+            <Txt style={styles.measLabel}>Bottoms</Txt>
+            <TextInput
+              testID="size-bottom"
+              style={styles.input}
+              value={sizesBottom}
+              onChangeText={setSizesBottom}
+              placeholder="e.g. 30 / 12"
+              placeholderTextColor={colors.onSurfaceTertiary}
+            />
+          </View>
+        </View>
+
+        <Txt style={styles.groupLabel}>STYLE — PICK A FEW</Txt>
+        <View style={styles.wrapChips}>
+          {STYLE_PREFS.map((s) => {
+            const on = stylePrefs.includes(s);
+            return (
+              <Pressable key={s} testID={`style-${s}`} style={[styles.chip, on && styles.chipActive]} onPress={() => toggleStyle(s)}>
+                <Txt style={[styles.chipTxt, on && styles.chipTxtActive]}>{s}</Txt>
+              </Pressable>
+            );
+          })}
+        </View>
 
         <Txt style={styles.groupLabel}>MEASUREMENTS</Txt>
         <View style={styles.measGrid}>
@@ -150,6 +204,9 @@ const styles = StyleSheet.create({
   groupLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginTop: spacing.xl, marginBottom: spacing.md },
   measGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   measField: { width: "47%", marginBottom: spacing.lg },
+  sizeRow: { flexDirection: "row", gap: spacing.lg },
+  sizeField: { flex: 1 },
+  wrapChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   measLabel: { fontSize: 12, color: colors.onSurfaceTertiary, marginBottom: 4 },
   input: { fontFamily: fonts.body, fontSize: 16, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm },
   inputMulti: { minHeight: 60, textAlignVertical: "top" },

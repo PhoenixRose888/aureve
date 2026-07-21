@@ -9,6 +9,8 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts, CATEGORIES, SEASONS } from "@/src/theme";
 import { api } from "@/src/api/client";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
+import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
+import * as haptics from "@/src/utils/haptics";
 
 type Photos = { photo?: string; worn_photo?: string };
 
@@ -40,6 +42,13 @@ export default function AddItem() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [duplicates, setDuplicates] = useState<any[]>([]);
+
+  const analyzeMsg = useRotatingMessage(analyzing, [
+    "Reading the piece…",
+    "Identifying colour & fabric…",
+    "Removing the background…",
+    "Tidying up the details…",
+  ]);
 
   useEffect(() => {
     if (!editing) return;
@@ -90,8 +99,10 @@ export default function AddItem() {
         if (r.estimated_value && !price) setPrice(String(r.estimated_value));
         setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
         setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
+        haptics.success();
       } catch {
         setError("Couldn't auto-detect. Fill details manually.");
+        haptics.warn();
       }
       setAnalyzing(false);
     },
@@ -184,7 +195,7 @@ export default function AddItem() {
             {analyzing && (
               <View style={styles.analyzeOverlay}>
                 <ActivityIndicator color={colors.onSurfaceInverse} />
-                <Txt style={styles.analyzeTxt}>Reading & cleaning…</Txt>
+                <Txt style={styles.analyzeTxt}>{analyzeMsg}</Txt>
               </View>
             )}
             {!analyzing && origPhoto && photos.photo ? (

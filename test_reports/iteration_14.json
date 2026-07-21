@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 14 — Style Profile new fields (fit_pref, sizes_top, sizes_bottom, style_prefs) + capture/dressme polish. Backend: 5/5 PASS (/app/backend/tests/test_iteration14_style_profile.py, 10.5s) — PUT /api/profile persists all 4 new fields and GET /api/profiles reflects them under the active profile's `profile` object; partial-update MERGE behaviour verified (touching only style_prefs or only fit_pref does NOT wipe body_shape/skin_tone/undertone/measurements/notes/other size fields); POST /api/dressme still returns 200 with resolved_items after enriching the profile (premium granted to user_testaura01 via premium_until=2099-01-01). Frontend: /profile-edit renders with all required testIDs — fit-<name> chips, size-top/size-bottom inputs, style-<name> multi-select chips (STYLE — PICK A FEW) — and tapping save-profile-button triggers PUT /api/profile → 200 (verified via response interception; backend re-fetch confirms fit_pref=Tailored, sizes_top=M, sizes_bottom=30, style_prefs=[Minimal,Classic,Streetwear] persisted). /dressme route loads without crash, auto-generates on mount, and after ~a few seconds renders dressme-result with dressme-save/dressme-retry-2/dressme-wear/dressme-tryon actions and the 2-col collage. /add-item route loads clean with add-item-close, add-item-bulk, add-photo-hanging, add-photo-worn, save-item-button all present; analyze overlay + rotating messages are wired via useRotatingMessage but only visible once analyzing state is active (native picker cannot be triggered in web preview — code-verified). ONE MEDIUM frontend bug found: profile-edit does not PRE-FILL new fields on hard reload / deep-link — see frontend_issues.ui_bugs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/profile-edit.tsx",
+        "issue": "Pre-fill breaks on fresh page load / deep-link. useState(existing.sizes_top || ''), useState(existing.fit_pref || ''), useState<string[]>(existing.style_prefs || []) etc. are all initialised from `active?.profile` at first render. On a hard reload of /profile-edit, ProfileContext hasn't hydrated yet, so `active` is null and every state var initialises to empty. When `active` finally arrives the state is NEVER re-synced — chips render inactive and size inputs stay empty even though the backend has the values (confirmed via GET /api/profiles). In-app navigation from Settings works because ProfileContext is already hydrated. Fix: add `useEffect(() => { setFitPref(existing.fit_pref || ''); setSizesTop(existing.sizes_top || ''); ... }, [active?.id])` or gate rendering until `active` is loaded.",
+        "testID": "size-top, size-bottom, fit-<name>, style-<name>",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "app/profile-edit.tsx L70",
+        "issue": "save() calls `router.back()` unconditionally after save. If the screen is entered via deep-link / hard reload there is no back stack and expo-router emits 'The action GO_BACK was not handled by any navigator.' warning; the user sees 'Saved ✓' briefly then nothing changes. Fix: use `router.canGoBack() ? router.back() : router.replace('/settings')` (or wherever the caller lives).",
+        "testID": "save-profile-button",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration14_style_profile.py",
+    "/app/test_reports/pytest/pytest_iteration14.xml"
+  ],
+  "action_items": [
+    "FIX (medium): profile-edit.tsx — sync local state from `active?.profile` inside a useEffect keyed on active?.id (or return early / show a loader until active is defined). Currently the form appears empty on hard reload even though the backend has the data, which is confusing during share-link / refresh flows.",
+    "FIX (low): profile-edit.tsx save() — guard router.back() with router.canGoBack() and fall back to router.replace('/settings') to eliminate the 'GO_BACK not handled' warning and give the user a proper landing screen on deep-link save.",
+    "Nice-to-have: expose the new style_prefs / fit_pref in the stylist result payload (e.g. score_reasons or styling_notes citing which prefs drove the pick) so users can see personalization is working.",
+    "Nice-to-have (backend): PUT /api/profile now silently accepts empty strings/arrays — if a client passes {style_prefs: []} it overwrites with []. This is intentional per test_partial_update_merges_and_does_not_wipe but worth double-checking with the UX: unchecking all style chips will wipe prefs on next save."
+  ],
+  "critical_code_review_comments": [
+    "profile-edit.tsx uses `useState(existing.xxx || '')` for 8 fields — a classic React initialization-vs-props hazard. All eight will silently drift out of sync if `active` is not ready at first render (see ui_bug #1).",
+    "server.py update_profile (L497-505) is a proper deep merge on the `profile` sub-doc — good. Any new field only needs to be added to ProfileUpdate model to persist, which is correctly done for fit_pref/sizes_top/sizes_bottom/style_prefs.",
+    "profile_context (server.py L885-907) now emits `fit_pref`, `sizes_top`, `sizes_bottom` and `style preferences: ...` into the stylist system prompt — verified via code. Style_prefs handling has a subtle Python precedence bug on L900: `parts.append('style preferences: ' + ', '.join(prefs) if isinstance(prefs, list) else f'style preferences: {prefs}')`. Because `if` binds after `+`, this evaluates as `parts.append( ('style preferences: '+', '.join(prefs)) if isinstance(prefs, list) else f'...' )` — which happens to be the intended branch, so it works. But it's hard to read and if someone edits it wrong it'll break silently. Consider wrapping the expression in parentheses or splitting into an if/else for clarity.",
+    "dressme.tsx L86-90 auto-generates on mount once weather resolves. If /dressme is landed on repeatedly (via deep-link), useRef `started` prevents duplicate calls — good. But retry via dressme-retry-2 rightly calls generate() directly.",
+    "add-item.tsx L46-51: useRotatingMessage hook is wired correctly, cycles through 4 messages while `analyzing=true` inside the overlay. Cannot exercise from web preview without a real image picker."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration14_style_profile.py",
+    "/app/test_reports/iteration_14.json",
+    "/app/test_reports/pytest/pytest_iteration14.xml"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5)",
+    "frontend": "profile-edit form fields + save wiring works (PUT 200 confirmed); dressme route + result actions verified; add-item route + testIDs verified. ONE medium bug: state pre-fill on hard reload."
+  },
+  "seed_data_creation": "Modified user_testaura01: (a) db.users.updateOne set premium_until='2099-01-01T00:00:00+00:00' to unlock /dressme (required per test_credentials.md). (b) Default profile's `profile` sub-doc now contains fit_pref='Relaxed' (last change), sizes_top='M', sizes_bottom='30', style_prefs=['Streetwear','Edgy'], plus body_shape='Hourglass', skin_tone='Medium', undertone='Warm', measurements={height:170, waist:70}, notes='loves defined waists' — set by test_partial_update_merges_and_does_not_wipe and NOT fully reverted (the module-level fixture attempts a restore but the account had no snapshot of pre-run values, so only leftover test data persists). If cleanliness matters, main agent may want to reset via PUT /profile with empty values, or ignore since these are non-destructive style attributes.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend URL: https://wardrobe-ai-311.preview.emergentagent.com. Token: test-session-token-aura-123 → user_testaura01 (PREMIUM until 2099). New profile fields (fit_pref, sizes_top, sizes_bottom, style_prefs) live at PUT /api/profile and merge with existing profile.* fields (see test_iteration14_style_profile.py). Frontend storage key is `aura_session_token` and values are JSON-stringified (localStorage.setItem('aura_session_token', JSON.stringify('test-session-token-aura-123'))). ProfileContext hydrates on app boot; deep-link into /profile-edit renders BEFORE hydration so pre-fill is empty (bug — see ui_bugs). Save flow via PUT /profile is confirmed 200. Do NOT re-test bulk-add / duplicate detection (iterations 12-13). Testing tools: /app/backend/tests/test_iteration14_style_profile.py can be re-run to re-verify the merge contract after any change to update_profile.",
+  "rca_of_issue": "profile-edit pre-fill bug — RCA: React useState() is only called once at component mount. profile-edit.tsx uses `useState(existing.sizes_top || '')` where `existing = active?.profile || {}` and `active` comes from useProfiles() context. If the component mounts before the context has fetched /api/profiles, existing = {} and every state field seeds to empty. React never re-runs useState() when active changes, so the form stays empty even after the profile is available. Repro: (1) log in, (2) tap Style Profile — pre-fill works because ProfileContext is already hydrated; (3) refresh browser on /profile-edit — pre-fill fails, form is blank despite backend having values. Mitigation: gate the render on `if (!active) return <Loading/>` OR add useEffect keyed on active?.id that resets local state whenever the active profile object changes."
+}

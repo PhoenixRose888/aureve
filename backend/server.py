@@ -421,6 +421,10 @@ class ProfileUpdate(BaseModel):
     undertone: Optional[str] = None
     height: Optional[str] = None
     sizes: Optional[str] = None
+    fit_pref: Optional[str] = None
+    sizes_top: Optional[str] = None
+    sizes_bottom: Optional[str] = None
+    style_prefs: Optional[list] = None
     notes: Optional[str] = None
 
 
@@ -888,14 +892,18 @@ def profile_context(user: dict) -> str:
     meas = ", ".join(f"{k}: {v}" for k, v in m.items() if v)
     if meas:
         parts.append(f"measurements ({meas})")
-    for key in ["height", "body_shape", "skin_tone", "undertone", "sizes", "notes"]:
+    for key in ["height", "fit_pref", "sizes_top", "sizes_bottom", "sizes", "body_shape", "skin_tone", "undertone", "notes"]:
         if p.get(key):
             parts.append(f"{key.replace('_', ' ')}: {p[key]}")
+    prefs = p.get("style_prefs")
+    if prefs:
+        parts.append("style preferences: " + ", ".join(prefs) if isinstance(prefs, list) else f"style preferences: {prefs}")
     if not parts:
         return "No body profile provided — style with general best practices."
     return (
         "Body profile — " + "; ".join(parts) +
-        ". Choose cuts, lengths, proportions and colours that flatter this body shape and skin tone."
+        ". Choose cuts, lengths, proportions and colours that flatter this body shape and skin tone, "
+        "respect their fit preference and sizes, and lean into their stated style preferences."
     )
 
 
