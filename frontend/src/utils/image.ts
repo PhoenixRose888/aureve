@@ -53,6 +53,26 @@ export async function pickFromCamera(): Promise<PickResult> {
   }
 }
 
+export type MultiPickResult = { images: string[] } | { error: "denied" | "blocked" | "cancelled" | "failed" };
+
+export async function pickMultipleFromLibrary(limit = 10): Promise<MultiPickResult> {
+  const perm = await ensureLibraryPermission();
+  if (perm !== "granted") return { error: perm === "blocked" ? "blocked" : "denied" };
+  try {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      ...OPTS,
+      allowsMultipleSelection: true,
+      selectionLimit: limit,
+    });
+    if (res.canceled || !res.assets?.length) return { error: "cancelled" };
+    const images = res.assets.map((a) => a.base64).filter((b): b is string => !!b);
+    if (!images.length) return { error: "failed" };
+    return { images };
+  } catch {
+    return { error: "failed" };
+  }
+}
+
 export function openSettings() {
   Linking.openSettings();
 }
