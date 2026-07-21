@@ -8,6 +8,7 @@ import re
 import json
 import logging
 import uuid
+import asyncio
 import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -695,32 +696,81 @@ ANALYZE_SYSTEM = (
 )
 
 
+async def _analyze_core(image_b64: str, category_hint: Optional[str], scope_id: str) -> dict:
+    chat = await ai_chat(f"analyze-{scope_id}-{uuid.uuid4().hex[:6]}", ANALYZE_SYSTEM)
+    if category_hint:
+        text = (
+            f"The person in the photo may be wearing several garments. Focus ONLY on the "
+            f"{category_hint} and catalogue that single item, ignoring everything else "
+            f"they are wearing. Set the category to '{category_hint}'. Return JSON only."
+        )
+    else:
+        text = "Catalogue this clothing item. Return JSON only."
+    resp = await chat.send_message(UserMessage(text=text, file_contents=[ImageContent(image_base64=image_b64)]))
+    return parse_json_block(resp) or {}
+
+
+async def _clean_photo(image_b64: str) -> Optional[str]:
+    """Background-removed, catalogue-style version of a garment photo (best-effort)."""
+    instruction = (
+        "Isolate the single main clothing item in this photo and remove the background. Return the SAME "
+        "garment with its shape, colour, pattern, texture and details completely unchanged — do NOT restyle "
+        "or redesign it. Place it centred on a clean, seamless, light neutral (#F1EFEA) studio background, "
+        "flat product-catalogue style. Output only the image."
+    )
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"clean-{uuid.uuid4().hex[:8]}",
+        system_message="You are a product-photo background remover for a clothing catalogue.",
+    ).with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+    _text, images = await chat.send_message_multimodal_response(
+        UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
+    )
+    return images[0]["data"] if images else None
+
+
 @api_router.post("/analyze-item")
 async def analyze_item(payload: AnalyzeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
-    chat = await ai_chat(f"analyze-{user['user_id']}-{uuid.uuid4().hex[:6]}", ANALYZE_SYSTEM)
-    if payload.category_hint:
-        text = (
-            f"The person in the photo may be wearing several garments. Focus ONLY on the "
-            f"{payload.category_hint} and catalogue that single item, ignoring everything else "
-            f"they are wearing. Set the category to '{payload.category_hint}'. Return JSON only."
-        )
-    else:
-        text = "Catalogue this clothing item. Return JSON only."
-    msg = UserMessage(
-        text=text,
-        file_contents=[ImageContent(image_base64=payload.image)],
-    )
     try:
-        resp = await chat.send_message(msg)
+        result = await _analyze_core(payload.image, payload.category_hint, user["user_id"])
     except Exception as e:
         logger.exception("analyze-item failed")
         raise HTTPException(status_code=502, detail=f"AI error: {e}")
-    result = parse_json_block(resp)
     if not result:
         raise HTTPException(status_code=502, detail="Could not analyze image")
     return result
+
+
+class CaptureRequest(BaseModel):
+    image: str
+    category_hint: Optional[str] = None
+    clean: bool = True
+
+
+@api_router.post("/capture")
+async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope)):
+    """One-shot capture: auto-tag the garment AND clean its background in parallel,
+    so adding a piece needs near-zero manual work."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    tasks = [_analyze_core(payload.image, payload.category_hint, user["user_id"])]
+    if payload.clean:
+        tasks.append(_clean_photo(payload.image))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    analysis = results[0]
+    if isinstance(analysis, Exception) or not analysis:
+        logger.warning("capture analyze failed: %s", analysis)
+        analysis = {}
+    clean_img = None
+    if payload.clean and len(results) > 1:
+        cr = results[1]
+        if isinstance(cr, Exception):
+            logger.warning("capture clean failed: %s", cr)
+        else:
+            clean_img = cr
+    return {"analysis": analysis, "clean_image": clean_img}
 
 
 # ----------------------------- AI: Stylist Suggest -----------------------------

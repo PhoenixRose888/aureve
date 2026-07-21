@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 10 — Backend-only test of NEW /api/capture (analyze + Gemini background-remove in parallel) and Google Calendar read-only endpoints + /api/dressme.calendar_events. Wrote /app/backend/tests/test_iteration10_capture_calendar.py (11 tests). ALL 11 PASSED in 19.32s. Details: (1) POST /api/capture {clean:true, category_hint:'Tops'} with a real JPEG (PIL-generated tee, ~9KB) → 200 in 5.7s with analysis={name:'White short-sleeve t-shirt', category:'Tops', colour:'white', ...} and clean_image=398,536-char base64 JPEG (first10='/9j/4AAQSk' — valid JPEG magic). (2) POST /api/capture {clean:false} → 200, analysis populated, clean_image is null. (3) Backward-compat POST /api/analyze-item {image, category_hint:'Tops'} → 200 returning analysis dict directly (no 'analysis' wrapper, no clean_image), category='Tops' matches hint. (4) Calendar (account NOT connected): GET /api/calendar/status → {connected:false, configured:true}; GET /api/calendar/authorize → {url} starts with 'https://accounts.google.com/o/oauth2/v2/auth', contains scope calendar.readonly and the configured redirect_uri; GET /api/calendar/events → {events:[]}; DELETE /api/calendar/disconnect → {ok:true}; GET /api/calendar/callback?error=access_denied → HTTP 200 HTML page (no crash). (5) POST /api/dressme (premium granted via Mongo) → 200 with calendar_events:[] (empty because not connected). (6) Regression: GET /api/items returns list where each item has integer pairs_count; GET /api/membership/plans still 200. CLEANUP verified — user_testaura01 left FREE (no premium_until/premium_source/trial_used), usage collection empty, no calendar_tokens, no calendar_oauth_states.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration10_capture_calendar.py",
+    "/app/test_reports/pytest/pytest_iteration10.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:752-773 /api/capture correctly runs _analyze_core and _clean_photo in parallel via asyncio.gather(return_exceptions=True). Failures in either are logged and degrade gracefully (analysis={} / clean_image=None) rather than 500 — good defensive design.",
+    "server.py:713-729 _clean_photo uses gemini-3.1-flash-image-preview with modalities=['image','text'] as specified, with a strong prompt ensuring the SAME garment (no restyle) on a neutral #F1EFEA background.",
+    "server.py:1103-1179 Calendar endpoints: status uses account-scoped tokens (account_id=user_id, not profile), authorize creates one-time state in calendar_oauth_states, callback validates state, exchanges code, upserts token; disconnect deletes account-scoped tokens. Access token refresh uses refresh_token with 60s clock-skew guard.",
+    "server.py:1133 /api/calendar/callback is registered directly on `app` (NOT api_router), which is correct since Google will call the public /api/calendar/callback URL without a Bearer token — it must be public. HTML response always returns 200 (no crash) even on error/missing code.",
+    "server.py:913,928 /api/dressme now fetches today's calendar events via _gcal_events(account_id) and always includes calendar_events in the response (empty list when not connected). It also incorporates events into the styling prompt when present. Clean integration.",
+    "server.py:1170-1173 /api/calendar/events uses account['user_id'] as account_id — consistent with the write path. Defaults date to today. Returns []`, not 404, when not connected — friendly.",
+    "Minor: _gcal_events at server.py:1061-1063 falls back to now_utc() on bad `date` param (silent). Could return 400 for invalid input, but current behavior is user-friendly for the dressme use case."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration10_capture_calendar.py"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None permanent. During TestDressMeCalendarEvents, users.premium_until was temporarily set to 2099-01-01 and unset in the finally block. Module-scope autouse fixture also runs pre+post cleanup: unset premium_until/premium_source/trial_used, delete usage/calendar_tokens/calendar_oauth_states for user_testaura01. Verified via direct Mongo query — DB is clean.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "user_testaura01 is FREE and clean (no premium fields, empty usage, no calendar tokens/states). GOOGLE_CALENDAR_CLIENT_ID/SECRET/REDIRECT_URI are all configured in backend/.env; redirect_uri = https://wardrobe-ai-311.preview.emergentagent.com/api/calendar/callback. The end-to-end OAuth completion (real Google consent → real token exchange) cannot be automated headlessly, so we only verified the not-connected paths and that the authorize URL is well-formed. Backend URL env key is EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL). /api/capture Gemini call was fast in this run (~5.7s) but can spike to 30-90s per the request spec — timeout=180 is used.",
+  "rca_of_issue": "N/A — no bugs found."
+}

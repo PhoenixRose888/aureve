@@ -19,6 +19,7 @@ export default function AddItem() {
   const editing = !!id;
 
   const [photos, setPhotos] = useState<Photos>({});
+  const [origPhoto, setOrigPhoto] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Tops");
   const [colour, setColour] = useState("");
@@ -68,10 +69,16 @@ export default function AddItem() {
       setAnalyzing(true);
       setError("");
       try {
-        const r = await api<any>("/analyze-item", {
+        const res = await api<any>("/capture", {
           method: "POST",
-          body: { image: base64, category_hint: hint || null },
+          body: { image: base64, category_hint: hint || null, clean: true },
         });
+        const r = res.analysis || {};
+        // Swap in the clean, background-removed photo (fall back to the original).
+        if (res.clean_image) {
+          setOrigPhoto(base64);
+          setPhotos((p) => ({ ...p, photo: res.clean_image }));
+        }
         if (r.name && !name) setName(r.name);
         if (r.category && CATEGORIES.includes(r.category) && !hint) setCategory(r.category);
         if (r.colour) setColour(r.colour);
@@ -169,9 +176,22 @@ export default function AddItem() {
             {analyzing && (
               <View style={styles.analyzeOverlay}>
                 <ActivityIndicator color={colors.onSurfaceInverse} />
-                <Txt style={styles.analyzeTxt}>Reading item…</Txt>
+                <Txt style={styles.analyzeTxt}>Reading & cleaning…</Txt>
               </View>
             )}
+            {!analyzing && origPhoto && photos.photo ? (
+              <Pressable
+                style={styles.revertPill}
+                testID="revert-photo"
+                onPress={() => {
+                  setPhotos((p) => ({ ...p, photo: origPhoto }));
+                  setOrigPhoto(null);
+                }}
+              >
+                <Feather name="rotate-ccw" size={11} color={colors.onBrandPrimary} />
+                <Txt style={styles.revertTxt}>Original</Txt>
+              </Pressable>
+            ) : null}
           </Pressable>
           <Pressable style={styles.photoBox} testID="add-photo-worn" onPress={() => setPickerTarget("worn_photo")}>
             {photos.worn_photo ? (
@@ -353,6 +373,8 @@ const styles = StyleSheet.create({
   photoHint: { fontSize: 10, color: colors.onSurfaceTertiary, textAlign: "center" },
   analyzeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(26,26,26,0.55)", alignItems: "center", justifyContent: "center", gap: 8 },
   analyzeTxt: { color: colors.onSurfaceInverse, fontSize: 12 },
+  revertPill: { position: "absolute", bottom: 6, right: 6, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brandPrimary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill },
+  revertTxt: { color: colors.onBrandPrimary, fontSize: 10 },
   error: { color: colors.error, fontSize: 13, marginTop: spacing.lg },
   field: { marginTop: spacing.xl },
   fieldLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginBottom: spacing.sm },
