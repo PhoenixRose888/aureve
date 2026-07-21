@@ -1,5 +1,11 @@
 # Aureve — Your AI Personal Stylist
 
+## Implemented (2026-07-21b) — Dress Me + calm brand identity
+- ✅ **Flagship "Dress Me"** (Premium) — one-tap daily outfit. `POST /api/dressme` infers today's occasion from the planner (else "a normal day"), uses live weather + the ready wardrobe via the shared `_build_outfit` engine, returns confidence score + reasoning. New `app/dressme.tsx` (charcoal, auto-runs on open) and it's now the **primary Home CTA**; custom-occasion Stylist demoted to secondary. Verified iteration 7 (6/6).
+- ✅ **Brand identity refresh** to the "calm, timeless, inclusive" direction: palette → soft ivory `#FAF9F6` + deep charcoal `#232323`, muted-emerald accent `#3F6B5B`, sage success `#7A9E7E`, terracotta error `#C46A5C`, sapphire info `#4B6587`. Typography switched from ornate serif (Cormorant) to **Plus Jakarta Sans** (local static TTFs) — modern, readable, timeless. Voice stays never-judgemental ("Wear everything you own").
+
+
+
 ## Implemented (2026-07-21) — Rebrand + Premium membership
 - ✅ **Rebrand to "Aureve — Your AI Personal Stylist."** across app UI + AI persona (backend prompts). Storage keys unchanged.
 - ✅ **Premium membership (per-account / whole household)** via Stripe Checkout (emergentintegrations one-time payment → time-boxed `users.premium_until`; $9.99/30d monthly, $79.99/365d annual). Endpoints: `GET /api/membership/plans`, `POST /api/payments/checkout`, `GET /api/payments/status/{id}` (idempotent grant, owner-scoped). Paywall `app/premium.tsx` + `app/premium-success.tsx` (polls status).
