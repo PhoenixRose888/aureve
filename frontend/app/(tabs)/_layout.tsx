@@ -8,7 +8,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.sage,
+        tabBarActiveTintColor: colors.sageDeep,
         tabBarInactiveTintColor: colors.onSurfaceTertiary,
         tabBarStyle: {
           backgroundColor: colors.surface,
@@ -37,7 +37,7 @@ export default function TabsLayout() {
         name="wardrobe"
         options={{
           title: "Wardrobe",
-          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="hanger" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="hanger" size={20} color={color} />,
         }}
       />
       <Tabs.Screen

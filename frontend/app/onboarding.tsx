@@ -8,8 +8,6 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 import { useAuth } from "@/src/context/AuthContext";
-import AureveWelcomeMark from "@/src/components/AureveWelcomeMark";
-import WelcomeDecor from "@/src/components/WelcomeDecor";
 
 type Slide = { icon: React.ReactNode; title: string; body: string };
 
@@ -39,7 +37,7 @@ export default function Onboarding() {
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
   const [entering, setEntering] = useState(false);
-  const total = 1 + VALUE_SLIDES.length; // welcome + value slides
+  const total = VALUE_SLIDES.length;
 
   const fade = useSharedValue(0);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
@@ -54,8 +52,7 @@ export default function Onboarding() {
     router.replace("/login");
   };
 
-  // Get Started → fade the welcome out, spin up a guest session, and land the
-  // user in the app Home (which surfaces the Dress Me hero).
+  // Finish onboarding → spin up a guest session and fade into Home.
   const enterApp = async () => {
     if (entering) return;
     setEntering(true);
@@ -69,7 +66,7 @@ export default function Onboarding() {
     });
   };
 
-  const next = () => (page < total - 1 ? goTo(page + 1) : finish());
+  const next = () => (page < total - 1 ? goTo(page + 1) : enterApp());
 
   return (
     <View style={styles.container}>
@@ -81,36 +78,22 @@ export default function Onboarding() {
         scrollEventThrottle={16}
         onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
       >
-        {/* Welcome */}
-        <View style={[styles.slide, styles.welcomeSlide, { width, paddingTop: insets.top + spacing["3xl"] }]}>
-          <View style={{ flex: 1 }} />
-          <AureveWelcomeMark size={72} />
-          <Txt style={styles.brandWord}>Aureve</Txt>
-          <Txt style={styles.tagline1}>Your AI Personal Stylist</Txt>
-          <Txt style={styles.tagline2}>Make the most of what you already own.</Txt>
-          <View style={{ flex: 1.3 }} />
-          <WelcomeDecor />
-          <Pressable style={styles.primaryBtn} testID="onb-get-started" onPress={enterApp} disabled={entering}>
-            {entering ? <ActivityIndicator color={colors.onSage} /> : <Txt style={styles.primaryTxt}>Get Started</Txt>}
-          </Pressable>
-          <Pressable style={styles.signIn} testID="onb-signin" onPress={finish} disabled={entering}>
-            <Txt style={styles.signInTxt}>I already have an account</Txt>
-          </Pressable>
-          <View style={{ height: insets.bottom + spacing.lg }} />
-        </View>
-
-        {/* Value props */}
         {VALUE_SLIDES.map((s, i) => (
           <View key={i} style={[styles.slide, { width, paddingTop: insets.top + spacing["3xl"] }]}>
+            <View style={{ flex: 1 }} />
             <View style={styles.heroCircle}>{s.icon}</View>
             <Display weight="semibold" style={styles.valueTitle}>{s.title}</Display>
             <Txt style={styles.valueBody}>{s.body}</Txt>
-            <View style={{ flex: 1 }} />
-            <Pressable style={styles.primaryBtn} testID={`onb-continue-${i}`} onPress={next}>
-              <Txt style={styles.primaryTxt}>{i === VALUE_SLIDES.length - 1 ? "Get Started" : "Continue"}</Txt>
+            <View style={{ flex: 1.2 }} />
+            <Pressable style={styles.primaryBtn} testID={`onb-continue-${i}`} onPress={next} disabled={entering}>
+              {entering && i === VALUE_SLIDES.length - 1 ? (
+                <ActivityIndicator color={colors.onSage} />
+              ) : (
+                <Txt style={styles.primaryTxt}>{i === VALUE_SLIDES.length - 1 ? "Enter Aureve" : "Continue"}</Txt>
+              )}
             </Pressable>
-            <Pressable style={styles.signIn} testID={`onb-skip-${i}`} onPress={finish}>
-              <Txt style={styles.signInTxt}>Skip</Txt>
+            <Pressable style={styles.signIn} testID={`onb-skip-${i}`} onPress={finish} disabled={entering}>
+              <Txt style={styles.signInTxt}>{i === VALUE_SLIDES.length - 1 ? "I already have an account" : "Skip"}</Txt>
             </Pressable>
             <View style={{ height: insets.bottom + spacing.lg }} />
           </View>
@@ -124,7 +107,7 @@ export default function Onboarding() {
         ))}
       </View>
 
-      {/* Fade-to-cream overlay when entering Dress Me */}
+      {/* Fade-to-cream overlay when entering the app */}
       <Animated.View style={[styles.fadeCover, fadeStyle]} pointerEvents={entering ? "auto" : "none"} />
     </View>
   );
@@ -133,14 +116,7 @@ export default function Onboarding() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   slide: { flex: 1, paddingHorizontal: spacing.xl, alignItems: "center" },
-  welcomeSlide: { justifyContent: "flex-end" },
-  brandWord: { fontFamily: fonts.serif, fontSize: 52, color: colors.onSurface, marginTop: spacing.sm, letterSpacing: 1, includeFontPadding: false },
-  tagline1: { fontFamily: fonts.serifRegular, fontSize: 18, color: colors.onSurfaceSecondary, marginTop: spacing.lg },
-  tagline2: { fontFamily: fonts.body, fontSize: 14, color: colors.onSurfaceTertiary, marginTop: spacing.xs, textAlign: "center" },
-  wordmark: { fontSize: 24, letterSpacing: 6, color: colors.onSurface, fontFamily: fonts.displayMedium, marginBottom: spacing["2xl"] },
   heroCircle: { width: 160, height: 160, borderRadius: 80, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", marginBottom: spacing["2xl"] },
-  welcomeTitle: { fontSize: 28, textAlign: "center", marginBottom: spacing.md },
-  welcomeBody: { fontSize: 15, color: colors.onSurfaceSecondary, textAlign: "center", lineHeight: 23, paddingHorizontal: spacing.md },
   valueTitle: { fontSize: 27, textAlign: "center", marginBottom: spacing.lg, lineHeight: 34 },
   valueBody: { fontSize: 15, color: colors.onSurfaceSecondary, textAlign: "center", lineHeight: 23, paddingHorizontal: spacing.sm },
   primaryBtn: { alignSelf: "stretch", backgroundColor: colors.sage, height: 54, borderRadius: radius.md, alignItems: "center", justifyContent: "center", marginBottom: spacing.md },

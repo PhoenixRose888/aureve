@@ -29,22 +29,19 @@ function greeting() {
   return "Good evening";
 }
 
-// Short, weather-aware styling nudge shown under the greeting.
-function weatherSuggestion(w: any): string {
+// Concise AI styling recommendation — advice only, no weather data repeated
+// (temperature/condition/city already live in the top-left weather cluster).
+function stylingRecommendation(w: any): string {
   const t = Math.round(w.temperature);
   const c = w.code ?? 3;
-  const place = w.city ? ` in ${w.city}` : "";
-  const cond = (w.description || "").toLowerCase();
-  let tip: string;
-  if (c >= 95) tip = "stay covered — stormy out there";
-  else if (c >= 71 && c <= 77) tip = "layer up and keep it cosy";
-  else if (c >= 51 && c <= 82) tip = "grab a jacket and closed shoes";
-  else if (t <= 6) tip = "bundle up with a warm coat";
-  else if (t <= 14) tip = "a light layer will feel just right";
-  else if (t <= 22) tip = "perfect for smart-casual layers";
-  else if (t <= 28) tip = "keep it light and breathable";
-  else tip = "go for airy, breathable pieces";
-  return `${t}°C · ${cond || "clear"}${place} — ${tip}.`;
+  if (c >= 95) return "Stormy today — a waterproof layer is a smart call.";
+  if (c >= 71 && c <= 77) return "Snow on the way — layer up and keep it cosy.";
+  if (c >= 51 && c <= 82) return "Rain likely — a jacket and closed shoes are ideal.";
+  if (t <= 6) return "Bundle up — a warm coat will serve you well today.";
+  if (t <= 14) return "A light layer will feel just right today.";
+  if (t <= 22) return "Perfect weather for effortless smart-casual layering.";
+  if (t <= 28) return "Keep it light and breathable today.";
+  return "A hot one — reach for airy, breathable pieces.";
 }
 
 function timeAgo(iso?: string) {
@@ -125,10 +122,12 @@ export default function Home() {
         <View style={styles.greetBlock}>
           <Display weight="semibold" style={styles.greeting}>{greeting()}</Display>
           {status === "done" && weather ? (
-            <Txt style={styles.suggestion} testID="home-weather-suggestion">{weatherSuggestion(weather)}</Txt>
+            <Txt style={styles.suggestion} testID="home-weather-suggestion">{stylingRecommendation(weather)}</Txt>
           ) : status === "loading" ? (
-            <Txt style={styles.suggestion}>Checking today&rsquo;s weather…</Txt>
-          ) : null}
+            <Txt style={styles.suggestion}>Preparing today&rsquo;s styling tip.</Txt>
+          ) : (
+            <Txt style={styles.suggestion}>Let&rsquo;s make the most of your wardrobe today.</Txt>
+          )}
         </View>
 
         {/* Wardrobe growing banner */}
@@ -164,9 +163,16 @@ export default function Home() {
         </View>
 
         {outfits.length === 0 ? (
-          <View style={styles.emptyOutfits} testID="home-outfits-empty">
-            <View style={styles.emptyIcon}><MaterialCommunityIcons name="hanger" size={26} color={colors.onSurfaceTertiary} /></View>
-            <Txt style={styles.emptyTxt}>No outfits yet? Tap &lsquo;Dress Me&rsquo; to create your first look in seconds.</Txt>
+          <View style={styles.emptyWrap} testID="home-outfits-empty">
+            <View style={styles.ghostRow}>
+              <Pressable style={[styles.ghostCard, styles.ghostCreate]} onPress={openDressMe} testID="home-empty-create">
+                <View style={styles.ghostPlus}><Feather name="plus" size={18} color={colors.onSage} /></View>
+                <Txt style={styles.ghostCreateTxt}>Create a look</Txt>
+              </Pressable>
+              <View style={styles.ghostCard}><MaterialCommunityIcons name="hanger" size={24} color={colors.onSurfaceTertiary} /></View>
+              <View style={styles.ghostCard}><MaterialCommunityIcons name="tshirt-crew-outline" size={24} color={colors.onSurfaceTertiary} /></View>
+            </View>
+            <Txt style={styles.emptyCopy}>Your styled looks will appear here.</Txt>
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentRow}>
@@ -196,7 +202,7 @@ export default function Home() {
         <View style={styles.quickGrid}>
           {quickActions.map((qa) => (
             <Pressable key={qa.key} style={styles.quickCard} testID={`home-qa-${qa.key}`} onPress={() => { haptics.tap(); qa.onPress(); }}>
-              {qa.icon}
+              <View style={styles.qaIcon}>{qa.icon}</View>
               <Txt style={styles.quickLabel}>{qa.label}</Txt>
             </Pressable>
           ))}
@@ -218,9 +224,9 @@ const styles = StyleSheet.create({
   growBanner: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginHorizontal: spacing.lg, marginBottom: spacing.md },
   growTitle: { fontSize: 14, color: colors.onBrandTertiary, fontFamily: fonts.displayMedium },
   growSub: { fontSize: 12, color: colors.onBrandTertiary, opacity: 0.85, marginTop: 1 },
-  dressBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.sage, marginHorizontal: spacing.lg, height: 64, borderRadius: radius.lg, paddingHorizontal: spacing.xl, marginBottom: spacing["2xl"] },
-  dressTxt: { color: colors.onSage, fontSize: 22 },
-  dressArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" },
+  dressBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.sage, marginHorizontal: spacing.lg, height: 56, borderRadius: radius.lg, paddingHorizontal: spacing.xl, marginBottom: spacing["2xl"] },
+  dressTxt: { color: colors.onSage, fontSize: 21 },
+  dressArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { fontSize: 16, color: colors.onSurface, fontFamily: fonts.display, letterSpacing: -0.3 },
   seeAll: { fontSize: 13, color: colors.sage },
@@ -232,10 +238,15 @@ const styles = StyleSheet.create({
   recentCell: { width: "50%", height: "50%", alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceTertiary },
   recentName: { fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium, marginTop: spacing.sm },
   recentTime: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
-  emptyOutfits: { flexDirection: "row", alignItems: "center", marginHorizontal: spacing.lg, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, borderStyle: "dashed", gap: spacing.md },
-  emptyIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
-  emptyTxt: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, textAlign: "left", lineHeight: 18 },
+  emptyWrap: { paddingHorizontal: spacing.lg },
+  ghostRow: { flexDirection: "row", gap: spacing.md },
+  ghostCard: { flex: 1, aspectRatio: 0.82, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.divider, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  ghostCreate: { backgroundColor: colors.surface, borderColor: colors.sage, borderStyle: "dashed" },
+  ghostPlus: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.sage, alignItems: "center", justifyContent: "center" },
+  ghostCreateTxt: { fontSize: 12, color: colors.onSurfaceSecondary, fontFamily: fonts.displayMedium },
+  emptyCopy: { fontSize: 13, color: colors.onSurfaceTertiary, marginTop: spacing.md },
   quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg },
-  quickCard: { width: "47.6%", flexGrow: 1, height: 96, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  quickCard: { width: "47.6%", flexGrow: 1, height: 100, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", gap: spacing.md },
+  qaIcon: { height: 26, alignItems: "center", justifyContent: "center" },
   quickLabel: { fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium },
 });
