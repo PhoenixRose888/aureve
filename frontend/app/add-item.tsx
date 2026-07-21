@@ -153,7 +153,13 @@ export default function AddItem() {
           <Feather name="x" size={24} color={colors.onSurface} />
         </Pressable>
         <Display weight="medium" style={styles.headerTitle}>{editing ? "Edit piece" : "New piece"}</Display>
-        <View style={{ width: 24 }} />
+        {editing ? (
+          <View style={{ width: 56 }} />
+        ) : (
+          <Pressable onPress={() => router.replace("/bulk-add")} testID="add-item-bulk" hitSlop={8}>
+            <Txt style={styles.bulkLink}>Several</Txt>
+          </Pressable>
+        )}
       </View>
 
       <KeyboardAwareScrollView
@@ -356,6 +362,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerTitle: { fontSize: 22 },
+  bulkLink: { fontSize: 14, color: colors.brand },
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   photoRow: { flexDirection: "row", gap: spacing.md },
   photoBox: {
