@@ -5,7 +5,6 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
-import { useAuth } from "@/src/context/AuthContext";
 import { useWeather } from "@/src/hooks/useWeather";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
@@ -46,13 +45,11 @@ function timeAgo(iso?: string) {
 export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
   const { weather, status, reload } = useWeather();
   const [outfits, setOutfits] = useState<any[]>([]);
   const [itemCount, setItemCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [growDismissed, setGrowDismissed] = useState(false);
-  const premium = !!user?.premium;
 
   const load = useCallback(async () => {
     try {
@@ -72,7 +69,6 @@ export default function Home() {
 
   const openDressMe = () => {
     haptics.tap();
-    if (!premium) { router.push("/premium"); return; }
     router.push("/(tabs)/dressme");
   };
 
@@ -128,7 +124,7 @@ export default function Home() {
         <Pressable style={styles.dressBtn} testID="home-dress-me-button" onPress={openDressMe}>
           <Display weight="semibold" style={styles.dressTxt}>Dress Me</Display>
           <View style={styles.dressArrow}>
-            <Feather name={premium ? "arrow-right" : "lock"} size={20} color={colors.onSage} />
+            <Feather name="arrow-right" size={20} color={colors.onSage} />
           </View>
         </Pressable>
 

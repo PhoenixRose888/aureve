@@ -55,15 +55,15 @@ export default function Onboarding() {
   };
 
   // Get Started → fade the welcome out, spin up a guest session, and land the
-  // user straight in the Dress Me hero experience.
-  const enterDressMe = async () => {
+  // user in the app Home (which surfaces the Dress Me hero).
+  const enterApp = async () => {
     if (entering) return;
     setEntering(true);
     await storage.setItem("aureve_onboarded", true);
     try {
       await guestLogin();
     } catch {}
-    const go = () => router.replace("/(tabs)/dressme");
+    const go = () => router.replace("/(tabs)");
     fade.value = withTiming(1, { duration: 550, easing: Easing.inOut(Easing.cubic) }, (finished) => {
       if (finished) runOnJS(go)();
     });
@@ -90,7 +90,7 @@ export default function Onboarding() {
           <Txt style={styles.tagline2}>Make the most of what you already own.</Txt>
           <View style={{ flex: 1.3 }} />
           <WelcomeDecor />
-          <Pressable style={styles.primaryBtn} testID="onb-get-started" onPress={enterDressMe} disabled={entering}>
+          <Pressable style={styles.primaryBtn} testID="onb-get-started" onPress={enterApp} disabled={entering}>
             {entering ? <ActivityIndicator color={colors.onSage} /> : <Txt style={styles.primaryTxt}>Get Started</Txt>}
           </Pressable>
           <Pressable style={styles.signIn} testID="onb-signin" onPress={finish} disabled={entering}>

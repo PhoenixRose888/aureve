@@ -51,8 +51,11 @@ PREMIUM_PLANS = {
 FREE_LIMITS = {
     "stylist": {"period": "day", "max": 5},
     "beauty": {"period": "month", "max": 1},
+    # Dress Me is available to everyone (flagship experience) with a generous
+    # daily cap so it stays usable for demos/judging.
+    "dressme": {"period": "day", "max": 50},
 }
-# Everything not in FREE_LIMITS is Premium-only (packing, capsule, shop, missing, health, compatibility, dressme).
+# Everything not in FREE_LIMITS is Premium-only (packing, capsule, shop, missing, health, compatibility).
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
