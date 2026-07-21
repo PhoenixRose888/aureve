@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useRouter } from "expo-router";
@@ -47,6 +47,21 @@ export default function ProfileEdit() {
   const toggleStyle = (s: string) =>
     setStylePrefs((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
+  // Re-sync form state once the profile hydrates (or when switching profiles),
+  // so values populate correctly on hard reload / deep-link.
+  useEffect(() => {
+    const p = active?.profile || {};
+    setMeas(p.measurements || {});
+    setBodyShape(p.body_shape || "");
+    setSkinTone(p.skin_tone || "");
+    setUndertone(p.undertone || "");
+    setFitPref(p.fit_pref || "");
+    setSizesTop(p.sizes_top || "");
+    setSizesBottom(p.sizes_bottom || "");
+    setStylePrefs(p.style_prefs || []);
+    setNotes(p.notes || "");
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const save = async () => {
     setSaving(true);
     const measurements = Object.fromEntries(Object.entries(meas).filter(([, v]) => v && String(v).trim()));
@@ -67,7 +82,10 @@ export default function ProfileEdit() {
       });
       await refresh();
       setSaved(true);
-      setTimeout(() => router.back(), 400);
+      setTimeout(() => {
+        if (router.canGoBack()) router.back();
+        else router.replace("/(tabs)/profile");
+      }, 400);
     } catch {
       setSaving(false);
     }

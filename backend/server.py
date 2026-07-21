@@ -897,7 +897,8 @@ def profile_context(user: dict) -> str:
             parts.append(f"{key.replace('_', ' ')}: {p[key]}")
     prefs = p.get("style_prefs")
     if prefs:
-        parts.append("style preferences: " + ", ".join(prefs) if isinstance(prefs, list) else f"style preferences: {prefs}")
+        prefs_str = ", ".join(prefs) if isinstance(prefs, list) else str(prefs)
+        parts.append(f"style preferences: {prefs_str}")
     if not parts:
         return "No body profile provided — style with general best practices."
     return (
