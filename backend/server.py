@@ -9,6 +9,9 @@ import json
 import logging
 import uuid
 import asyncio
+import io
+import base64 as _b64
+from PIL import Image
 import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -616,9 +619,29 @@ def strip_image(doc: dict, keep: bool = False) -> dict:
     return doc
 
 
+def compress_b64(b64: Optional[str], max_side: int = 1024, quality: int = 72) -> Optional[str]:
+    """Normalise any base64 image to a bounded JPEG so it stores/renders reliably.
+    Oversized/uncompressed images (e.g. AI-generated clean photos) can render blank on device."""
+    if not b64:
+        return b64
+    try:
+        raw = _b64.b64decode(b64)
+        img = Image.open(io.BytesIO(raw))
+        if img.mode not in ("RGB",):
+            img = img.convert("RGB")
+        img.thumbnail((max_side, max_side))
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        return _b64.b64encode(out.getvalue()).decode()
+    except Exception:
+        return b64
+
+
 @api_router.post("/items")
 async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
     item = payload.dict()
+    item["photo"] = compress_b64(item.get("photo"))
+    item["worn_photo"] = compress_b64(item.get("worn_photo"))
     item["id"] = new_id("item")
     item["user_id"] = user["user_id"]
     item["wear_count"] = 0
@@ -663,6 +686,10 @@ async def update_item(item_id: str, payload: ItemUpdate, user: dict = Depends(ge
     updates = {k: v for k, v in payload.dict().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates")
+    if "photo" in updates:
+        updates["photo"] = compress_b64(updates["photo"])
+    if "worn_photo" in updates:
+        updates["worn_photo"] = compress_b64(updates["worn_photo"])
     res = await db.items.update_one(
         {"id": item_id, "user_id": user["user_id"]}, {"$set": updates}
     )
@@ -726,7 +753,7 @@ async def _clean_photo(image_b64: str) -> Optional[str]:
     _text, images = await chat.send_message_multimodal_response(
         UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
     )
-    return images[0]["data"] if images else None
+    return compress_b64(images[0]["data"]) if images else None
 
 
 @api_router.post("/analyze-item")
