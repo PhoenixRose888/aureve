@@ -1,5 +1,10 @@
 # Aureve — Your AI Personal Stylist
 
+## Fixed (2026-07-21i) — blank wardrobe photos
+- 🐞 **Blank item images fixed.** Root cause: some stored photos (esp. AI background-removed images ~460KB base64, and large uploads) were too big/uncompressed and rendered blank on device. Fix: backend `compress_b64` (Pillow) normalises every image to a bounded JPEG (≤1024px, q72) on `POST/PUT /items` and on `/capture` clean_image; ran a one-time migration that repaired 10 existing oversized photos. Verified iteration 11 (7/7): ~11× size reduction, all photos valid JPEG, 0 oversized remain.
+
+
+
 ## Implemented (2026-07-21h) — Exceptional wardrobe capture
 - ✅ **One-shot capture with AI background removal** — new `POST /api/capture` runs auto-tagging (GPT vision) + background removal (Gemini `gemini-3.1-flash-image-preview`) in parallel, returning `{analysis, clean_image}`. Add-item now calls it: pieces are auto-filled AND get a clean, catalogue-style photo on a neutral background (with a one-tap "Original" revert). `/analyze-item` kept for compat. Free (capture is core). Verified iteration 10 (11/11).
 
