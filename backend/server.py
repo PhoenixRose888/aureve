@@ -236,6 +236,12 @@ async def migrate_guest_data(guest_token: str, account_id: str):
     guest_user = await db.users.find_one({"user_id": guest_id}, {"_id": 0})
     if not guest_user or not guest_user.get("is_guest"):
         return
+    # Purge the auto-seeded demo wardrobe so it never clutters a real account
+    # (only the guest's own added items are kept).
+    guest_profiles = await db.profiles.find({"user_id": guest_id}, {"_id": 0, "id": 1}).to_list(100)
+    prof_ids = [p["id"] for p in guest_profiles]
+    if prof_ids:
+        await db.items.delete_many({"user_id": {"$in": prof_ids}, "demo": True})
     # Reassign the guest's profiles (and any account-scoped usage) to the account.
     await db.profiles.update_many({"user_id": guest_id}, {"$set": {"user_id": account_id}})
     await db.usage.update_many({"account_id": guest_id}, {"$set": {"account_id": account_id}})
@@ -251,6 +257,48 @@ async def migrate_guest_data(guest_token: str, account_id: str):
     # Retire the guest user + all its sessions.
     await db.users.delete_one({"user_id": guest_id})
     await db.user_sessions.delete_many({"user_id": guest_id})
+
+
+async def seed_demo_wardrobe(profile_id: str):
+    """Populate a fresh guest profile with a curated demo wardrobe so Dress Me
+    and the wardrobe feel alive immediately. Items are flagged demo:True."""
+    try:
+        from demo_wardrobe import DEMO_ITEMS
+    except Exception as e:
+        logger.warning(f"Demo wardrobe unavailable: {e}")
+        return
+    now = now_utc().isoformat()
+    docs = []
+    for g in DEMO_ITEMS:
+        docs.append({
+            "id": new_id("item"),
+            "user_id": profile_id,
+            "name": g["name"],
+            "category": g["category"],
+            "colour": g.get("colour", ""),
+            "fabric": g.get("fabric", ""),
+            "season": g.get("season", "All"),
+            "pattern": "",
+            "style": g.get("style", ""),
+            "sleeve_length": "",
+            "formality": g.get("formality", ""),
+            "tone": g.get("tone", ""),
+            "fit_notes": "",
+            "brand": "",
+            "size": "",
+            "price": None,
+            "condition": "",
+            "availability": "Ready",
+            "photo": g["photo"],
+            "worn_photo": None,
+            "flatters": g.get("flatters", True),
+            "wear_count": 0,
+            "last_worn": None,
+            "created_at": now,
+            "demo": True,
+        })
+    if docs:
+        await db.items.insert_many(docs)
 
 
 @api_router.post("/auth/guest")
@@ -277,6 +325,9 @@ async def create_guest():
         }},
         upsert=True,
     )
+    # Give the guest a ready-to-explore wardrobe.
+    prof = await ensure_default_profile(user_id, "Guest")
+    await seed_demo_wardrobe(prof["id"])
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     return {"session_token": session_token, "user": user}
 
