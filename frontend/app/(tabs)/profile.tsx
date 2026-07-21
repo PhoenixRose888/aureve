@@ -73,6 +73,15 @@ export default function Profile() {
 
   const unworn = data ? (data.least_worn || []).filter((i: any) => (i.wear_count || 0) === 0) : [];
 
+  const handleSignOut = async () => {
+    await logout();
+    router.replace("/");
+  };
+  const handleSwitchAccount = async () => {
+    await logout();
+    await login();
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -99,7 +108,7 @@ export default function Profile() {
               </View>
             </View>
             {!isGuest && (
-              <Pressable onPress={logout} testID="logout-button" hitSlop={10}>
+              <Pressable onPress={handleSignOut} testID="logout-button" hitSlop={10}>
                 <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
               </Pressable>
             )}
@@ -314,6 +323,23 @@ export default function Profile() {
               </ScrollView>
             </View>
           )}
+
+          {/* Account */}
+          <View style={styles.section}>
+            <Txt style={styles.sectionTitle}>ACCOUNT</Txt>
+            {!isGuest && (
+              <Pressable style={styles.acctRow} testID="switch-account" onPress={handleSwitchAccount}>
+                <Feather name="repeat" size={18} color={colors.onSurface} />
+                <Txt style={styles.acctTxt}>Switch account</Txt>
+                <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+              </Pressable>
+            )}
+            <Pressable style={styles.acctRow} testID="sign-out" onPress={handleSignOut}>
+              <Feather name="log-out" size={18} color={colors.error} />
+              <Txt style={[styles.acctTxt, { color: colors.error }]}>{isGuest ? "Exit guest mode" : "Sign out"}</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
+          </View>
 
           {!data || data.total_items === 0 ? (
             <View style={styles.empty}>
@@ -552,5 +578,7 @@ const styles = StyleSheet.create({
   simPlaceholder: { alignItems: "center", justifyContent: "center" },
   simName: { fontSize: 12, color: colors.onSurface, marginTop: 6 },
   empty: { marginTop: spacing["2xl"], alignItems: "center" },
+  acctRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  acctTxt: { flex: 1, fontSize: 15, color: colors.onSurface },
   emptyTxt: { fontSize: 14, color: colors.onSurfaceTertiary, textAlign: "center" },
 });
