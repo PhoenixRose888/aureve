@@ -94,7 +94,7 @@ export default function TryOn() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Display weight="medium" style={styles.title}>See it on you</Display>
+        <Display weight="semibold" style={styles.title}>See it on you</Display>
         <Txt style={styles.sub}>Add a full-body photo, pick pieces from your wardrobe, and preview the look on you.</Txt>
 
         <Txt style={styles.groupLabel}>YOUR PHOTO</Txt>

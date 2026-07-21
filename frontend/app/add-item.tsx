@@ -171,7 +171,7 @@ export default function AddItem() {
         <Pressable onPress={() => router.back()} testID="add-item-close" hitSlop={12}>
           <Feather name="x" size={24} color={colors.onSurface} />
         </Pressable>
-        <Display weight="medium" style={styles.headerTitle}>{editing ? "Edit piece" : "New piece"}</Display>
+        <Display weight="semibold" style={styles.headerTitle}>{editing ? "Edit piece" : "New piece"}</Display>
         {editing ? (
           <View style={{ width: 56 }} />
         ) : (

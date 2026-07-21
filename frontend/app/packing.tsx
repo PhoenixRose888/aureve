@@ -67,7 +67,7 @@ export default function Packing() {
         <Pressable onPress={() => router.back()} testID="packing-back" hitSlop={12}>
           <Feather name="arrow-left" size={24} color={colors.onSurface} />
         </Pressable>
-        <Display weight="medium" style={styles.headerTitle}>Pack a trip</Display>
+        <Display weight="semibold" style={styles.headerTitle}>Pack a trip</Display>
         <View style={{ width: 24 }} />
       </View>
 

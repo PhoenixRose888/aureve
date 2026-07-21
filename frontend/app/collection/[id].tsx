@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,13 +10,12 @@ import GarmentImage from "@/src/components/GarmentImage";
 import ConfirmModal from "@/src/components/ConfirmModal";
 import * as haptics from "@/src/utils/haptics";
 
-const { width } = Dimensions.get("window");
-const CARD_W = (width - spacing.lg * 2 - spacing.md) / 2;
-
 export default function CollectionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const CARD_W = (width - spacing.lg * 2 - spacing.md) / 2;
   const [coll, setColl] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -81,7 +80,7 @@ export default function CollectionDetail() {
         ) : (
           <View style={styles.grid}>
             {outfits.map((o: any) => (
-              <Pressable key={o.id} style={styles.card} testID={`coll-outfit-${o.id}`} onPress={() => router.push(`/outfit/${o.id}`)}>
+              <Pressable key={o.id} style={[styles.card, { width: CARD_W }]} testID={`coll-outfit-${o.id}`} onPress={() => router.push(`/outfit/${o.id}`)}>
                 <View style={styles.collage}>
                   <View style={styles.collageGrid}>
                     {(o.items || []).slice(0, 4).map((it: any, i: number) => (
@@ -150,7 +149,7 @@ const styles = StyleSheet.create({
   addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.sage, height: 48, borderRadius: radius.md, marginBottom: spacing.lg },
   addBtnTxt: { color: colors.onSage, fontSize: 15, fontFamily: fonts.displayMedium },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
-  card: { width: CARD_W, marginBottom: spacing.sm },
+  card: { marginBottom: spacing.sm },
   collage: { width: "100%", aspectRatio: 0.82, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, overflow: "hidden", borderWidth: 0.5, borderColor: colors.border },
   collageGrid: { flex: 1, flexDirection: "row", flexWrap: "wrap" },
   collageCell: { width: "50%", height: "50%", alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceTertiary },

@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator, Dimensions } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -8,14 +8,13 @@ import { useAuth } from "@/src/context/AuthContext";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, fonts } from "@/src/theme";
 
-const { height } = Dimensions.get("window");
-
 const HERO =
   "https://images.unsplash.com/photo-1578102718171-ec1f91680562?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaGljJTIwc3RyZWV0JTIwc3R5bGUlMjBvdXRmaXR8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
 
 export default function Login() {
   const { user, login, guestLogin, signingIn, loading } = useAuth();
   const router = useRouter();
+  const { height } = useWindowDimensions();
 
   useEffect(() => {
     if (user) router.replace("/(tabs)");
@@ -23,7 +22,7 @@ export default function Login() {
 
   return (
     <View style={styles.container} testID="login-screen">
-      <Image source={{ uri: HERO }} style={styles.hero} contentFit="cover" transition={300} />
+      <Image source={{ uri: HERO }} style={[styles.hero, { height: height * 0.75 }]} contentFit="cover" transition={300} />
       <LinearGradient
         colors={["rgba(26,26,26,0.1)", "rgba(26,26,26,0.55)", colors.surfaceInverse]}
         locations={[0, 0.5, 0.92]}
@@ -72,7 +71,7 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceInverse },
-  hero: { position: "absolute", top: 0, left: 0, right: 0, height: height * 0.75 },
+  hero: { position: "absolute", top: 0, left: 0, right: 0 },
   content: { flex: 1, justifyContent: "flex-end", paddingHorizontal: spacing.xl, paddingBottom: spacing["3xl"] },
   kicker: {
     color: colors.brandTertiary,

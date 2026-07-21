@@ -77,7 +77,7 @@ export default function Stylist() {
         {router.canGoBack() ? (
           <Pressable onPress={() => router.back()} hitSlop={12}><Feather name="chevron-left" size={26} color={colors.onSurface} /></Pressable>
         ) : <View style={{ width: 26 }} />}
-        <Display weight="medium" style={styles.headerTitle}>AI Stylist</Display>
+        <Display weight="semibold" style={styles.headerTitle}>AI Stylist</Display>
         <Pressable onPress={() => { haptics.tap(); setMessages([]); }} hitSlop={12} testID="stylist-clear"><Feather name="edit" size={20} color={colors.onSurface} /></Pressable>
       </View>
 

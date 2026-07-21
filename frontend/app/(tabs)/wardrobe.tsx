@@ -1,17 +1,15 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, Dimensions } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
-import { colors, spacing, radius, CATEGORIES } from "@/src/theme";
+import { colors, spacing, radius, fonts, CATEGORIES } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
 
-const { width } = Dimensions.get("window");
 const GUTTER = spacing.md;
-const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
 
 const FILTERS = ["All", ...CATEGORIES];
 
@@ -21,6 +19,8 @@ const EMPTY_IMG =
 export default function Wardrobe() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
   const [items, setItems] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
@@ -50,10 +50,10 @@ export default function Wardrobe() {
     return (
     <Pressable
       testID={`wardrobe-item-${item.id}`}
-      style={[styles.card, { marginRight: index % 2 === 0 ? GUTTER : 0 }]}
+      style={[styles.card, { width: COL_W, marginRight: index % 2 === 0 ? GUTTER : 0 }]}
       onPress={() => router.push(`/item/${item.id}`)}
     >
-      <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={styles.cardImg} iconSize={28} testID={`wardrobe-img-${item.id}`} />
+      <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }]} iconSize={28} testID={`wardrobe-img-${item.id}`} />
       {status !== "Ready" && (
         <View style={styles.laundryBadge}>
           <Feather name="droplet" size={11} color={colors.onSurfaceInverse} />
@@ -81,7 +81,7 @@ export default function Wardrobe() {
         <View style={styles.headerRow}>
           <View>
             <Txt style={styles.kicker}>{items.length} PIECES</Txt>
-            <Display weight="medium" style={styles.title}>Wardrobe</Display>
+            <Display weight="semibold" style={styles.title}>Wardrobe</Display>
           </View>
           <View style={styles.headerActions}>
             <Pressable
@@ -146,7 +146,7 @@ export default function Wardrobe() {
               <View style={styles.laundryEmptyIcon}>
                 <Feather name="droplet" size={28} color={colors.brand} />
               </View>
-              <Display weight="medium" style={styles.emptyTitle}>Laundry basket is empty</Display>
+              <Display weight="semibold" style={styles.emptyTitle}>Laundry basket is empty</Display>
               <Txt style={styles.emptySub}>Nothing is in the wash. Mark a piece as Washing from its detail screen and it will appear here.</Txt>
               <Pressable style={styles.emptyBtn} testID="laundry-empty-back" onPress={() => setLaundryMode(false)}>
                 <Txt style={styles.emptyBtnTxt}>Back to wardrobe</Txt>
@@ -155,7 +155,7 @@ export default function Wardrobe() {
           ) : (
             <>
               <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
-              <Display weight="medium" style={styles.emptyTitle}>
+              <Display weight="semibold" style={styles.emptyTitle}>
                 {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
               </Display>
               <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   laundryCountTxt: { color: colors.onSurfaceInverse, fontSize: 10, fontWeight: "600" },
   kicker: { fontSize: 11, letterSpacing: 2, color: colors.onSurfaceTertiary, marginBottom: 2 },
-  title: { fontSize: 34, color: colors.onSurface },
+  title: { fontSize: 30, color: colors.onSurface, letterSpacing: -0.5 },
   addBtn: {
     width: 44,
     height: 44,
@@ -240,8 +240,8 @@ const styles = StyleSheet.create({
   chipTxt: { fontSize: 13, color: colors.onSurfaceSecondary },
   chipTxtActive: { color: colors.onBrandPrimary },
   grid: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
-  card: { width: COL_W, marginBottom: spacing.xl },
-  cardImg: { width: COL_W, height: COL_W * 1.3, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
+  card: { marginBottom: spacing.xl },
+  cardImg: { borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   placeholder: { alignItems: "center", justifyContent: "center" },
   laundryBadge: {
     position: "absolute",
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing.xl,
   },
-  emptyTitle: { fontSize: 26, textAlign: "center", marginBottom: spacing.sm },
+  emptyTitle: { fontSize: 20, textAlign: "center", marginBottom: spacing.sm, letterSpacing: -0.3 },
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", marginBottom: spacing.xl },
   emptyBtn: {
     backgroundColor: colors.brandPrimary,
@@ -306,5 +306,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radius.sm,
   },
-  emptyBtnTxt: { color: colors.onBrandPrimary, fontSize: 15 },
+  emptyBtnTxt: { color: colors.onBrandPrimary, fontSize: 15, fontFamily: fonts.displayBold },
 });

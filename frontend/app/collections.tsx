@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, TextInput, ActivityIndicator, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Modal, TextInput, ActivityIndicator, useWindowDimensions } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,12 +9,11 @@ import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
 import * as haptics from "@/src/utils/haptics";
 
-const { width } = Dimensions.get("window");
-const CARD_W = (width - spacing.lg * 2 - spacing.md) / 2;
-
 export default function Collections() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const CARD_W = (width - spacing.lg * 2 - spacing.md) / 2;
   const [collections, setCollections] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -61,7 +60,7 @@ export default function Collections() {
         ) : (
           <View style={styles.grid}>
             {collections.map((c) => (
-              <Pressable key={c.id} style={styles.card} testID={`collection-${c.id}`} onPress={() => router.push(`/collection/${c.id}`)}>
+              <Pressable key={c.id} style={[styles.card, { width: CARD_W }]} testID={`collection-${c.id}`} onPress={() => router.push(`/collection/${c.id}`)}>
                 <View style={styles.cover}>
                   {(c.cover || []).length === 0 ? (
                     <View style={styles.coverEmpty}><Feather name="folder" size={22} color={colors.onSurfaceTertiary} /></View>
@@ -104,7 +103,7 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   topTitle: { fontSize: 18 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
-  card: { width: CARD_W, marginBottom: spacing.sm },
+  card: { marginBottom: spacing.sm },
   cover: { width: "100%", aspectRatio: 1, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, overflow: "hidden", borderWidth: 0.5, borderColor: colors.border },
   coverEmpty: { flex: 1, alignItems: "center", justifyContent: "center" },
   coverGrid: { flex: 1, flexDirection: "row", flexWrap: "wrap" },

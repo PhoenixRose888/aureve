@@ -50,7 +50,7 @@ export default function Beauty() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Display weight="medium" style={styles.title}>Beauty for your colouring</Display>
+        <Display weight="semibold" style={styles.title}>Beauty for your colouring</Display>
         <Txt style={styles.sub}>Hair and makeup tuned to your skin tone and undertone — colour theory, not guesswork.</Txt>
 
         <Txt style={styles.groupLabel}>OCCASION</Txt>

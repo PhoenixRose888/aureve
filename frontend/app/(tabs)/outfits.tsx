@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl, useWindowDimensions } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,9 +7,6 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
-
-const { width } = Dimensions.get("window");
-const CARD_W = (width - spacing.lg * 2 - spacing.md) / 2;
 
 function timeAgo(iso?: string) {
   if (!iso) return "";
@@ -30,6 +27,8 @@ const SEGMENTS = ["All", "Recent", "Saved"] as const;
 export default function OutfitsHub() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const CARD_W = (width - spacing.lg * 2 - spacing.md) / 2;
   const [outfits, setOutfits] = useState<any[]>([]);
   const [seg, setSeg] = useState<(typeof SEGMENTS)[number]>("All");
   const [refreshing, setRefreshing] = useState(false);
@@ -83,7 +82,7 @@ export default function OutfitsHub() {
         {loaded && filtered.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}><Feather name="layers" size={26} color={colors.onSurfaceTertiary} /></View>
-            <Display weight="medium" style={styles.emptyTitle}>No outfits yet</Display>
+            <Display weight="semibold" style={styles.emptyTitle}>No outfits yet</Display>
             <Txt style={styles.emptySub}>
               Tap &lsquo;Dress Me&rsquo; to create your first look in seconds, or build one by hand.
             </Txt>
@@ -94,7 +93,7 @@ export default function OutfitsHub() {
         ) : (
           <View style={styles.grid}>
             {filtered.map((o) => (
-              <Pressable key={o.id} style={styles.card} testID={`outfit-card-${o.id}`} onPress={() => router.push(`/outfit/${o.id}`)}>
+              <Pressable key={o.id} style={[styles.card, { width: CARD_W }]} testID={`outfit-card-${o.id}`} onPress={() => router.push(`/outfit/${o.id}`)}>
                 <View style={styles.collage}>
                   {o.preview_image ? (
                     <GarmentImage photo={o.preview_image} category="" mime="png" style={styles.collageFull} contentFit="contain" iconSize={28} />
@@ -132,14 +131,14 @@ export default function OutfitsHub() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  title: { fontSize: 30 },
+  title: { fontSize: 30, letterSpacing: -0.5 },
   segments: { flexDirection: "row", gap: spacing.xl, paddingHorizontal: spacing.lg, marginBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.border },
   segBtn: { paddingBottom: spacing.sm },
   segTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
   segTxtActive: { color: colors.onSurface, fontFamily: fonts.displayMedium },
   segUnderline: { position: "absolute", bottom: -0.5, left: 0, right: 0, height: 2, backgroundColor: colors.sage, borderRadius: 2 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingHorizontal: spacing.lg },
-  card: { width: CARD_W, marginBottom: spacing.sm },
+  card: { marginBottom: spacing.sm },
   collage: { width: "100%", aspectRatio: 0.82, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, overflow: "hidden", borderWidth: 0.5, borderColor: colors.border },
   collageFull: { width: "100%", height: "100%" },
   collageGrid: { flex: 1, flexDirection: "row", flexWrap: "wrap" },
@@ -151,7 +150,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, marginBottom: spacing.sm },
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", lineHeight: 21, marginBottom: spacing.xl },
   emptyCta: { backgroundColor: colors.sage, paddingHorizontal: spacing["2xl"], paddingVertical: spacing.md, borderRadius: radius.md },
-  emptyCtaTxt: { color: colors.onSage, fontSize: 15, fontFamily: fonts.displayMedium },
+  emptyCtaTxt: { color: colors.onSage, fontSize: 15, fontFamily: fonts.displayBold },
   calendarBtn: { position: "absolute", left: spacing.lg, right: spacing.lg, height: 48, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   calendarTxt: { fontSize: 15, color: colors.onSurface, fontFamily: fonts.displayMedium },
 });

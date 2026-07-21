@@ -97,7 +97,7 @@ export default function ProfileEdit() {
         <Pressable onPress={() => router.back()} testID="profile-edit-close" hitSlop={12}>
           <Feather name="x" size={24} color={colors.onSurface} />
         </Pressable>
-        <Display weight="medium" style={styles.headerTitle}>Style profile</Display>
+        <Display weight="semibold" style={styles.headerTitle}>Style profile</Display>
         <View style={{ width: 24 }} />
       </View>
 

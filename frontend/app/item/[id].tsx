@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Dimensions, ActivityIndicator, Modal } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Modal } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,8 +7,6 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
-
-const { width } = Dimensions.get("window");
 
 const LAUNDRY = [
   { key: "Ready", icon: "check-circle" },
@@ -20,6 +18,7 @@ const LAUNDRY = [
 export default function ItemDetail() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -102,7 +101,7 @@ export default function ItemDetail() {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing["3xl"] }}>
         {/* Gallery */}
-        <View style={styles.gallery}>
+        <View style={[styles.gallery, { height: width * 1.15 }]}>
           {photos.length > 0 ? (
             <ScrollView
               horizontal
@@ -111,11 +110,11 @@ export default function ItemDetail() {
               onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
             >
               {photos.map((p: string, i: number) => (
-                <GarmentImage key={i} photo={p} category={item.category} style={styles.galleryImg} iconSize={40} />
+                <GarmentImage key={i} photo={p} category={item.category} style={[styles.galleryImg, { width, height: width * 1.15 }]} iconSize={40} />
               ))}
             </ScrollView>
           ) : (
-            <GarmentImage photo={null} category={item.category} style={styles.galleryImg} iconSize={44} />
+            <GarmentImage photo={null} category={item.category} style={[styles.galleryImg, { width, height: width * 1.15 }]} iconSize={44} />
           )}
 
           {/* top controls */}
@@ -331,8 +330,8 @@ function Stars({ n }: { n: number }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
-  gallery: { height: width * 1.15, backgroundColor: colors.surfaceSecondary },
-  galleryImg: { width, height: width * 1.15 },
+  gallery: { backgroundColor: colors.surfaceSecondary },
+  galleryImg: { backgroundColor: colors.surfaceSecondary },
   placeholder: { alignItems: "center", justifyContent: "center" },
   topBar: { position: "absolute", left: spacing.lg, right: spacing.lg, flexDirection: "row", justifyContent: "space-between" },
   circleBtn: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: "rgba(26,26,26,0.4)", alignItems: "center", justifyContent: "center" },

@@ -67,7 +67,7 @@ export default function Looks() {
         <Pressable onPress={() => router.back()} testID="looks-back" hitSlop={12}>
           <Feather name="arrow-left" size={24} color={colors.onSurface} />
         </Pressable>
-        <Display weight="medium" style={styles.headerTitle}>Looks</Display>
+        <Display weight="semibold" style={styles.headerTitle}>Looks</Display>
         <View style={{ width: 24 }} />
       </View>
 

@@ -56,7 +56,7 @@ export default function Capsule() {
         <Pressable onPress={() => router.back()} testID="capsule-back" hitSlop={12}>
           <Feather name="arrow-left" size={24} color={colors.onSurface} />
         </Pressable>
-        <Display weight="medium" style={styles.headerTitle}>Capsule builder</Display>
+        <Display weight="semibold" style={styles.headerTitle}>Capsule builder</Display>
         <View style={{ width: 24 }} />
       </View>
 

@@ -109,7 +109,7 @@ export default function Planner() {
         <Pressable onPress={() => router.back()} testID="planner-back" hitSlop={12}>
           <Feather name="arrow-left" size={24} color={colors.onSurface} />
         </Pressable>
-        <Display weight="medium" style={styles.headerTitle}>The week ahead</Display>
+        <Display weight="semibold" style={styles.headerTitle}>The week ahead</Display>
         <View style={{ width: 24 }} />
       </View>
 
