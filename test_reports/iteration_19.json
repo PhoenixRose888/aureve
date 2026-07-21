@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 19 — Profile tab board-style header polish (frontend-only). VERDICT: ALL PASS, ZERO REGRESSIONS. Verified on mobile viewport (390x844) at https://wardrobe-ai-311.preview.emergentagent.com/profile with seeded bearer token test-session-token-aura-123 (user_testaura01, PREMIUM). Account card renders exactly as designed: 60x60 sage avatar with 'AT' initials (computed correctly from 'Aura Tester'), name 'Aura Tester', email 'tester@aura.app', and the Premium badge (with award icon + 'Premium' label on sage background — free-plan branch confirmed via code review at profile.tsx:91-94). Stats row shows 5 Pieces / 6 Looks / 2 Profiles with the vertical dividers (mDiv) in between (values are wired to data.total_items, data.outfits_logged, profiles.length). 'Active wardrobe' switcher row (testID profile-switcher-trigger) shows the active profile emoji (👤) + label 'Active wardrobe' + active profile name 'Aura' + chevron-down; tapping it opened the switcher modal with 'Wardrobes' heading, both existing profiles listed (Aura ✓ active, David), the new-profile-input and add-profile-button visible → switcher/create/delete plumbing intact. Sign out icon (log-out Feather, testID logout-button) is present in the top-right of the account card and tappable (Pressable with hitSlop 10 — 40+ hit target). All 7 CTA rows render and navigate correctly: open-style-profile → /profile-edit (verified), open-beauty (Hair & makeup for your colouring, no lock for Premium user), profile-calendar-cta (Google Calendar 'Connect so Dress Me styles for your day'), profile-premium-cta → /premium (verified), open-health-report (Monthly wardrobe health report), find-missing-button (in THE MISSING PIECE card). Insights sections all rendered on this account: HOW YOUR OUTFITS FEEL confidence bars (Flattering 3.5 / Comfort 3.5 / Confidence 3.5), WHAT YOU OWN category breakdown (Outerwear/Bottoms/Tops/Shoes/Jewellery each with count 1), MOST WORN list (Gold hoop earrings 5 wears with rank-1 numbering + GarmentImage thumbnail), and WARDROBE HEALTH with 4 unworn pieces rendered as GarmentImage tiles (Cream linen blazer / Black tailored trousers / White cotton tee / Tan leather loafers) — no broken images, GarmentImage regression clean. Console: only pre-existing React Native Web deprecation warnings ('shadow*' style props, props.pointerEvents) that exist app-wide and are NOT caused by the Profile header rewrite. Zero pageerrors, zero red-screen, zero missing testIDs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_19.json"
+  ],
+  "action_items": [
+    "None. Profile header polish is production-ready; no changes required.",
+    "OPTIONAL nit (not from this iteration, app-wide): app-level 'shadow*' style props and props.pointerEvents deprecation warnings continue to appear in web preview console. They come from other components (not the Profile header rewrite) and are noise-level. Consider a codemod pass to migrate to `boxShadow` / `style.pointerEvents` in a future cleanup."
+  ],
+  "critical_code_review_comments": [
+    "profile.tsx:20-26 — initials computation is defensively correct: falls back through user.name → user.email → '?', splits on whitespace, filters empty, slices first 2, upper-cases. For 'Aura Tester' → 'AT' (verified in screenshot). Single-word names (e.g. 'David') would yield 'D'; email-only accounts would yield first 2 chars of the email local-part (e.g. 'te' for 'tester@aura.app'). All edge cases safe — no crash paths.",
+    "profile.tsx:91-94 — Premium/Free badge branches on `!!user?.premium`, using two style variants (badgePremium sage vs badgeFree neutral) with matching icon (award vs user) + label ('Premium' vs 'Free plan'). Both branches use fontFamily displayMedium at 11px — visually consistent. Verified Premium branch live; Free branch is a pure conditional so behaviour is guaranteed by symmetry.",
+    "profile.tsx:96-98 — Sign-out is now a compact icon-only Pressable (log-out Feather, 20px, colors.onSurfaceTertiary) with hitSlop=10 → effective touch area ≈ 40x40, meeting Apple HIG's 44pt minimum only marginally. If accessibility becomes a concern, consider hitSlop=12 (44x44). Not a blocker.",
+    "profile.tsx:101-107 — Metric row is `flex:1` per Metric column with 0.5x40 dividers — evenly distributes across the screen. Fallback values (`?? 0`, `?? 1`) prevent 'undefined' from rendering. Value fontSize 28 (Display medium) is high-contrast and readable. Good.",
+    "profile.tsx:109-116 — Switcher row uses backgroundColor surfaceSecondary + radius.md + 32x32 avatarSm. onPress opens the existing Modal (unchanged from before). The state (setShowSwitcher) is unchanged from prior implementation → guaranteed no regression in create/delete/switch flows. Verified modal opens with both profiles listed and add-form inputs present.",
+    "profile.tsx:408-458 — Header StyleSheet is clean: proper 8pt spacing (spacing.md/lg/xl from theme), radius.pill (30) for avatarLg. No unused styles remain from the previous header design that would leak visual bugs (profileRow, switcherTrigger, avatar, accountName, activeRow, name are defined but unused now — dead code, not harmful but could be trimmed in a future cleanup).",
+    "Minor dead-code nit at profile.tsx:424-430 — the styles `profileRow`, `switcherTrigger`, `avatar`, `accountName`, `activeRow`, `name` appear to be leftovers from the previous header layout and are no longer referenced. Safe to remove in a follow-up but doesn't affect runtime."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only task)",
+    "frontend": "100% — 8/8 required testIDs present, account card + stats row + switcher row + logout icon render correctly, all CTAs navigate, switcher modal opens with profiles and create/delete controls, insights sections + GarmentImage lists intact, zero console errors."
+  },
+  "seed_data_creation": "None — used the existing seeded PREMIUM account user_testaura01 (5 items, 6 outfits, 2 profiles). No test data was created or mutated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Profile tab is stable. To retest quickly: mobile viewport 390x844, seed `localStorage.setItem('aura_session_token', JSON.stringify('test-session-token-aura-123'))` + same key with `@AsyncStorage:` prefix, then goto /profile. Required testIDs on this screen: logout-button, profile-switcher-trigger, open-style-profile, open-beauty, profile-calendar-cta, profile-premium-cta, open-health-report, find-missing-button, new-profile-input, add-profile-button, switch-profile-<id>, delete-profile-<id>. If testing the Free-plan badge branch, unset `users.premium_until` in Mongo for user_testaura01; the badge should switch to neutral background + 'Free plan' label. Dead-code styles (profileRow, switcherTrigger, avatar, accountName, activeRow, name at profile.tsx:424-430) are unused leftovers from the previous header and safe to delete in a cleanup pass.",
+  "rca_of_issue": "N/A — no bugs found."
+}
