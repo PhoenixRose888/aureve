@@ -14,7 +14,7 @@ import GarmentImage from "@/src/components/GarmentImage";
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, login, isGuest, signingIn } = useAuth();
   const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
   const premium = !!user?.premium;
   const initials = (user?.name || user?.email || "?")
@@ -86,16 +86,18 @@ export default function Profile() {
               <Txt style={styles.avatarInitials}>{initials}</Txt>
             </View>
             <View style={{ flex: 1 }}>
-              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{user?.name || "Your account"}</Display>
-              {user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
+              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{isGuest ? "Guest" : (user?.name || "Your account")}</Display>
+              {!isGuest && user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
               <View style={premium ? styles.badgePremium : styles.badgeFree}>
                 <Feather name={premium ? "award" : "user"} size={11} color={premium ? colors.onSage : colors.onSurfaceSecondary} />
-                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : "Free plan"}</Txt>
+                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : isGuest ? "Guest mode" : "Free plan"}</Txt>
               </View>
             </View>
-            <Pressable onPress={logout} testID="logout-button" hitSlop={10}>
-              <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
-            </Pressable>
+            {!isGuest && (
+              <Pressable onPress={logout} testID="logout-button" hitSlop={10}>
+                <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
+              </Pressable>
+            )}
           </View>
 
           <View style={styles.metricRow}>
@@ -117,6 +119,27 @@ export default function Profile() {
         </View>
 
         <View style={styles.body}>
+          {isGuest && (
+            <Pressable
+              style={styles.guestCard}
+              testID="guest-backup-cta"
+              onPress={login}
+              disabled={signingIn}
+            >
+              <View style={styles.guestIcon}>
+                <Feather name="cloud" size={20} color={colors.onSage} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Txt style={styles.guestTitle}>Back up your wardrobe</Txt>
+                <Txt style={styles.guestBody}>You're exploring as a guest. Sign in with Google and everything you've added moves to your account.</Txt>
+              </View>
+              {signingIn ? (
+                <ActivityIndicator color={colors.sage} />
+              ) : (
+                <Feather name="chevron-right" size={18} color={colors.sage} />
+              )}
+            </Pressable>
+          )}
           {/* Style profile */}
           <Pressable style={styles.styleProfileCta} testID="open-style-profile" onPress={() => router.push("/profile-edit")}>
             <View style={styles.spIcon}>
@@ -441,6 +464,22 @@ const styles = StyleSheet.create({
   addInput: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm },
   addBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
+  guestCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  guestIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.sage,
+    alignItems: "center", justifyContent: "center",
+  },
+  guestTitle: { fontSize: 15, fontFamily: fonts.displayMedium, color: colors.onBrandTertiary, marginBottom: 2 },
+  guestBody: { fontSize: 12.5, color: colors.onBrandTertiary, opacity: 0.8, lineHeight: 17 },
   styleProfileCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   spIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   spTitle: { fontSize: 15, color: colors.onSurface },

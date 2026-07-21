@@ -10,6 +10,7 @@ import logging
 import uuid
 import asyncio
 import io
+import secrets
 import base64 as _b64
 from PIL import Image
 import httpx
@@ -216,6 +217,56 @@ async def enforce_limit(scope: dict, feature: str):
 
 class SessionRequest(BaseModel):
     session_token: str
+    guest_token: Optional[str] = None   # optional guest session to migrate on sign-in
+
+
+async def migrate_guest_data(guest_token: str, account_id: str):
+    """Move a guest session's wardrobe into the real account, then retire the
+    guest. Data is scoped per-profile, so reassigning the guest's profiles to
+    the new account brings all items/outfits/logs along for free."""
+    guest_session = await db.user_sessions.find_one({"session_token": guest_token}, {"_id": 0})
+    if not guest_session:
+        return
+    guest_id = guest_session["user_id"]
+    if guest_id == account_id:
+        return
+    guest_user = await db.users.find_one({"user_id": guest_id}, {"_id": 0})
+    if not guest_user or not guest_user.get("is_guest"):
+        return
+    # Reassign the guest's profiles (and any account-scoped usage) to the account.
+    await db.profiles.update_many({"user_id": guest_id}, {"$set": {"user_id": account_id}})
+    await db.usage.update_many({"account_id": guest_id}, {"$set": {"account_id": account_id}})
+    # Retire the guest user + all its sessions.
+    await db.users.delete_one({"user_id": guest_id})
+    await db.user_sessions.delete_many({"user_id": guest_id})
+
+
+@api_router.post("/auth/guest")
+async def create_guest():
+    """Mint a transient guest user + bearer session so people can explore, add
+    items and use AI immediately without signing in. Data migrates to their
+    real account on Google sign-in."""
+    user_id = new_id("guest")
+    session_token = "guest_" + secrets.token_urlsafe(32)
+    await db.users.insert_one({
+        "user_id": user_id,
+        "email": f"{user_id}@guest.aureve.local",
+        "name": "Guest",
+        "is_guest": True,
+        "created_at": now_utc().isoformat(),
+    })
+    await db.user_sessions.update_one(
+        {"session_token": session_token},
+        {"$set": {
+            "session_token": session_token,
+            "user_id": user_id,
+            "expires_at": now_utc() + timedelta(days=7),
+            "created_at": now_utc(),
+        }},
+        upsert=True,
+    )
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return {"session_token": session_token, "user": user}
 
 
 @api_router.post("/auth/session")
@@ -251,6 +302,13 @@ async def create_session(payload: SessionRequest):
             "created_at": now_utc().isoformat(),
         })
 
+    # Migrate any guest wardrobe into this account before returning.
+    if payload.guest_token:
+        try:
+            await migrate_guest_data(payload.guest_token, user_id)
+        except Exception as e:
+            logger.warning(f"Guest migration skipped: {e}")
+
     await db.user_sessions.update_one(
         {"session_token": session_token},
         {"$set": {
@@ -271,6 +329,7 @@ async def auth_me(user: dict = Depends(get_current_user)):
     return {
         **user,
         "premium": prem,
+        "is_guest": bool(user.get("is_guest")),
         "premium_until": user.get("premium_until"),
         "premium_source": user.get("premium_source"),
         "trial_used": bool(user.get("trial_used")),

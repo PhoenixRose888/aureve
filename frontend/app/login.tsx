@@ -14,7 +14,7 @@ const HERO =
   "https://images.unsplash.com/photo-1578102718171-ec1f91680562?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaGljJTIwc3RyZWV0JTIwc3R5bGUlMjBvdXRmaXR8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
 
 export default function Login() {
-  const { user, login, signingIn, loading } = useAuth();
+  const { user, login, guestLogin, signingIn, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -54,7 +54,17 @@ export default function Login() {
             </>
           )}
         </Pressable>
-        <Txt style={styles.terms}>Sign in to sync your wardrobe across devices.</Txt>
+        <Pressable
+          testID="guest-login-button"
+          style={styles.guestBtn}
+          onPress={guestLogin}
+          disabled={signingIn || loading}
+        >
+          <Txt style={styles.guestTxt}>Explore as guest</Txt>
+        </Pressable>
+        <Txt style={styles.terms}>
+          Start building your wardrobe now — sign in anytime to back it up.
+        </Txt>
       </View>
     </View>
   );
@@ -87,5 +97,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   googleTxt: { color: colors.onSurface, fontSize: 16, fontFamily: fonts.body },
+  guestBtn: {
+    height: 52,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.md,
+  },
+  guestTxt: { color: colors.onSurfaceInverse, fontSize: 15, fontFamily: fonts.body, textDecorationLine: "underline" },
   terms: { color: "rgba(250,250,250,0.5)", fontSize: 12, textAlign: "center", marginTop: spacing.lg },
 });

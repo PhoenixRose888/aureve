@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import { api, setToken, clearToken, getToken } from "@/src/api/client";
+import { storage } from "@/src/utils/storage";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -16,13 +17,16 @@ type User = {
   premium_source?: string;
   trial_used?: boolean;
   trial_eligible?: boolean;
+  is_guest?: boolean;
 } | null;
 
 type AuthCtx = {
   user: User;
+  isGuest: boolean;
   loading: boolean;
   signingIn: boolean;
   login: () => Promise<void>;
+  guestLogin: () => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -31,6 +35,9 @@ const Ctx = createContext<AuthCtx>({} as AuthCtx);
 export const useAuth = () => useContext(Ctx);
 
 const AUTH_URL = "https://auth.emergentagent.com/";
+// Token stashed when a guest starts Google sign-in so the backend can migrate
+// their wardrobe into the new account (survives the web redirect reload).
+const GUEST_MIGRATE_KEY = "aura_guest_migrate_token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(null);
@@ -38,12 +45,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [signingIn, setSigningIn] = useState(false);
 
   const processSessionId = useCallback(async (sessionId: string) => {
+    const guestToken = await storage.secureGet<string>(GUEST_MIGRATE_KEY, "");
     const data = await api<{ session_token: string; user: User }>("/auth/session", {
       method: "POST",
       auth: false,
-      body: { session_token: sessionId },
+      body: { session_token: sessionId, guest_token: guestToken || undefined },
     });
     await setToken(data.session_token);
+    if (guestToken) await storage.secureRemove(GUEST_MIGRATE_KEY);
     setUser(data.user);
   }, []);
 
@@ -95,9 +104,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [processSessionId, checkExisting]);
 
+  // Stash the current guest token so it can be migrated after Google sign-in.
+  const stashGuestToken = useCallback(async () => {
+    if (!user?.is_guest) return;
+    const token = await getToken();
+    if (token) await storage.secureSet(GUEST_MIGRATE_KEY, token);
+  }, [user]);
+
+  const guestLogin = useCallback(async () => {
+    setSigningIn(true);
+    try {
+      const data = await api<{ session_token: string; user: User }>("/auth/guest", {
+        method: "POST",
+        auth: false,
+      });
+      await setToken(data.session_token);
+      setUser(data.user);
+    } finally {
+      setSigningIn(false);
+    }
+  }, []);
+
   const login = useCallback(async () => {
     setSigningIn(true);
     try {
+      await stashGuestToken();
       if (Platform.OS === "web") {
         const redirectUrl = window.location.origin + "/";
         window.location.href = `${AUTH_URL}?redirect=${encodeURIComponent(redirectUrl)}`;
@@ -115,13 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSigningIn(false);
     }
-  }, [processSessionId]);
+  }, [processSessionId, stashGuestToken]);
 
   const logout = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" });
     } catch {}
     await clearToken();
+    await storage.secureRemove(GUEST_MIGRATE_KEY);
     setUser(null);
   }, []);
 
@@ -132,7 +164,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ user, loading, signingIn, login, logout, refreshUser }}>
+    <Ctx.Provider
+      value={{
+        user,
+        isGuest: !!user?.is_guest,
+        loading,
+        signingIn,
+        login,
+        guestLogin,
+        logout,
+        refreshUser,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );
