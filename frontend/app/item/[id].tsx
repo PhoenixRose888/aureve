@@ -115,9 +115,7 @@ export default function ItemDetail() {
               ))}
             </ScrollView>
           ) : (
-            <View style={[styles.galleryImg, styles.placeholder]}>
-              <Feather name="image" size={40} color={colors.onSurfaceTertiary} />
-            </View>
+            <GarmentImage photo={null} category={item.category} style={styles.galleryImg} iconSize={44} />
           )}
 
           {/* top controls */}

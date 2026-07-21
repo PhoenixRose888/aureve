@@ -11,6 +11,7 @@ import { api } from "@/src/api/client";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
+import GarmentImage from "@/src/components/GarmentImage";
 
 type Photos = { photo?: string; worn_photo?: string };
 
@@ -240,11 +241,7 @@ export default function AddItem() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dupRow}>
               {duplicates.map((d) => (
                 <Pressable key={d.id} style={styles.dupCard} testID={`dup-${d.id}`} onPress={() => router.push({ pathname: "/item/[id]", params: { id: d.id } })}>
-                  {d.photo ? (
-                    <Image source={{ uri: `data:image/jpeg;base64,${d.photo}` }} style={styles.dupImg} contentFit="cover" />
-                  ) : (
-                    <View style={[styles.dupImg, styles.dupImgEmpty]}><Feather name="image" size={18} color={colors.onSurfaceTertiary} /></View>
-                  )}
+                  <GarmentImage photo={d.photo} category={d.category} style={styles.dupImg} iconSize={18} />
                   <Txt style={styles.dupName} numberOfLines={1}>{d.name || d.category}</Txt>
                 </Pressable>
               ))}
