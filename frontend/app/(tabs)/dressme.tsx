@@ -129,11 +129,19 @@ export default function DressMe() {
         ) : (
           <View style={{ width: 26 }} />
         )}
-        <Display weight="medium" style={styles.headerTitle}>{result ? "Perfect for Today" : "Dress Me"}</Display>
         <View style={{ width: 26 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.titleBlock}>
+          <Txt style={styles.kicker}>YOUR DAILY EDIT</Txt>
+          <Display weight="semibold" style={styles.pageTitle}>{result ? "Perfect for today" : "Dress Me"}</Display>
+          <Txt style={styles.pageSub}>
+            {result
+              ? "Styled from your wardrobe, tuned to today\u2019s weather."
+              : "One considered outfit \u2014 styled from what you already own, tuned to today\u2019s weather."}
+          </Txt>
+        </View>
         {loading && (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={colors.sage} />
@@ -231,6 +239,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   headerTitle: { fontSize: 18 },
+  titleBlock: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
+  kicker: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, fontFamily: fonts.displayMedium, marginBottom: spacing.xs },
+  pageTitle: { fontSize: 30, letterSpacing: -0.5 },
+  pageSub: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: spacing.xs, paddingRight: spacing.xl },
   scroll: { paddingBottom: spacing["3xl"] },
   loadingWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 2, gap: spacing.xl },
   loadingTxt: { color: colors.onSurfaceSecondary, fontSize: 15, fontStyle: "italic", textAlign: "center" },

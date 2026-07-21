@@ -49,13 +49,17 @@ export default function Collections() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing["3xl"] }}>
         {loaded && collections.length === 0 ? (
-          <View style={styles.empty}>
-            <View style={styles.emptyIcon}><Feather name="folder" size={26} color={colors.onSurfaceTertiary} /></View>
-            <Display weight="medium" style={styles.emptyTitle}>No collections yet</Display>
-            <Txt style={styles.emptySub}>Organise outfits for work, weekends, or special occasions. Create your first collection to get started.</Txt>
-            <Pressable style={styles.emptyCta} testID="collections-empty-create" onPress={() => setCreating(true)}>
-              <Txt style={styles.emptyCtaTxt}>Create Collection</Txt>
-            </Pressable>
+          <View style={styles.emptyWrap} testID="collections-empty">
+            <Display weight="semibold" style={styles.emptyHeading}>No collections yet</Display>
+            <Txt style={styles.emptyCopy}>Group outfits for work, weekends or travel — beautifully organised.</Txt>
+            <View style={styles.ghostRow}>
+              <Pressable style={[styles.ghostCard, styles.ghostCreate]} testID="collections-empty-create" onPress={() => { haptics.tap(); setCreating(true); }}>
+                <View style={styles.ghostPlus}><Feather name="plus" size={18} color={colors.onSage} /></View>
+                <Txt style={styles.ghostCreateTxt}>New collection</Txt>
+              </Pressable>
+              <View style={styles.ghostCard}><Feather name="folder" size={22} color={colors.onSurfaceTertiary} /></View>
+              <View style={styles.ghostCard}><Feather name="grid" size={22} color={colors.onSurfaceTertiary} /></View>
+            </View>
           </View>
         ) : (
           <View style={styles.grid}>
