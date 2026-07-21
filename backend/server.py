@@ -236,6 +236,15 @@ async def migrate_guest_data(guest_token: str, account_id: str):
     # Reassign the guest's profiles (and any account-scoped usage) to the account.
     await db.profiles.update_many({"user_id": guest_id}, {"$set": {"user_id": account_id}})
     await db.usage.update_many({"account_id": guest_id}, {"$set": {"account_id": account_id}})
+    # Carry over any entitlement the guest earned (e.g. an active trial), but
+    # never downgrade an account that already has premium.
+    account = await db.users.find_one({"user_id": account_id}, {"_id": 0})
+    if guest_user.get("premium_until") and not is_premium(account or {}):
+        await db.users.update_one({"user_id": account_id}, {"$set": {
+            "premium_until": guest_user.get("premium_until"),
+            "premium_source": guest_user.get("premium_source"),
+            "trial_used": bool(guest_user.get("trial_used")),
+        }})
     # Retire the guest user + all its sessions.
     await db.users.delete_one({"user_id": guest_id})
     await db.user_sessions.delete_many({"user_id": guest_id})

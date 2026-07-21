@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useAuth } from "@/src/context/AuthContext";
 import { storage } from "@/src/utils/storage";
-import { colors } from "@/src/theme";
+import BrandSplash from "@/src/components/BrandSplash";
 
 export default function Index() {
   const { user, loading } = useAuth();
@@ -14,17 +13,9 @@ export default function Index() {
   }, []);
 
   if (loading || onboarded === null) {
-    return (
-      <View style={styles.center} testID="app-loading">
-        <ActivityIndicator color={colors.onSurface} />
-      </View>
-    );
+    return <BrandSplash />;
   }
 
   if (user) return <Redirect href="/(tabs)" />;
   return <Redirect href={onboarded ? "/login" : "/onboarding"} />;
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
-});

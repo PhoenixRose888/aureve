@@ -26,6 +26,14 @@ export const colors = {
   border: "#E5E2DB",
   borderStrong: "#232323",
   divider: "#EAE7E0",
+  // Aureve brand mark — gold on ink (splash / logo lockups)
+  ink: "#1C1C1C",
+  inkSoft: "#3A3A3A",
+  gold: "#D4AF37",
+  goldDeep: "#B88A3C",
+  goldSoft: "#E9C87A",
+  cream: "#F5F1E8",
+  creamDim: "#E9E2D6",
 };
 
 export const spacing = {
@@ -51,6 +59,11 @@ export const fonts = {
   displayMedium: "PlusJakartaSans-Medium",
   displayRegular: "PlusJakartaSans-Regular",
   body: "Geist",
+  // Elegant serif — used for the Aureve wordmark / brand lockups.
+  serif: "CormorantGaramond-SemiBold",
+  serifMedium: "CormorantGaramond-Medium",
+  serifRegular: "CormorantGaramond-Regular",
+  serifBold: "CormorantGaramond-Bold",
 };
 
 export const type = {
