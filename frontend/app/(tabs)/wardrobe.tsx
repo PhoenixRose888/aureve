@@ -53,7 +53,7 @@ export default function Wardrobe() {
       style={[styles.card, { marginRight: index % 2 === 0 ? GUTTER : 0 }]}
       onPress={() => router.push(`/item/${item.id}`)}
     >
-      <GarmentImage photo={item.photo} category={item.category} style={styles.cardImg} iconSize={28} testID={`wardrobe-img-${item.id}`} />
+      <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={styles.cardImg} iconSize={28} testID={`wardrobe-img-${item.id}`} />
       {status !== "Ready" && (
         <View style={styles.laundryBadge}>
           <Feather name="droplet" size={11} color={colors.onSurfaceInverse} />

@@ -19,6 +19,7 @@ const CATEGORY_ICON: Record<string, keyof typeof MaterialCommunityIcons.glyphMap
 
 type Props = {
   photo?: string | null;
+  fallbackPhoto?: string | null;   // e.g. a worn photo to use if the main photo is missing/broken
   category?: string | null;
   style?: StyleProp<ImageStyle>;
   mime?: "jpeg" | "png";
@@ -30,12 +31,14 @@ type Props = {
 
 /**
  * Renders a wardrobe item's base64 photo with graceful degradation:
- * - no photo → clean category placeholder
- * - decode/render failure → one silent retry, then category placeholder
+ * - main photo missing → try the fallback (worn) photo
+ * - decode/render failure → one silent retry, then the next candidate
+ * - all candidates exhausted → clean category placeholder
  * The item's name/details are rendered by callers separately, so they always stay visible.
  */
 export default function GarmentImage({
   photo,
+  fallbackPhoto,
   category,
   style,
   mime = "jpeg",
@@ -44,14 +47,22 @@ export default function GarmentImage({
   iconSize = 26,
   testID,
 }: Props) {
+  // Ordered list of base64 sources to try (main first, then fallback).
+  const candidates = React.useMemo(
+    () => [photo, fallbackPhoto].filter((c): c is string => !!c && !!c.trim()),
+    [photo, fallbackPhoto]
+  );
+  const [idx, setIdx] = useState(0);
   const [failures, setFailures] = useState(0);
 
-  // Reset the failure count if the photo changes (e.g. item edited/updated).
+  // Reset when the sources change (e.g. item edited/updated).
   useEffect(() => {
+    setIdx(0);
     setFailures(0);
-  }, [photo]);
+  }, [photo, fallbackPhoto]);
 
-  const showPlaceholder = !photo || failures >= 2;
+  const current = candidates[idx];
+  const showPlaceholder = !current;
 
   if (showPlaceholder) {
     const icon = (category && CATEGORY_ICON[category]) || "hanger";
@@ -65,21 +76,20 @@ export default function GarmentImage({
   return (
     <Image
       testID={testID}
-      source={{ uri: `data:image/${mime};base64,${photo}` }}
+      source={{ uri: `data:image/${mime};base64,${current}` }}
       style={style}
       contentFit={contentFit}
       transition={transition}
       // base64 changes remount cleanly; retry key nudges a fresh decode attempt.
-      recyclingKey={`${failures}`}
+      recyclingKey={`${idx}-${failures}`}
       onError={() => {
-        setFailures((f) => {
-          if (f === 0) {
-            console.warn("[GarmentImage] photo failed to render, retrying once", { category });
-          } else if (f === 1) {
-            console.warn("[GarmentImage] photo failed after retry, showing placeholder", { category });
-          }
-          return f + 1;
-        });
+        // Retry the current source once, then advance to the next candidate.
+        if (failures === 0) {
+          setFailures(1);
+        } else {
+          setIdx((i) => i + 1);
+          setFailures(0);
+        }
       }}
     />
   );
