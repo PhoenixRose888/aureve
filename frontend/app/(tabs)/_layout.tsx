@@ -1,14 +1,15 @@
-import { Tabs } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Tabs, useRouter } from "expo-router";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Platform } from "react-native";
 import { colors, fonts } from "@/src/theme";
 
 export default function TabsLayout() {
+  const router = useRouter();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.onSurface,
+        tabBarActiveTintColor: colors.sage,
         tabBarInactiveTintColor: colors.onSurfaceTertiary,
         tabBarStyle: {
           backgroundColor: colors.surface,
@@ -21,7 +22,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: {
           fontFamily: fonts.body,
           fontSize: 10,
-          letterSpacing: 0.5,
+          letterSpacing: 0.3,
           marginTop: 2,
         },
       }}
@@ -29,38 +30,47 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Today",
-          tabBarIcon: ({ color }) => <Feather name="sun" size={20} color={color} />,
+          title: "Home",
+          tabBarIcon: ({ color }) => <Feather name="home" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
         name="wardrobe"
         options={{
           title: "Wardrobe",
-          tabBarIcon: ({ color }) => <Feather name="grid" size={20} color={color} />,
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="hanger" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="stylist"
+        name="dressme"
         options={{
-          title: "Stylist",
-          tabBarIcon: ({ color }) => <Feather name="feather" size={20} color={color} />,
+          title: "Dress Me",
+          tabBarIcon: ({ color }) => <Feather name="star" size={20} color={color} />,
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.push("/dressme");
+          },
         }}
       />
       <Tabs.Screen
-        name="shop"
+        name="outfits"
         options={{
-          title: "Shop Check",
-          tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={20} color={color} />,
+          title: "Outfits",
+          tabBarIcon: ({ color }) => <Feather name="layers" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Insights",
-          tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={20} color={color} />,
+          title: "Profile",
+          tabBarIcon: ({ color }) => <Feather name="user" size={20} color={color} />,
         }}
       />
+      {/* Reachable routes kept out of the tab bar */}
+      <Tabs.Screen name="stylist" options={{ href: null }} />
+      <Tabs.Screen name="shop" options={{ href: null }} />
     </Tabs>
   );
 }

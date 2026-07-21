@@ -1,0 +1,66 @@
+{
+  "summary": "Iteration 16 — Home dashboard, tab bar, Dress Me flow, Outfits hub, Outfit Detail and Manual Outfit Builder. Backend: 7/7 pytest passed (GET /items, GET /outfits with resolved items, POST /dressme with resolved_items+photo+category, POST/DELETE /outfits, POST /plans set-as-today, duplicate flow). Frontend: Home, Outfits hub, Outfit Detail (Set as Today's Outfit + Duplicate → new /outfit/<id>), Manual Builder (3 slots, per-category pickers, Save+Name modal), and Dress Me itself (loading spinner, 'Perfect for Today', 5-item flat-lay, Save→'Saved to My Outfits', swap sheet) all work with the correct testIDs. Tab bar renders the 5 expected tabs in the correct order (Home · Wardrobe · Dress Me · Outfits · Profile) with sage active tint; Shop/Stylist are correctly hidden (href:null). ONE P0 BLOCKING BUG: opening Dress Me from inside the tab navigator — either via the Home hero `home-dress-me-button` or via the 'Dress Me' tab bar item — crashes the app with 'Maximum update depth exceeded' (React infinite render loop, stack at (tabs)/_layout.tsx:7 → useSyncStore listeners.forEach). Direct URL navigation to /dressme works, so the Dress Me screen itself is fine; the loop is caused by the ambiguous route registration between app/(tabs)/dressme.tsx (which just Redirects to /dressme) and the top-level app/dressme.tsx, combined with the tabPress listener that also calls router.push('/dressme'). Because BOTH primary entrypoints (hero button and tab tap) are broken, the demo path cannot be completed by a user without a browser URL bar — this is the single biggest issue in the iteration and must be fixed before shipping.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/(tabs)/_layout.tsx + app/(tabs)/dressme.tsx + app/dressme.tsx",
+        "issue": "P0 — 'Maximum update depth exceeded' infinite loop when opening Dress Me from inside the tab navigator. Repro (both paths): (1) Home → tap green hero 'Dress Me' button (data-testid=home-dress-me-button) → red-screen React error; (2) tap 'Dress Me' tab bar item → same red-screen. Console stack points at (tabs)/_layout.tsx:7:27 (`const router = useRouter();`) and @react-navigation/core useSyncStore listeners.forEach → forceStoreRerender. Root cause: `app/(tabs)/dressme.tsx` renders `<Redirect href='/dressme' />` while `<Tabs.Screen name='dressme'>` in (tabs)/_layout.tsx also has `listeners={{tabPress: (e)=>{e.preventDefault(); router.push('/dressme')}}}`. When the user is inside the (tabs) group and either the listener or the hero calls `router.push('/dressme')`, expo-router prefers the nested `(tabs)/dressme` route, which mounts and immediately Redirects to '/dressme', which resolves back to '(tabs)/dressme', ad infinitum. Direct `page.goto('/dressme')` at a fresh session works because the (tabs) group has not yet been mounted, so the top-level route wins. FIX (one of): (a) delete `app/(tabs)/dressme.tsx` and either drop the Dress Me Tabs.Screen entry entirely or replace it with a custom `tabBarButton` that only calls `router.push('/dressme')` (no Tabs.Screen with the same name); OR (b) merge the two files — move the contents of `app/dressme.tsx` into `app/(tabs)/dressme.tsx`, drop the tabPress listener, and change the Home hero to `router.push('/(tabs)/dressme')`. Either eliminates the redirect ping-pong.",
+        "testID": "home-dress-me-button, tab 'Dress Me'",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Dress Me open (Home hero + tab press)",
+        "issue": "Infinite render loop crashes the screen; users cannot reach the Dress Me AI flow from inside the app (only via direct URL). Blocks the entire core demo path described in the PRD ('Home → Dress Me → save look').",
+        "affected_testIDs": ["home-dress-me-button", "tab: Dress Me"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Home",
+        "issues": [
+          "Weather cluster shows '—' + 'Weather' (no temp / description) on web because Location permission is denied in browser — expected in headless testing but worth confirming the fallback copy is acceptable on real Expo Go where permission may still be denied by the user."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_16.json",
+    "/app/backend/tests/test_iteration16_home_dressme.py",
+    "/app/test_reports/pytest/pytest_iteration16.xml"
+  ],
+  "action_items": [
+    "FIX (P0 / blocker): resolve the (tabs)/dressme.tsx ↔ app/dressme.tsx redirect ping-pong that causes 'Maximum update depth exceeded' when tapping the Home hero (`home-dress-me-button`) or the 'Dress Me' tab bar entry. Recommended: delete `app/(tabs)/dressme.tsx`, drop the `listeners={{tabPress}}` intercept in `_layout.tsx`, and give the Dress Me Tabs.Screen a custom `tabBarButton` that calls `router.push('/dressme')` (without registering an actual screen for that path inside (tabs)). Alternatively, move the whole dressme screen inside the (tabs) group and delete the top-level `app/dressme.tsx`.",
+    "After fix, re-run playwright: (1) tap home-dress-me-button from Home → should show 'Building today's outfit' spinner and then 'Perfect for Today' with dressme-item-0..N; (2) tap Dress Me tab from Home → same result; (3) verify the tab bar returns to /(tabs)/index after `router.back()` from Dress Me.",
+    "NICE-TO-HAVE: add a small `city` label under the temperature (weather.city is already fetched via reverseGeocode in useWeather) so the header shows e.g. '22°C · London · Partly cloudy' instead of just the description.",
+    "NICE-TO-HAVE: the outfit-builder Cancel/Save name-modal input has no explicit testID — add `builder-name-input` for future E2E."
+  ],
+  "critical_code_review_comments": [
+    "app/(tabs)/_layout.tsx L1-7: `useRouter()` is called at TabsLayout scope and the `listeners` object `{tabPress: ...}` is re-created every render — this is a well-known expo-router foot-gun. Prefer `useNavigation()` inside the listener or, better, use `tabBarButton` for the Dress Me entry so no listener is needed at all.",
+    "app/(tabs)/dressme.tsx: <Redirect> inside a Tabs.Screen guarantees a re-navigation on every focus. Combined with the tabPress listener above, this produces the infinite loop. Redirect is a valid pattern but only when the source and target route are unambiguously different — here the target `/dressme` resolves back to `(tabs)/dressme` because expo-router prefers nested groups.",
+    "app/dressme.tsx L38-72: `started` ref + `useEffect(status !== 'idle' && !== 'loading')` correctly auto-runs generate() once and only once; retested and verified working when reached via a fresh /dressme URL.",
+    "app/outfit-builder.tsx L75-87: doSave() calls `router.replace(/outfit/${outfit.id})` which is correct (prevents user from back-navigating into the builder mid-save). Verified end-to-end (2 slots picked → Save → name modal → created outfit_fdabdd9960c5 → navigated to detail).",
+    "app/outfit/[id].tsx L25-34: `load()` fetches the ENTIRE /outfits list then .find(id) — works for the seeded account but O(N). If a user grows to hundreds of outfits this is wasteful. Consider adding a GET /api/outfits/{id} endpoint (currently missing — only POST/GET-list/DELETE exist).",
+    "Backend: /outfits, /dressme, /plans all correctly exclude Mongo `_id` (verified with assert '_id' not in data) and correctly resolve items with photo+category into `items` for the frontend collages."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration16_home_dressme.py (new)",
+    "/app/test_reports/pytest/pytest_iteration16.xml (new)",
+    "/app/test_reports/iteration_16.json (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 pytest: items list, outfits list, dressme AI generation, outfit create+persist, duplicate, plans set-as-today, delete)",
+    "frontend": "6/7 flows pass — Home layout ✅, Outfits Hub ✅, Outfit Detail (set-today + duplicate) ✅, Manual Outfit Builder (3 slots + AI + save) ✅, Dress Me screen when reached directly ✅, tab bar rendering ✅. FAIL: Dress Me OPEN from Home hero AND from tab press (infinite render loop) — 1/7 core demo entrypoint broken."
+  },
+  "seed_data_creation": "No new seeds required — the account already has enough items (Tops/Bottoms/Shoes/Outerwear/Accessories present, verified via /api/items). Two transient outfits created during frontend testing (`outfit_fdabdd9960c5` from builder, and one duplicate `outfit_a81d4c501cbb` from outfit detail); tried to clean up via DELETE /api/outfits/{id} but both returned 403 because the DELETE endpoint enforces the X-Profile-Id scope and the test session was in a specific profile. Main agent can delete via mongo shell or by re-running with the correct X-Profile-Id header (`prof_365ddfe52deb`). Pytest suite (test_iteration16_home_dressme.py) cleans up its own artifacts properly.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Frontend URL: https://wardrobe-ai-311.preview.emergentagent.com. Token: `test-session-token-aura-123` → user_testaura01 (PREMIUM until 2099, profile prof_365ddfe52deb). Seed to log in on web via localStorage: `localStorage.setItem('aura_session_token', JSON.stringify('test-session-token-aura-123')); localStorage.setItem('@AsyncStorage:aura_session_token', JSON.stringify('test-session-token-aura-123'))`. Backend regression suite: `pytest /app/backend/tests/test_iteration16_home_dressme.py -v` (JUnit at /app/test_reports/pytest/pytest_iteration16.xml). To reproduce the P0 loop bug post-fix: (1) fresh page → set localStorage → goto /(root) → tap `[data-testid=\"home-dress-me-button\"]` → must land on Dress Me without any 'Maximum update depth exceeded' console error; (2) same page → tap 'Dress Me' text in bottom tab bar → same expected result. Direct navigate to /dressme was and remains functional, so testing must go through the tab navigator to be meaningful. The Dress Me screen produces 5 resolved items with photos/placeholders and single 'Save to My Outfits' → 'Saved to My Outfits' idempotent action (verified).",
+  "rca_of_issue": "Dress Me tab & hero button infinite render loop — RCA: Two files register the same route name. `app/dressme.tsx` (top-level) is the real Dress Me screen; `app/(tabs)/dressme.tsx` is a stub that renders `<Redirect href='/dressme' />` because the design wanted the tab to look like a tab but open a modal-ish full-screen route. In `app/(tabs)/_layout.tsx` the Dress Me Tabs.Screen has `listeners={{tabPress: (e)=>{e.preventDefault(); router.push('/dressme')}}}`. When the app is running inside the (tabs) navigator and any code path calls `router.push('/dressme')` (either the tabPress listener or Home's `openDressMe → router.push('/dressme')`), expo-router matches the more-specific nested route `(tabs)/dressme` — that mounts, Redirect fires, re-navigates to '/dressme', which again matches (tabs)/dressme, and the `<Tabs>` navigation state store (@react-navigation/core useSyncStore) keeps firing state-change subscribers on every micro-step, exhausting React's setState-in-render budget. `page.goto('/dressme')` on a fresh session works because expo-router initialises without the (tabs) group already mounted, so the initial resolution picks the top-level route unambiguously. Mitigation: (recommended) delete `app/(tabs)/dressme.tsx`; in `_layout.tsx` change the Dress Me entry to `<Tabs.Screen name='dressme-fake' options={{href: null, tabBarButton: (props) => <Pressable {...props} onPress={() => router.push('/dressme')}>...</Pressable>}} />`, OR change `<Tabs.Screen name='dressme' options={{href: null}} />` and render the Dress Me tab icon as an extra Pressable in a custom tab bar. Alternative: move the whole Dress Me screen into `(tabs)/dressme.tsx` (no more top-level file, no Redirect) and drop the tabPress listener + change home hero to `router.push('/(tabs)/dressme')`."
+}

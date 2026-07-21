@@ -55,6 +55,8 @@ export default function RootLayout() {
               <Stack.Screen name="add-item" options={{ presentation: "modal" }} />
               <Stack.Screen name="bulk-add" options={{ presentation: "modal" }} />
               <Stack.Screen name="item/[id]" />
+              <Stack.Screen name="outfit/[id]" />
+              <Stack.Screen name="outfit-builder" options={{ presentation: "modal" }} />
               <Stack.Screen name="packing" />
               <Stack.Screen name="looks" />
               <Stack.Screen name="planner" />
