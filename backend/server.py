@@ -167,7 +167,11 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
 
 
 def is_premium(account: dict) -> bool:
-    """Whole-household premium — driven by the account's premium_until timestamp."""
+    """Whole-household premium — driven by the account's premium_until timestamp.
+    When TRIAL_UNLOCK_ALL is enabled, every account is treated as Premium so
+    friends & family can trial all features (used for shared preview builds)."""
+    if os.environ.get("TRIAL_UNLOCK_ALL", "").lower() in ("1", "true", "yes"):
+        return True
     pu = (account or {}).get("premium_until")
     if not pu:
         return False
