@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl, Image } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -114,6 +114,7 @@ export default function Home() {
               <Txt style={styles.weatherDesc}>{weather?.description || "Weather"}</Txt>
             </View>
           </View>
+          <Image source={require("@/assets/images/aureve-mark.png")} style={styles.brandMark} resizeMode="contain" />
           <Pressable hitSlop={10} testID="home-bell" onPress={() => router.push("/(tabs)/profile")}>
             <Feather name="bell" size={22} color={colors.onSurface} />
           </Pressable>
@@ -216,6 +217,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   weatherCluster: { flexDirection: "row", alignItems: "center" },
+  brandMark: { width: 38, height: 28, opacity: 0.9 },
   temp: { fontSize: 18, color: colors.onSurface, fontFamily: fonts.displayMedium },
   weatherDesc: { fontSize: 12, color: colors.onSurfaceTertiary },
   greetBlock: { paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
