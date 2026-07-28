@@ -76,7 +76,7 @@ export default function Profile() {
 
   const handleSignOut = async () => {
     await logout();
-    router.replace("/");
+    router.replace("/login");
   };
   const handleSwitchAccount = async () => {
     await logout();
@@ -90,7 +90,7 @@ export default function Profile() {
     try {
       await deleteAccount();
       setConfirmDelete(false);
-      router.replace("/");
+      router.replace("/login");
     } catch {
       setDeleting(false);
     }
