@@ -4,6 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import { api, setToken, clearToken, getToken } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
+import { initPurchases } from "@/src/services/purchases";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -182,6 +183,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginEmail = useCallback((email: string, password: string) => emailAuth("login", email, password), [emailAuth]);
   const registerEmail = useCallback((email: string, password: string, name?: string) => emailAuth("register", email, password, name), [emailAuth]);
 
+  // Configure RevenueCat with the signed-in user id (native only; no-op on web / Expo Go).
+  useEffect(() => {
+    if (user?.user_id && !user?.is_guest) {
+      initPurchases(user.user_id).catch(() => {});
+    }
+  }, [user?.user_id, user?.is_guest]);
+
   const deleteAccount = useCallback(async () => {
     try {
       await api("/auth/account", { method: "DELETE" });
@@ -191,8 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const refreshUser = useCallback(async () => {
-    try {
+  const refreshUser = useCallback(async () => {    try {
       setUser(await api<User>("/auth/me"));
     } catch {}
   }, []);

@@ -15,6 +15,9 @@ import base64 as _b64
 from PIL import Image
 import httpx
 import bcrypt
+import hmac
+import hashlib
+import time as _time
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
@@ -547,6 +550,70 @@ async def start_trial(account: dict = Depends(get_current_user)):
         {"$set": {"premium_until": until, "premium_source": "trial", "trial_used": True}},
     )
     return {"premium": True, "premium_until": until, "premium_source": "trial", "trial_used": True}
+
+
+REVENUECAT_WEBHOOK_AUTH = os.environ.get("REVENUECAT_WEBHOOK_AUTH", "")
+REVENUECAT_WEBHOOK_SECRET = os.environ.get("REVENUECAT_WEBHOOK_SECRET", "")
+_RC_ACTIVE_TYPES = {
+    "INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION",
+    "PRODUCT_CHANGE", "NON_RENEWING_PURCHASE", "SUBSCRIPTION_EXTENDED",
+    "TEMPORARY_ENTITLEMENT_GRANT",
+}
+
+
+@api_router.post("/webhooks/revenuecat")
+async def revenuecat_webhook(request: Request, authorization: Optional[str] = Header(None)):
+    """Receive RevenueCat subscription events and sync the account's premium
+    status. Configure a matching Authorization header in the RevenueCat
+    dashboard (stored in REVENUECAT_WEBHOOK_AUTH)."""
+    raw = await request.body()
+
+    # Auth: RevenueCat sends a custom Authorization header you configure.
+    if REVENUECAT_WEBHOOK_AUTH:
+        if not authorization or not hmac.compare_digest(authorization, REVENUECAT_WEBHOOK_AUTH):
+            raise HTTPException(status_code=401, detail="Unauthorized webhook")
+    # Optional HMAC signature (if enabled on the dashboard).
+    if REVENUECAT_WEBHOOK_SECRET:
+        sig = request.headers.get("X-RevenueCat-Signature") or request.headers.get("x-revenuecat-webhook-signature")
+        if sig:
+            mac = hmac.new(REVENUECAT_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+            provided = sig.split(",")[-1].split("=")[-1]
+            if not hmac.compare_digest(mac, provided):
+                raise HTTPException(status_code=401, detail="Bad signature")
+
+    try:
+        payload = json.loads(raw)
+        evt = payload["event"]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    event_id = evt.get("id")
+    if event_id:
+        if await db.revenuecat_events.find_one({"event_id": event_id}):
+            return {"ok": True}
+        await db.revenuecat_events.insert_one({"event_id": event_id, "received_at": now_utc()})
+
+    app_user_id = evt.get("app_user_id")
+    if not app_user_id:
+        return {"ok": True}
+
+    etype = evt.get("type", "")
+    exp_ms = evt.get("expiration_at_ms")
+    if exp_ms:
+        until_dt = datetime.fromtimestamp(int(exp_ms) / 1000, tz=timezone.utc)
+        active = until_dt > now_utc() and etype not in ("EXPIRATION",)
+    else:
+        active = etype in _RC_ACTIVE_TYPES
+        until_dt = now_utc() + timedelta(days=31) if active else None
+
+    update = {
+        "premium_source": "revenuecat",
+        "premium_until": until_dt.isoformat() if (active and until_dt) else None,
+    }
+    await db.users.update_one({"user_id": app_user_id}, {"$set": update})
+    logger.info(f"RevenueCat {etype} for {app_user_id}: premium={'yes' if active else 'no'}")
+    return {"ok": True}
+
 
 
 @api_router.post("/payments/checkout")

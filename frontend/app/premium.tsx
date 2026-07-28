@@ -8,6 +8,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { isPurchasesAvailable, getPackages, purchasePackage, restorePurchases, Pkg } from "@/src/services/purchases";
 
 const FEATURES = [
   "Unlimited AI styling & outfits",
@@ -27,9 +28,31 @@ export default function Premium() {
   const [loading, setLoading] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState("");
+  const [iapPkgs, setIapPkgs] = useState<Pkg[]>([]);
+  const [restoring, setRestoring] = useState(false);
+  const iapReady = iapPkgs.length > 0;
+
+  React.useEffect(() => {
+    if (isPurchasesAvailable()) {
+      getPackages().then(setIapPkgs).catch(() => {});
+    }
+  }, []);
 
   const alreadyPremium = !!user?.premium;
   const trialEligible = !!user?.trial_eligible;
+
+  const restore = async () => {
+    setRestoring(true);
+    setError("");
+    try {
+      const r = await restorePurchases();
+      await refreshUser();
+      if (!r.premium) setError("No previous purchases found to restore.");
+    } catch (e: any) {
+      setError(e?.message || "Couldn't restore purchases.");
+    }
+    setRestoring(false);
+  };
 
   const startTrial = async () => {
     setTrialLoading(true);
@@ -48,6 +71,16 @@ export default function Premium() {
     setLoading(true);
     setError("");
     try {
+      // Native in-app purchase (App Store / Play Billing) when available.
+      if (iapReady) {
+        const pkg = iapPkgs.find((p) => p.period === plan) || iapPkgs[0];
+        const r = await purchasePackage(pkg);
+        await refreshUser();
+        if (r.premium) router.replace("/(tabs)/dressme");
+        setLoading(false);
+        return;
+      }
+      // Web fallback — Stripe hosted checkout.
       const origin =
         Platform.OS === "web"
           ? window.location.origin
@@ -60,11 +93,10 @@ export default function Premium() {
         window.location.href = r.url;
       } else {
         await WebBrowser.openBrowserAsync(r.url);
-        // On return, refresh entitlement (webhook/poll may have granted it).
         await refreshUser();
       }
     } catch (e: any) {
-      setError(e.message || "Couldn't start checkout");
+      if (!/cancel/i.test(e?.message || "")) setError(e.message || "Couldn't start checkout");
     }
     setLoading(false);
   };
@@ -168,8 +200,22 @@ export default function Premium() {
             <Txt style={styles.ctaTxt}>{alreadyPremium ? "Extend Premium" : "Start Premium"}</Txt>
           )}
         </Pressable>
+
+        {Platform.OS !== "web" ? (
+          <Pressable style={styles.restoreBtn} testID="restore-button" onPress={restore} disabled={restoring}>
+            {restoring ? (
+              <ActivityIndicator color={colors.brandTertiary} />
+            ) : (
+              <Txt style={styles.restoreTxt}>Restore purchases</Txt>
+            )}
+          </Pressable>
+        ) : null}
+
         <Txt style={styles.legal}>
-          One plan covers your whole household (up to 6 members). Secure checkout by Stripe.
+          One plan covers your whole household (up to 6 members).{" "}
+          {Platform.OS === "web"
+            ? "Secure checkout by Stripe."
+            : "Billed through your App Store / Google Play account; manage or cancel anytime in your store settings."}
         </Txt>
       </ScrollView>
     </View>
@@ -210,5 +256,7 @@ const styles = StyleSheet.create({
   error: { color: colors.brandTertiary, fontSize: 13, marginTop: spacing.lg, textAlign: "center" },
   cta: { backgroundColor: colors.brandTertiary, height: 56, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", marginTop: spacing.xl },
   ctaTxt: { color: colors.onBrandTertiary, fontSize: 16 },
+  restoreBtn: { height: 44, alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
+  restoreTxt: { color: "rgba(250,250,250,0.75)", fontSize: 14, textDecorationLine: "underline" },
   legal: { fontSize: 11, color: "rgba(250,250,250,0.5)", textAlign: "center", marginTop: spacing.md, lineHeight: 16 },
 });
