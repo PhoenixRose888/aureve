@@ -14,6 +14,7 @@ import secrets
 import base64 as _b64
 from PIL import Image
 import httpx
+import bcrypt
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
@@ -390,6 +391,83 @@ async def create_session(payload: SessionRequest):
     return {"session_token": session_token, "user": user}
 
 
+class EmailAuthRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+    guest_token: Optional[str] = None  # optional guest session to migrate
+
+
+def _norm_email(e: str) -> str:
+    return (e or "").strip().lower()
+
+
+async def _mint_session(user_id: str) -> str:
+    session_token = "sess_" + secrets.token_urlsafe(32)
+    await db.user_sessions.update_one(
+        {"session_token": session_token},
+        {"$set": {
+            "session_token": session_token,
+            "user_id": user_id,
+            "expires_at": now_utc() + timedelta(days=7),
+            "created_at": now_utc(),
+        }},
+        upsert=True,
+    )
+    return session_token
+
+
+@api_router.post("/auth/register")
+async def register_email(payload: EmailAuthRequest):
+    """Create an account with email + password (bcrypt-hashed) and return a
+    bearer session — an alternative to Google sign-in."""
+    email = _norm_email(payload.email)
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    if len(payload.password or "") < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=409, detail="An account with this email already exists. Try signing in.")
+    user_id = new_id("user")
+    pw_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    await db.users.insert_one({
+        "user_id": user_id,
+        "email": email,
+        "name": (payload.name or email.split("@")[0]).strip(),
+        "provider": "email",
+        "password_hash": pw_hash,
+        "created_at": now_utc().isoformat(),
+    })
+    if payload.guest_token:
+        try:
+            await migrate_guest_data(payload.guest_token, user_id)
+        except Exception as e:
+            logger.warning(f"Guest migration skipped: {e}")
+    session_token = await _mint_session(user_id)
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"session_token": session_token, "user": user}
+
+
+@api_router.post("/auth/login")
+async def login_email(payload: EmailAuthRequest):
+    """Sign in with email + password."""
+    email = _norm_email(payload.email)
+    user = await db.users.find_one({"email": email})
+    # Constant-ish work to avoid leaking whether the email exists.
+    dummy = "$2b$12$" + "x" * 53
+    stored = (user or {}).get("password_hash") or dummy
+    ok = False
+    try:
+        ok = bcrypt.checkpw(payload.password.encode(), stored.encode())
+    except Exception:
+        ok = False
+    if not user or not user.get("password_hash") or not ok:
+        raise HTTPException(status_code=400, detail="Incorrect email or password.")
+    session_token = await _mint_session(user["user_id"])
+    safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash")}
+    return {"session_token": session_token, "user": safe}
+
+
 @api_router.get("/auth/me")
 async def auth_me(user: dict = Depends(get_current_user)):
     prem = is_premium(user)
@@ -410,6 +488,27 @@ async def logout(authorization: Optional[str] = Header(None)):
         token = authorization.split(" ", 1)[1].strip()
         await db.user_sessions.delete_one({"session_token": token})
     return {"ok": True}
+
+
+@api_router.delete("/auth/account")
+async def delete_account(account: dict = Depends(get_current_user)):
+    """Permanently delete the signed-in account and ALL associated data
+    (every wardrobe profile, items, outfits, plans, collections, usage,
+    calendar tokens, payment records and sessions). Required by App Store /
+    Play Store policy for apps that support accounts."""
+    account_id = account["user_id"]
+    profs = await db.profiles.find({"user_id": account_id}, {"_id": 0, "id": 1}).to_list(200)
+    prof_ids = [p["id"] for p in profs]
+    if prof_ids:
+        for coll in (db.items, db.outfits, db.wear_logs, db.plans, db.collections):
+            await coll.delete_many({"user_id": {"$in": prof_ids}})
+    await db.profiles.delete_many({"user_id": account_id})
+    await db.usage.delete_many({"account_id": account_id})
+    await db.calendar_tokens.delete_many({"account_id": account_id})
+    await db.payment_transactions.delete_many({"account_id": account_id})
+    await db.user_sessions.delete_many({"user_id": account_id})
+    await db.users.delete_one({"user_id": account_id})
+    return {"ok": True, "deleted": True}
 
 
 # ----------------------------- Membership / Payments -----------------------------

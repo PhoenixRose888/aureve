@@ -27,6 +27,9 @@ type AuthCtx = {
   signingIn: boolean;
   login: () => Promise<void>;
   guestLogin: () => Promise<void>;
+  loginEmail: (email: string, password: string) => Promise<void>;
+  registerEmail: (email: string, password: string, name?: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -157,6 +160,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const emailAuth = useCallback(async (mode: "login" | "register", email: string, password: string, name?: string) => {
+    setSigningIn(true);
+    try {
+      let guest_token: string | undefined;
+      if (user?.is_guest) {
+        const t = await getToken();
+        if (t) guest_token = t;
+      }
+      const data = await api<{ session_token: string; user: User }>(
+        mode === "register" ? "/auth/register" : "/auth/login",
+        { method: "POST", auth: false, body: { email, password, name, guest_token } }
+      );
+      await setToken(data.session_token);
+      setUser(data.user);
+    } finally {
+      setSigningIn(false);
+    }
+  }, [user]);
+
+  const loginEmail = useCallback((email: string, password: string) => emailAuth("login", email, password), [emailAuth]);
+  const registerEmail = useCallback((email: string, password: string, name?: string) => emailAuth("register", email, password, name), [emailAuth]);
+
+  const deleteAccount = useCallback(async () => {
+    try {
+      await api("/auth/account", { method: "DELETE" });
+    } catch {}
+    await clearToken();
+    await storage.secureRemove(GUEST_MIGRATE_KEY);
+    setUser(null);
+  }, []);
+
   const refreshUser = useCallback(async () => {
     try {
       setUser(await api<User>("/auth/me"));
@@ -172,6 +206,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signingIn,
         login,
         guestLogin,
+        loginEmail,
+        registerEmail,
+        deleteAccount,
         logout,
         refreshUser,
       }}

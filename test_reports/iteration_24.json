@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 24 — App-Store readiness pass (email auth, guest→email migration, account deletion, Privacy/Terms, Style-Profile consolidation). VERDICT: PASS with 1 minor UX observation. BACKEND (11/11 pytest passes in test_iteration24_email_auth.py): POST /api/auth/register 400s on invalid email + short password, 409s on duplicate, 200 with sess_* bearer + provider:'email' + password_hash stripped on success; that bearer works on /api/auth/me. POST /api/auth/login is case-insensitive (email.upper() succeeds), 400s on wrong password AND non-existent email with an identical generic 'Incorrect email or password.' message (no user-existence leak). Guest→email migration: minting a guest yields exactly 16 demo items; the guest's own added item (TEST_migrate_item) is inherited by the new email account, while the auto-seeded 16 demo items are INTENTIONALLY PURGED by migrate_guest_data (server.py L244-249, consistent with test_credentials.md). Note the review-request phrasing 'should inherit the wardrobe items' is currently interpreted as user-added items only, not the demo 16 — flagged as a policy question, not a bug (see integration_issues). DELETE /api/auth/account returns {ok:true, deleted:true}, /api/auth/me immediately 401s, /api/items 401s, and the seeded QA account (user_testaura01, 16 items) is untouched. FRONTEND (mobile 390x844, live preview URL): /login renders email + password TextInputs, 'Sign in' toggles to 'Create account' via toggle-mode, Google + guest buttons present, Privacy/Terms links in footer working. Fresh signup lands in /(tabs) home. Bad login shows 'Incorrect email or password.' via [data-testid=login-error]. /legal opens for both Privacy (with 'Overview' section) and Terms of Service (with 'Acceptance' section) from BOTH the login footer AND Profile → Privacy Policy row; legal-back returns cleanly. Profile tab (signed-in, non-guest): 'Delete my account' testID visible; modal opens with confirm-delete + cancel-delete; Cancel dismisses; 'Delete everything' clears session (subsequent /auth/me 401s) and routes back toward auth. The old 'Hair & Makeup' CTA card is REMOVED from the Profile tab (0 title-case occurrences). /profile-edit shows all three help links (guide-measure 'Not sure how? →', guide-shape 'How to find yours →', guide-skin 'How to find yours →'); tapping guide-measure opens a bottom-sheet with real 'How to measure yourself' content (Bust/Waist/Hips/Inseam etc). 'Get my hair & makeup' button at the bottom navigates to /beauty (beauty screen renders occasion chips + 'Get my hair & makeup' primary button). REGRESSION: guest mode still auto-seeds 16 demo items; the seeded QA account still has 16 items intact. Only pre-existing RN-Web warnings ('shadow*', 'pointerEvents') and a Metro/expo IP-geo CORS error (mocked fallback per review) surface in console — nothing new introduced this iteration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Post-account-deletion redirect",
+        "issue": "After tapping 'Delete everything', the API cleanup and setUser(null) both work (subsequent requests 401), but the browser URL stays at '/' and the last-rendered screen remained the Home tab (bottom nav visible) instead of routing forward to /login. Expected per review request: 'returns to the welcome/login'. Repro: /profile → Delete my account → Delete everything → observe URL '/' + Home tab visible for 7+ seconds. Likely cause: profile.tsx handleDelete only calls router.replace('/'), but the (tabs) route stack may still be mounted; index.tsx redirect chain (splash → /login when !user && onboarded) doesn't visibly kick in on web preview. On native this may work; on web preview it doesn't. Main agent should either add a router.replace('/login') as a second step after router.replace('/'), or force a re-render / unmount of the (tabs) stack.",
+        "affected_testIDs": ["confirm-delete"]
+      },
+      {
+        "flow": "Guest → email migration — demo items",
+        "issue": "migrate_guest_data (server.py L244-249) intentionally purges demo:true items on migration. Review request says the new email account 'should inherit the wardrobe items' — literally interpreted that would mean the 16 demo items follow the account over. Current behaviour matches test_credentials.md ('demo items are purged') and matches Google-sign-in migration. Confirming this is the intended policy or updating the review criterion. User-added items DO migrate correctly.",
+        "affected_testIDs": []
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration24_email_auth.py",
+    "/app/test_reports/pytest/pytest_iteration24.xml"
+  ],
+  "action_items": [
+    "VERIFY: after DELETE /auth/account on web preview, force a hard redirect to /login (or /welcome) — currently profile.tsx handleDelete only calls router.replace('/') and the (tabs) stack stays mounted, leaving the user staring at Home even though their session was cleared. Suggest: `router.replace('/login')` (or two-step: replace('/') then setTimeout(replace('/login'), 100)).",
+    "CONFIRM policy: should the 16 auto-seeded demo items migrate along with the guest on email/Google sign-up? Current server code purges them (server.py L244-249). The review request phrasing 'should inherit the wardrobe items' can be read either way — the test currently verifies user-added items migrate."
+  ],
+  "critical_code_review_comments": [
+    "profile.tsx handleDelete (L88-97) only routes to '/'; on web preview this doesn't visually escape the (tabs) layout. Adding an explicit `router.replace('/login')` after a brief tick would guarantee the user sees the login screen.",
+    "AuthContext.emailAuth (L163-180) reads user?.is_guest to decide whether to attach guest_token during register/login — this is correct, but the closure captures 'user' as a dependency; if the guest sign-in is still in flight when the user taps 'Create account' this could race. Low risk in practice.",
+    "server.py migrate_guest_data (L244-249) unconditionally deletes demo:true items. If ever the policy changes, this is a single-line switch — safe.",
+    "server.py login_email (L461) constant-work dummy hash is a short 'x'*53 string that bcrypt.checkpw will reject before doing real work; the intent (timing side-channel mitigation) is there but the branch isn't fully constant-time. Acceptable trade-off for an MVP; document if App Store review asks."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration24_email_auth.py (new)",
+    "/app/test_reports/pytest/pytest_iteration24.xml (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 pytest tests in test_iteration24_email_auth.py pass, including validation, dup, login, migration, deletion, regression seed check)",
+    "frontend": "~95% — all UI acceptance criteria met EXCEPT the post-deletion redirect visibly returning to /login on the web preview (session IS cleared server-side and locally, but the tabs UI stays mounted). All other flows (login screen elements, signup lands in tabs, mode toggle, bad-login error, Privacy/Terms from login footer AND Profile, delete modal open/cancel/confirm, style-profile help sheets, Hair & Makeup card removed, Get my hair & makeup routes to /beauty) verified."
+  },
+  "seed_data_creation": "None persistent. Three throwaway email accounts were minted during backend + frontend testing (qa+*@aureve.local, password 'secret123') and every one was DELETE /auth/account'd at the end of its test. One transient guest session was minted per pytest run (7-day TTL). The seeded QA account (user_testaura01, 16 items) was left untouched and is verified intact by test_seeded_account_intact.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All new App-Store-required flows are in place and functional. The single lingering thread is that on the WEB PREVIEW, tapping 'Delete everything' clears the session (401s confirm) but the tabs layout stays visible for the observable duration; user has to manually reload to see /login. On a native build the redirect chain via index.tsx may work fine. If the main agent adds an explicit router.replace('/login') in profile.tsx handleDelete, a 30-second follow-up in-browser will confirm. Backend suite test_iteration24_email_auth.py is a good regression file for future iterations — all 11 tests self-clean.",
+  "rca_of_issue": "Post-deletion redirect: profile.tsx handleDelete calls `router.replace('/')` which lands on index.tsx, where the redirect chain (splash → /login when !user && onboarded=true) SHOULD fire. On web preview the URL updates to '/' but the (tabs) navigator remains the visible route. Likely cause: expo-router's web behaviour retains the previously-mounted stack until a route it recognises pushes over it, and `<Redirect href='/login'>` from index isn't triggering a full unmount. Fix suggestion: replace the single `router.replace('/')` with an explicit `router.replace('/login')` (welcome + onboarding are handled by the first-launch flag in AsyncStorage, which is true after the initial run, so /login is the correct target for returning users)."
+}

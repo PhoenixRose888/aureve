@@ -181,6 +181,42 @@ frontend:
         -agent: "main"
         -comment: "Replaced the long AI paragraph with a concise editorial one-line summary (backend STYLIST_SYSTEM 'summary' now ~12 words, vibe/occasion/weather, no garment names) + added an editorial piece list (SLOT + item name rows). Verified via curl: summary='Polished neutrals with a modern edge, perfect for cool drizzle.' + 6 pieces."
 
+  - task: "Email/password auth (register + login) alongside Google & guest"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py (/auth/register, /auth/login), frontend/app/login.tsx, frontend/src/context/AuthContext.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added email+password auth using bcrypt hashing and the existing bearer-session pattern (user_sessions, 7-day TTL). POST /auth/register (validates email/password>=6, 409 on duplicate, optional guest_token migration), POST /auth/login (400 on bad creds, non-leaking). Login screen now has email/password form with Sign in / Create account toggle, plus Google and guest. Verified via curl: register/login OK, wrong pass 400, duplicate 409, short pass 400."
+
+  - task: "Account deletion (App Store / Play Store requirement)"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py (DELETE /auth/account), frontend/app/(tabs)/profile.tsx, frontend/src/context/AuthContext.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "DELETE /auth/account wipes profiles, items, outfits, wear_logs, plans, collections, usage, calendar_tokens, payment_transactions, sessions and the user. Profile → Privacy & data → 'Delete my account' opens a confirm modal (non-guest only). Verified via curl: guest with 16 items -> delete 200 -> /auth/me 401."
+
+  - task: "In-app Privacy Policy & Terms of Service"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/legal.tsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "New /legal screen renders Privacy Policy or Terms (via ?doc= param). Linked from Profile → Privacy & data and from the login footer."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"

@@ -15,7 +15,7 @@ import GarmentImage from "@/src/components/GarmentImage";
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, login, isGuest, signingIn } = useAuth();
+  const { user, logout, login, isGuest, signingIn, deleteAccount } = useAuth();
   const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
   const premium = !!user?.premium;
   const initials = (user?.name || user?.email || "?")
@@ -81,6 +81,19 @@ export default function Profile() {
   const handleSwitchAccount = async () => {
     await logout();
     await login();
+  };
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      setConfirmDelete(false);
+      router.replace("/");
+    } catch {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -333,6 +346,45 @@ export default function Profile() {
             </Pressable>
           </View>
 
+          {/* Legal & data */}
+          <View style={styles.section}>
+            <Txt style={styles.sectionTitle}>PRIVACY & DATA</Txt>
+            <Pressable style={styles.acctRow} testID="privacy-policy" onPress={() => router.push({ pathname: "/legal", params: { doc: "privacy" } })}>
+              <Feather name="shield" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>Privacy Policy</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
+            <Pressable style={styles.acctRow} testID="terms" onPress={() => router.push({ pathname: "/legal", params: { doc: "terms" } })}>
+              <Feather name="file-text" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>Terms of Service</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
+            {!isGuest && (
+              <Pressable style={styles.acctRow} testID="delete-account" onPress={() => setConfirmDelete(true)}>
+                <Feather name="trash-2" size={18} color={colors.error} />
+                <Txt style={[styles.acctTxt, { color: colors.error }]}>Delete my account</Txt>
+                <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+              </Pressable>
+            )}
+          </View>
+
+          <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
+            <View style={styles.confirmBackdrop}>
+              <View style={styles.confirmCard}>
+                <Display weight="semibold" style={styles.confirmTitle}>Delete your account?</Display>
+                <Txt style={styles.confirmBody}>
+                  This permanently deletes your account and everything in it — your wardrobe, outfits, collections and profiles. This cannot be undone.
+                </Txt>
+                <Pressable style={styles.confirmDeleteBtn} testID="confirm-delete" onPress={handleDelete} disabled={deleting}>
+                  {deleting ? <ActivityIndicator color={colors.onSurfaceInverse} /> : <Txt style={styles.confirmDeleteTxt}>Delete everything</Txt>}
+                </Pressable>
+                <Pressable style={styles.confirmCancelBtn} testID="cancel-delete" onPress={() => setConfirmDelete(false)} disabled={deleting}>
+                  <Txt style={styles.confirmCancelTxt}>Keep my account</Txt>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
+
           {!data || data.total_items === 0 ? (
             <View style={styles.empty}>
               <Txt style={styles.emptyTxt}>Add clothes and log what you wear to unlock insights.</Txt>
@@ -573,5 +625,13 @@ const styles = StyleSheet.create({
   empty: { marginTop: spacing["2xl"], alignItems: "center" },
   acctRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
   acctTxt: { flex: 1, fontSize: 15, color: colors.onSurface },
+  confirmBackdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.5)", alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl },
+  confirmCard: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.xl, width: "100%", maxWidth: 400 },
+  confirmTitle: { fontSize: 20, color: colors.onSurface, marginBottom: spacing.sm },
+  confirmBody: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21, marginBottom: spacing.xl },
+  confirmDeleteBtn: { height: 52, borderRadius: radius.md, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
+  confirmDeleteTxt: { color: colors.onSurfaceInverse, fontSize: 15, fontFamily: fonts.displayBold },
+  confirmCancelBtn: { height: 50, alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
+  confirmCancelTxt: { color: colors.onSurface, fontSize: 15, fontFamily: fonts.displayMedium },
   emptyTxt: { fontSize: 14, color: colors.onSurfaceTertiary, textAlign: "center" },
 });
