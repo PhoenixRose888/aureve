@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView } from "react-native";
+import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, ScrollView, Modal } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -26,6 +26,49 @@ const MEAS = [
   { key: "shoe", label: "Shoe size", unit: "" },
 ];
 
+type GuideItem = { term: string; desc: string };
+const GUIDES: Record<string, { title: string; intro?: string; items: GuideItem[]; tip?: string }> = {
+  measure: {
+    title: "How to measure yourself",
+    intro: "Use a soft tape measure over light clothing. Keep the tape snug but not tight, and stand relaxed — don't suck in.",
+    items: [
+      { term: "Bust / chest", desc: "Around the fullest part of your chest, keeping the tape level all the way round." },
+      { term: "Waist", desc: "Around the narrowest part of your middle, usually just above the belly button." },
+      { term: "Hips", desc: "Around the fullest part of your seat, with your feet together." },
+      { term: "Inseam (inner leg)", desc: "From the crotch seam straight down the inside of the leg to your ankle bone." },
+      { term: "Outseam (outer leg)", desc: "From your natural waist down the outside of the leg to the ankle." },
+      { term: "Arm length", desc: "From the tip of your shoulder, down a slightly bent arm, to the wrist bone." },
+      { term: "Shoulder", desc: "Across your back, from the tip of one shoulder to the tip of the other." },
+    ],
+    tip: "Tip: if you can, ask someone to help — it's far more accurate than measuring alone.",
+  },
+  skin: {
+    title: "Find your skin tone & undertone",
+    intro: "Do this in natural daylight, with a bare, clean face. Skin tone is how light or deep your skin is; undertone is the subtle colour beneath.",
+    items: [
+      { term: "Skin tone", desc: "Look at your jaw/neck in daylight and match from Fair → Light → Medium → Olive → Tan → Deep → Dark." },
+      { term: "Vein test", desc: "Look at the veins on your inner wrist: greenish = warm, blue/purple = cool, a mix = neutral." },
+      { term: "Jewellery test", desc: "Gold tends to flatter warm undertones, silver flatters cool. If both look great, you're likely neutral." },
+      { term: "White-paper test", desc: "Hold white paper to your face: skin looking yellow/peachy = warm, pink/rosy = cool, balanced = neutral." },
+      { term: "Sun test", desc: "Burn easily and rarely tan? Often cool. Tan easily and rarely burn? Often warm." },
+    ],
+    tip: "Tip: undertone stays the same even when a tan changes your surface tone.",
+  },
+  shape: {
+    title: "Find your body shape",
+    intro: "Measure your bust, waist and hips (see the measuring guide), then compare which is widest.",
+    items: [
+      { term: "Hourglass", desc: "Bust and hips are roughly equal, with a clearly defined, narrower waist." },
+      { term: "Pear / triangle", desc: "Hips are noticeably wider than your bust and shoulders." },
+      { term: "Apple / round", desc: "Weight sits around the middle; waist is the widest point, with a fuller bust." },
+      { term: "Rectangle", desc: "Bust, waist and hips are fairly similar, with little waist definition." },
+      { term: "Inverted triangle", desc: "Shoulders and bust are wider than your hips." },
+      { term: "Athletic", desc: "A straighter, toned frame with subtle waist definition." },
+    ],
+    tip: "It's a guide, not a rule — always dress for how you want to feel.",
+  },
+};
+
 export default function ProfileEdit() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -43,6 +86,8 @@ export default function ProfileEdit() {
   const [notes, setNotes] = useState(existing.notes || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [guide, setGuide] = useState<null | "measure" | "skin" | "shape">(null);
+  const [goingBeauty, setGoingBeauty] = useState(false);
 
   const toggleStyle = (s: string) =>
     setStylePrefs((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -62,25 +107,29 @@ export default function ProfileEdit() {
     setNotes(p.notes || "");
   }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const persist = async () => {
+    const measurements = Object.fromEntries(Object.entries(meas).filter(([, v]) => v && String(v).trim()));
+    await api("/profile", {
+      method: "PUT",
+      body: {
+        measurements,
+        body_shape: bodyShape,
+        skin_tone: skinTone,
+        undertone,
+        fit_pref: fitPref,
+        sizes_top: sizesTop,
+        sizes_bottom: sizesBottom,
+        style_prefs: stylePrefs,
+        notes,
+      },
+    });
+    await refresh();
+  };
+
   const save = async () => {
     setSaving(true);
-    const measurements = Object.fromEntries(Object.entries(meas).filter(([, v]) => v && String(v).trim()));
     try {
-      await api("/profile", {
-        method: "PUT",
-        body: {
-          measurements,
-          body_shape: bodyShape,
-          skin_tone: skinTone,
-          undertone,
-          fit_pref: fitPref,
-          sizes_top: sizesTop,
-          sizes_bottom: sizesBottom,
-          style_prefs: stylePrefs,
-          notes,
-        },
-      });
-      await refresh();
+      await persist();
       setSaved(true);
       setTimeout(() => {
         if (router.canGoBack()) router.back();
@@ -89,6 +138,19 @@ export default function ProfileEdit() {
     } catch {
       setSaving(false);
     }
+  };
+
+  const goBeauty = async () => {
+    if (!skinTone && !undertone) {
+      setGuide("skin");
+      return;
+    }
+    setGoingBeauty(true);
+    try {
+      await persist();
+      router.push("/beauty");
+    } catch {}
+    setGoingBeauty(false);
   };
 
   return (
@@ -148,7 +210,12 @@ export default function ProfileEdit() {
           })}
         </View>
 
-        <Txt style={styles.groupLabel}>MEASUREMENTS</Txt>
+        <View style={styles.groupHeaderRow}>
+          <Txt style={styles.groupLabelInline}>MEASUREMENTS</Txt>
+          <Pressable onPress={() => setGuide("measure")} testID="guide-measure" hitSlop={8}>
+            <Txt style={styles.helpLink}>Not sure how? →</Txt>
+          </Pressable>
+        </View>
         <View style={styles.measGrid}>
           {MEAS.map((m) => (
             <View key={m.key} style={styles.measField}>
@@ -166,10 +233,20 @@ export default function ProfileEdit() {
           ))}
         </View>
 
-        <Txt style={styles.groupLabel}>BODY SHAPE</Txt>
+        <View style={styles.groupHeaderRow}>
+          <Txt style={styles.groupLabelInline}>BODY SHAPE</Txt>
+          <Pressable onPress={() => setGuide("shape")} testID="guide-shape" hitSlop={8}>
+            <Txt style={styles.helpLink}>How to find yours →</Txt>
+          </Pressable>
+        </View>
         <ChipRow options={BODY_SHAPES} value={bodyShape} onChange={setBodyShape} prefix="shape" />
 
-        <Txt style={styles.groupLabel}>SKIN TONE</Txt>
+        <View style={styles.groupHeaderRow}>
+          <Txt style={styles.groupLabelInline}>SKIN TONE</Txt>
+          <Pressable onPress={() => setGuide("skin")} testID="guide-skin" hitSlop={8}>
+            <Txt style={styles.helpLink}>How to find yours →</Txt>
+          </Pressable>
+        </View>
         <ChipRow options={SKIN_TONES} value={skinTone} onChange={setSkinTone} prefix="skin" />
 
         <Txt style={styles.groupLabel}>UNDERTONE</Txt>
@@ -185,6 +262,23 @@ export default function ProfileEdit() {
           placeholderTextColor={colors.onSurfaceTertiary}
           multiline
         />
+
+        <View style={styles.beautyBlock}>
+          <Txt style={styles.groupLabel}>HAIR & MAKEUP</Txt>
+          <Txt style={styles.beautyIntro}>
+            Get hair and makeup tuned to your skin tone and undertone — colour theory, not guesswork.
+          </Txt>
+          <Pressable style={styles.beautyBtn} testID="open-beauty-from-profile" onPress={goBeauty} disabled={goingBeauty}>
+            {goingBeauty ? (
+              <ActivityIndicator color={colors.onBrandTertiary} />
+            ) : (
+              <>
+                <Feather name="feather" size={17} color={colors.onBrandTertiary} />
+                <Txt style={styles.beautyBtnTxt}>Get my hair & makeup</Txt>
+              </>
+            )}
+          </Pressable>
+        </View>
       </KeyboardAwareScrollView>
 
       <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
@@ -194,6 +288,35 @@ export default function ProfileEdit() {
           </Pressable>
         </View>
       </KeyboardStickyView>
+
+      <Modal visible={guide != null} transparent animationType="slide" onRequestClose={() => setGuide(null)}>
+        <Pressable style={styles.guideBackdrop} onPress={() => setGuide(null)}>
+          <Pressable style={[styles.guideSheet, { paddingBottom: (insets.bottom || spacing.lg) + spacing.lg }]} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.guideHandle} />
+            {guide ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Display weight="semibold" style={styles.guideTitle}>{GUIDES[guide].title}</Display>
+                {GUIDES[guide].intro ? <Txt style={styles.guideIntro}>{GUIDES[guide].intro}</Txt> : null}
+                {GUIDES[guide].items.map((it, i) => (
+                  <View key={i} style={styles.guideRow}>
+                    <Txt style={styles.guideTerm}>{it.term}</Txt>
+                    <Txt style={styles.guideDesc}>{it.desc}</Txt>
+                  </View>
+                ))}
+                {GUIDES[guide].tip ? (
+                  <View style={styles.guideTipCard}>
+                    <Feather name="info" size={14} color={colors.brand} />
+                    <Txt style={styles.guideTipTxt}>{GUIDES[guide].tip}</Txt>
+                  </View>
+                ) : null}
+                <Pressable style={styles.guideClose} testID="guide-close" onPress={() => setGuide(null)}>
+                  <Txt style={styles.guideCloseTxt}>Got it</Txt>
+                </Pressable>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -220,6 +343,25 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   intro: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21 },
   groupLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginTop: spacing.xl, marginBottom: spacing.md },
+  groupHeaderRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: spacing.xl, marginBottom: spacing.md },
+  groupLabelInline: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary },
+  helpLink: { fontSize: 12, color: colors.brand, fontFamily: fonts.displayMedium },
+  beautyBlock: { marginTop: spacing["2xl"], borderTopWidth: 0.5, borderTopColor: colors.divider, paddingTop: spacing.md },
+  beautyIntro: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19, marginBottom: spacing.md },
+  beautyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 52, borderRadius: radius.md, backgroundColor: colors.brandTertiary },
+  beautyBtnTxt: { color: colors.onBrandTertiary, fontSize: 15, fontFamily: fonts.displayBold },
+  guideBackdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },
+  guideSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingHorizontal: spacing.xl, paddingTop: spacing.md, maxHeight: "82%" },
+  guideHandle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.surfaceTertiary, marginBottom: spacing.lg },
+  guideTitle: { fontSize: 22, letterSpacing: -0.4, color: colors.onSurface },
+  guideIntro: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21, marginTop: spacing.sm, marginBottom: spacing.lg },
+  guideRow: { marginBottom: spacing.lg },
+  guideTerm: { fontSize: 15, color: colors.onSurface, fontFamily: fonts.displayMedium, marginBottom: 2 },
+  guideDesc: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21 },
+  guideTipCard: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start", backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.sm },
+  guideTipTxt: { flex: 1, fontSize: 13, color: colors.onBrandTertiary, lineHeight: 20 },
+  guideClose: { height: 50, borderRadius: radius.md, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", marginTop: spacing.xl },
+  guideCloseTxt: { color: colors.onBrandPrimary, fontSize: 15, fontFamily: fonts.displayBold },
   measGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   measField: { width: "47%", marginBottom: spacing.lg },
   sizeRow: { flexDirection: "row", gap: spacing.lg },

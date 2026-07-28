@@ -167,23 +167,11 @@ export default function Profile() {
               <Txt style={styles.spTitle}>Your style profile</Txt>
               <Txt style={styles.spSub}>
                 {active?.profile && Object.keys(active.profile).length > 0
-                  ? "Measurements & skin tone added — tap to edit"
-                  : "Add measurements & skin tone for better fits"}
+                  ? "Measurements, colouring & hair/makeup — tap to edit"
+                  : "Add measurements & colouring for fits + hair & makeup"}
               </Txt>
             </View>
             <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
-          </Pressable>
-
-          {/* Hair & makeup */}
-          <Pressable style={styles.beautyCta} testID="open-beauty" onPress={() => (premium ? router.push("/beauty") : router.push("/premium"))}>
-            <View style={styles.beautyIcon}>
-              <Feather name="feather" size={18} color={colors.onBrandTertiary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Txt style={styles.spTitle}>Hair & makeup for your colouring</Txt>
-              <Txt style={styles.spSub}>AI colour analysis from your skin tone & undertone</Txt>
-            </View>
-            {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
           {/* Google Calendar */}
