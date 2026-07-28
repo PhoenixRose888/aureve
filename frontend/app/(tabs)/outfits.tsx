@@ -4,6 +4,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
+import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
@@ -68,6 +69,7 @@ export default function OutfitsHub() {
       >
         <View style={styles.header}>
           <Display weight="semibold" style={styles.title}>My Outfits</Display>
+          <BrandMark />
         </View>
 
         <View style={styles.segments}>
@@ -130,7 +132,7 @@ export default function OutfitsHub() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  header: { paddingHorizontal: spacing.lg, marginBottom: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { fontSize: 30, letterSpacing: -0.5 },
   segments: { flexDirection: "row", gap: spacing.xl, paddingHorizontal: spacing.lg, marginBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.border },
   segBtn: { paddingBottom: spacing.sm },

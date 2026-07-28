@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
+import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
@@ -92,7 +93,10 @@ export default function Profile() {
         <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
           <View style={styles.titleBlock}>
             <Txt style={styles.kicker}>YOUR ACCOUNT</Txt>
-            <Display weight="semibold" style={styles.pageTitle}>Profile</Display>
+            <View style={styles.titleRow}>
+              <Display weight="semibold" style={styles.pageTitle}>Profile</Display>
+              <BrandMark />
+            </View>
             <Txt style={styles.pageSub}>Your wardrobe, insights and preferences — all in one place.</Txt>
           </View>
           <View style={styles.accountCard}>
@@ -463,6 +467,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.border },
   titleBlock: { marginBottom: spacing.lg },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   kicker: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, fontFamily: fonts.displayMedium, marginBottom: spacing.xs },
   pageTitle: { fontSize: 30, letterSpacing: -0.5, color: colors.onSurface },
   pageSub: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: spacing.xs },

@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
+import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts, CATEGORIES } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
@@ -78,6 +79,7 @@ export default function Wardrobe() {
     <View style={styles.container}>
       {/* Sticky header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+        <BrandMark style={{ alignSelf: "center", marginBottom: spacing.sm }} />
         <View style={styles.headerRow}>
           <View>
             <Txt style={styles.kicker}>{items.length} PIECES</Txt>

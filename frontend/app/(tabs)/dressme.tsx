@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
+import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useWeather } from "@/src/hooks/useWeather";
@@ -129,7 +130,7 @@ export default function DressMe() {
         ) : (
           <View style={{ width: 26 }} />
         )}
-        <View style={{ width: 26 }} />
+        <BrandMark />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
