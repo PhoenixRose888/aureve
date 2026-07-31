@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform, Linking } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -41,8 +41,7 @@ export default function Premium() {
   const alreadyPremium = !!user?.premium;
   const trialEligible = !!user?.trial_eligible;
 
-  const restore = async () => {
-    setRestoring(true);
+  const restore = async () => {    setRestoring(true);
     setError("");
     try {
       const r = await restorePurchases();
@@ -52,6 +51,13 @@ export default function Premium() {
       setError(e?.message || "Couldn't restore purchases.");
     }
     setRestoring(false);
+  };
+
+  const openManage = () => {
+    const url = Platform.OS === "ios"
+      ? "https://apps.apple.com/account/subscriptions"
+      : "https://play.google.com/store/account/subscriptions";
+    Linking.openURL(url).catch(() => {});
   };
 
   const startTrial = async () => {
@@ -208,6 +214,12 @@ export default function Premium() {
             ) : (
               <Txt style={styles.restoreTxt}>Restore purchases</Txt>
             )}
+          </Pressable>
+        ) : null}
+
+        {Platform.OS !== "web" ? (
+          <Pressable style={styles.restoreBtn} testID="manage-subscription" onPress={openManage}>
+            <Txt style={styles.restoreTxt}>Manage subscription</Txt>
           </Pressable>
         ) : null}
 

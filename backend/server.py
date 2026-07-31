@@ -68,6 +68,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
+def free_trial_enabled() -> bool:
+    return os.environ.get("FREE_TRIAL_ENABLED", "").lower() in ("1", "true", "yes")
+
+
 # ----------------------------- Helpers -----------------------------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -481,7 +485,7 @@ async def auth_me(user: dict = Depends(get_current_user)):
         "premium_until": user.get("premium_until"),
         "premium_source": user.get("premium_source"),
         "trial_used": bool(user.get("trial_used")),
-        "trial_eligible": (not prem) and (not user.get("trial_used")),
+        "trial_eligible": free_trial_enabled() and (not prem) and (not user.get("trial_used")),
     }
 
 
@@ -528,7 +532,7 @@ async def membership_plans(user: dict = Depends(get_current_user)):
         "premium_until": user.get("premium_until"),
         "premium_source": user.get("premium_source"),
         "trial_used": bool(user.get("trial_used")),
-        "trial_eligible": (not prem) and (not user.get("trial_used")),
+        "trial_eligible": free_trial_enabled() and (not prem) and (not user.get("trial_used")),
         "trial_days": 7,
         "plans": [
             {"id": k, "amount": v["amount"], "days": v["days"], "label": v["label"], "currency": "usd"}
@@ -540,6 +544,8 @@ async def membership_plans(user: dict = Depends(get_current_user)):
 @api_router.post("/membership/trial")
 async def start_trial(account: dict = Depends(get_current_user)):
     """App-managed 7-day free trial — instant Premium, no card, once per account."""
+    if not free_trial_enabled():
+        raise HTTPException(status_code=403, detail="Free trial is not available.")
     if account.get("trial_used"):
         raise HTTPException(status_code=400, detail="You've already used your free trial.")
     if is_premium(account):
