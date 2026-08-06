@@ -8,7 +8,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
-import { isPurchasesAvailable, getPackages, purchasePackage, restorePurchases, Pkg } from "@/src/services/purchases";
+import { isPurchasesAvailable, restorePurchases, presentPaywall, presentCustomerCenter } from "@/src/services/purchases";
 
 const FEATURES = [
   "Unlimited AI styling & outfits",
@@ -28,15 +28,7 @@ export default function Premium() {
   const [loading, setLoading] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState("");
-  const [iapPkgs, setIapPkgs] = useState<Pkg[]>([]);
   const [restoring, setRestoring] = useState(false);
-  const iapReady = iapPkgs.length > 0;
-
-  React.useEffect(() => {
-    if (isPurchasesAvailable()) {
-      getPackages().then(setIapPkgs).catch(() => {});
-    }
-  }, []);
 
   const alreadyPremium = !!user?.premium;
   const trialEligible = !!user?.trial_eligible;
@@ -54,6 +46,12 @@ export default function Premium() {
   };
 
   const openManage = () => {
+    // Native: RevenueCat Customer Center (manage/cancel/restore). Falls back to
+    // the store's subscription settings if the Customer Center isn't available.
+    if (isPurchasesAvailable()) {
+      presentCustomerCenter();
+      return;
+    }
     const url = Platform.OS === "ios"
       ? "https://apps.apple.com/account/subscriptions"
       : "https://play.google.com/store/account/subscriptions";
@@ -77,10 +75,9 @@ export default function Premium() {
     setLoading(true);
     setError("");
     try {
-      // Native in-app purchase (App Store / Play Billing) when available.
-      if (iapReady) {
-        const pkg = iapPkgs.find((p) => p.period === plan) || iapPkgs[0];
-        const r = await purchasePackage(pkg);
+      // Native: present the RevenueCat Paywall (offerings you design in the dashboard).
+      if (isPurchasesAvailable()) {
+        const r = await presentPaywall();
         await refreshUser();
         if (r.premium) router.replace("/(tabs)/dressme");
         setLoading(false);

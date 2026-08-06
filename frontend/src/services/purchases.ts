@@ -1,14 +1,14 @@
-// Web / fallback stub. react-native-purchases is NEVER bundled on web —
+// Web / fallback stub. react-native-purchases(-ui) is NEVER bundled on web —
 // Metro resolves purchases.native.ts on iOS/Android and this file elsewhere.
 export type Pkg = {
   id: string;
   title: string;
   priceString: string;
-  period: "monthly" | "annual" | "other";
+  period: "monthly" | "annual" | "lifetime" | "other";
   raw?: any;
 };
 
-export const ENTITLEMENT_ID = "premium";
+export const ENTITLEMENT_ID = process.env.EXPO_PUBLIC_REVENUECAT_ENTITLEMENT || "";
 
 export function isPurchasesAvailable(): boolean {
   return false;
@@ -28,4 +28,16 @@ export async function purchasePackage(_pkg: Pkg): Promise<{ premium: boolean }> 
 
 export async function restorePurchases(): Promise<{ premium: boolean }> {
   return { premium: false };
+}
+
+export async function getIsPremium(): Promise<boolean> {
+  return false;
+}
+
+export async function presentPaywall(): Promise<{ premium: boolean }> {
+  return { premium: false };
+}
+
+export async function presentCustomerCenter(): Promise<void> {
+  /* no-op on web */
 }
