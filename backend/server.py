@@ -577,10 +577,24 @@ async def account_deletion_page():
   </div>
 
   <div class="card">
+    <h2>Delete individual data (without closing your account)</h2>
+    <p>You can remove or edit your own data at any time inside Aureve, without deleting your whole account:</p>
+    <ul>
+      <li><strong>Clothing items &amp; photos</strong> &mdash; open an item and tap the delete (trash) icon.</li>
+      <li><strong>Saved outfits</strong> &mdash; open an outfit and delete it.</li>
+      <li><strong>Collections</strong> and <strong>packing plans</strong> &mdash; delete them from their screens.</li>
+      <li><strong>Style profile</strong> (measurements, skin tone, sizes, preferences) &mdash; edit or clear the fields in Profile &rarr; Style profile.</li>
+      <li><strong>Wardrobe profiles</strong> (household members) &mdash; delete a profile to remove it and its items.</li>
+      <li><strong>Connected Google Calendar</strong> &mdash; disconnect it in Profile at any time.</li>
+    </ul>
+    <p class="muted">These changes take effect immediately and are permanent.</p>
+  </div>
+
+  <div class="card">
     <h2>Can&rsquo;t access the app?</h2>
     <p>Email us from your account&rsquo;s email address at
-      <a href="mailto:support@aureve.app?subject=Delete%20my%20Aureve%20account">support@aureve.app</a>
-      with the subject &ldquo;Delete my account&rdquo;. We will delete your account and data within 30 days.</p>
+      <a href="mailto:support@aureve.app?subject=Delete%20my%20Aureve%20data">support@aureve.app</a>.
+      We will action your request as soon as possible, and within 30 days at the latest.</p>
   </div>
 
   <h2>What gets deleted</h2>
@@ -588,11 +602,11 @@ async def account_deletion_page():
     <li>Your account and login details</li>
     <li>Every wardrobe profile you created</li>
     <li>All clothing items and photos</li>
-    <li>All saved outfits, collections and wear history</li>
+    <li>All saved outfits, collections, packing plans and wear history</li>
     <li>Style profile, preferences and usage records</li>
     <li>Any connected calendar tokens and payment records held by us</li>
   </ul>
-  <p class="muted">Deletion is permanent. Some limited records may be retained only where required by law (e.g. transaction receipts held by the app stores / payment providers).</p>
+  <p class="muted">Deletion is immediate and permanent &mdash; we do not keep your data or additional copies after it is deleted, and there is no retention period on our side. The only exception is transaction/receipt records held by the app stores (Apple, Google) or the payment provider under their own policies; those are outside our control and we cannot delete them on their behalf.</p>
 </div></body></html>"""
     return HTMLResponse(content=html)
 
