@@ -593,7 +593,7 @@ async def account_deletion_page():
   <div class="card">
     <h2>Can&rsquo;t access the app?</h2>
     <p>Email us from your account&rsquo;s email address at
-      <a href="mailto:support@aureve.app?subject=Delete%20my%20Aureve%20data">support@aureve.app</a>.
+      <a href="mailto:houseoffmr@gmail.com?subject=Delete%20my%20Aureve%20data">houseoffmr@gmail.com</a>.
       We will action your request as soon as possible, and within 30 days at the latest.</p>
   </div>
 

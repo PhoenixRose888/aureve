@@ -7,7 +7,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, fonts } from "@/src/theme";
 
 const EFFECTIVE = "June 2026";
-const CONTACT = "support@aureve.app";
+const CONTACT = "houseoffmr@gmail.com";
 
 type Section = { h: string; b: string };
 
