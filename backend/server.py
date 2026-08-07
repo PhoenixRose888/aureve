@@ -612,6 +612,196 @@ async def account_deletion_page():
 
 
 
+
+@api_router.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy_page():
+    """Aureve Privacy Policy — publicly accessible (no login). Published verbatim."""
+    html = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy for Aureve</title>
+<style>
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#FAF9F6;color:#232323;line-height:1.65}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 24px 96px}
+  h1{font-size:30px;letter-spacing:-0.5px;margin:0 0 4px}
+  .eff{color:#6B6B63;font-size:14px;margin-bottom:24px}
+  h2{font-size:20px;margin:34px 0 8px}
+  h3{font-size:16px;margin:18px 0 4px}
+  p{margin:10px 0}
+  ul{padding-left:22px} li{margin:5px 0}
+  a{color:#5F7355;font-weight:600}
+</style></head>
+<body><div class="wrap">
+<h1>Privacy Policy for Aureve</h1>
+<p class="eff">Effective date: 8 August 2026</p>
+
+<p>Aureve (&ldquo;Aureve&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo; or &ldquo;our&rdquo;) respects your privacy and is committed to protecting the personal information you provide when using the Aureve mobile application and related services.</p>
+<p>This Privacy Policy explains what information Aureve collects, why we collect it, how it is used and protected, and the choices available to you regarding your information.</p>
+
+<h2>1. Information We Collect</h2>
+<p>Depending on the features you use, Aureve may collect or process the following information:</p>
+
+<h3>Account Information</h3>
+<p>When you create or use an Aureve account, we may collect:</p>
+<ul>
+<li>Your name</li>
+<li>Email address</li>
+<li>User or account identifier</li>
+<li>Account and authentication information</li>
+</ul>
+<p>Some features may also be available through guest access without requiring all account information.</p>
+
+<h3>Profile and Personalisation Information</h3>
+<p>You may choose to provide information used to personalise Aureve's wardrobe, styling and recommendation features. This may include information such as:</p>
+<ul>
+<li>Height</li>
+<li>Weight</li>
+<li>Clothing sizes</li>
+<li>Style preferences</li>
+<li>Other information you voluntarily add to your profile</li>
+</ul>
+
+<h3>Wardrobe Content and Photos</h3>
+<p>Aureve allows you to add clothing, accessories and other wardrobe information. We may therefore process:</p>
+<ul>
+<li>Photos you upload or take using your device</li>
+<li>Information about wardrobe items</li>
+<li>Categories, descriptions, attributes and other information associated with those items</li>
+<li>Outfit information and combinations</li>
+<li>Other content you voluntarily add to your wardrobe</li>
+</ul>
+<p>Photos and wardrobe information are used to provide Aureve's wardrobe management, styling, outfit-planning and personalised recommendation features.</p>
+
+<h3>Location Information</h3>
+<p>With your permission, Aureve may use location information to provide location-dependent features such as local weather information and weather-appropriate outfit recommendations.</p>
+<p>Where possible, Aureve only uses the level of location information necessary to provide the requested feature.</p>
+<p>You can control location permission through your device settings.</p>
+
+<h3>App Activity</h3>
+<p>We may collect information about how Aureve is used, including:</p>
+<ul>
+<li>App interactions</li>
+<li>Features used</li>
+<li>In-app searches</li>
+<li>Other activity necessary to operate, analyse and improve Aureve</li>
+</ul>
+
+<h3>Device, Diagnostic and Performance Information</h3>
+<p>We may collect technical information including:</p>
+<ul>
+<li>Device or other identifiers</li>
+<li>Crash logs</li>
+<li>Diagnostic information</li>
+<li>App performance information</li>
+</ul>
+<p>This information helps us maintain Aureve, diagnose technical problems, improve reliability and understand how features perform.</p>
+
+<h3>Purchases and Subscriptions</h3>
+<p>If you purchase an Aureve subscription or other paid product, information relating to the purchase may be processed, including:</p>
+<ul>
+<li>Purchase and subscription history</li>
+<li>Subscription status</li>
+<li>Transaction-related information required to provide paid features</li>
+</ul>
+<p>Payments made through Google Play or Apple's App Store are processed by the relevant platform and payment providers. Aureve does not need to store your full credit or debit card number to provide your subscription.</p>
+
+<h2>2. How We Use Information</h2>
+<p>Information collected through Aureve may be used to:</p>
+<ul>
+<li>Create and manage user accounts</li>
+<li>Authenticate users</li>
+<li>Provide wardrobe-management features</li>
+<li>Provide outfit planning and styling functionality</li>
+<li>Generate personalised recommendations</li>
+<li>Provide weather-related functionality</li>
+<li>Remember preferences and settings</li>
+<li>Process and verify subscriptions and purchases</li>
+<li>Provide customer support and service communications</li>
+<li>Maintain the security and reliability of Aureve</li>
+<li>Diagnose crashes, errors and technical problems</li>
+<li>Analyse and improve app functionality and performance</li>
+<li>Comply with applicable legal obligations</li>
+</ul>
+<p>We do not use your personal information for third-party advertising unless this Privacy Policy is updated to disclose such use and any required consent is obtained.</p>
+
+<h2>3. Artificial Intelligence and Automated Features</h2>
+<p>Aureve may use artificial intelligence or automated systems to provide features such as wardrobe analysis, styling assistance, recommendations and other personalised functionality.</p>
+<p>Information you submit to these features may be processed as necessary to generate the requested result.</p>
+<p>We take reasonable steps to limit information provided to service providers to what is necessary to operate the relevant feature.</p>
+
+<h2>4. Third-Party Service Providers</h2>
+<p>Aureve may rely on trusted third-party providers to operate parts of the service, including providers of:</p>
+<ul>
+<li>Cloud hosting and data storage</li>
+<li>Authentication</li>
+<li>Artificial intelligence services</li>
+<li>Weather information</li>
+<li>Analytics and diagnostics</li>
+<li>Subscription and purchase management</li>
+<li>Google Play services</li>
+<li>Apple App Store services</li>
+</ul>
+<p>These providers may process information on our behalf where necessary to provide their services.</p>
+<p>Third-party services may also operate under their own privacy policies and legal obligations.</p>
+
+<h2>5. Data Sharing</h2>
+<p>We do not sell your personal information.</p>
+<p>Information may be shared with service providers where reasonably necessary to operate Aureve, process subscriptions, provide requested functionality, maintain security or comply with the law.</p>
+<p>We may also disclose information where reasonably necessary to:</p>
+<ul>
+<li>Comply with a legal obligation, court order or lawful government request</li>
+<li>Protect the rights, safety or security of Aureve, our users or others</li>
+<li>Detect or prevent fraud, abuse or security threats</li>
+</ul>
+
+<h2>6. Data Security</h2>
+<p>We use reasonable technical and organisational measures designed to protect information from unauthorised access, loss, misuse, alteration or disclosure.</p>
+<p>Information transmitted between Aureve and its online services is encrypted in transit using appropriate secure communication technologies.</p>
+<p>No internet-connected service can guarantee absolute security, but we take reasonable measures appropriate to the nature of the information we process.</p>
+
+<h2>7. Data Retention</h2>
+<p>We retain personal information only for as long as reasonably necessary to provide Aureve, maintain your account, fulfil the purposes described in this Privacy Policy, resolve disputes and meet applicable legal or regulatory obligations.</p>
+<p>When information is no longer reasonably required, it may be deleted or de-identified.</p>
+<p>Some information may remain temporarily in backups or system records after deletion where technically necessary, until those records are overwritten or removed in accordance with normal system processes.</p>
+
+<h2>8. Your Choices and Controls</h2>
+<p>Depending on the relevant feature, Aureve allows users to access, modify or delete information associated with their account.</p>
+<p>For example, users may be able to:</p>
+<ul>
+<li>Edit profile information</li>
+<li>Add or remove wardrobe items</li>
+<li>Delete uploaded content and photos</li>
+<li>Change app permissions through their device</li>
+<li>Manage subscription settings through the relevant app store</li>
+<li>Request deletion of personal information</li>
+<li>Request deletion of their Aureve account and associated data</li>
+</ul>
+
+<h2>9. Account and Data Deletion</h2>
+<p>Users may request deletion of their Aureve account and associated personal data through the account deletion options provided by Aureve or through the account/data deletion page linked from Aureve's Google Play listing.</p>
+<p>Users may also delete certain information, such as wardrobe items and other user-provided content, without deleting their entire account where this functionality is available within the app.</p>
+<p>When an account deletion request is completed, information associated with the account will be deleted or de-identified except where retention is reasonably necessary for legal, security, fraud-prevention, financial, dispute-resolution or other legitimate obligations.</p>
+
+<h2>10. Children's Privacy</h2>
+<p>Aureve is not designed to collect personal information from children below the minimum age permitted to independently use the service under applicable law.</p>
+<p>Where age-related consent requirements apply, Aureve will comply with applicable platform and legal requirements.</p>
+
+<h2>11. International Data Processing</h2>
+<p>Some service providers used by Aureve may process or store information in countries outside Australia.</p>
+<p>Where personal information is processed internationally, we take reasonable steps to use reputable service providers and appropriate safeguards consistent with applicable privacy requirements.</p>
+
+<h2>12. Changes to This Privacy Policy</h2>
+<p>We may update this Privacy Policy when Aureve's functionality, data practices, service providers or legal obligations change.</p>
+<p>The current version will be made available through Aureve or its associated website. The effective date at the top of this policy will be updated when material changes are made.</p>
+
+<h2>13. Contact Us</h2>
+<p>Questions, concerns, privacy requests or requests relating to personal information can be directed to:</p>
+<p>Aureve<br>House of FMR<br>Email: <a href="mailto:houseoffmr@gmail.com">houseoffmr@gmail.com</a><br>Australia</p>
+</div></body></html>"""
+    return HTMLResponse(content=html)
+
+
+
 @api_router.post("/membership/trial")
 async def start_trial(account: dict = Depends(get_current_user)):
     """App-managed 7-day free trial — instant Premium, no card, once per account."""
