@@ -541,6 +541,63 @@ async def membership_plans(user: dict = Depends(get_current_user)):
     }
 
 
+@api_router.get("/account-deletion", response_class=HTMLResponse)
+async def account_deletion_page():
+    """Public account & data deletion instructions page (no login required).
+    Required by Google Play & App Store review."""
+    html = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delete your Aureve account</title>
+<style>
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#FAF9F6;color:#232323;line-height:1.6}
+  .wrap{max-width:680px;margin:0 auto;padding:48px 24px 80px}
+  h1{font-size:30px;letter-spacing:-0.5px;margin:0 0 8px}
+  .kicker{font-size:12px;letter-spacing:2px;color:#8A8A82;text-transform:uppercase;margin-bottom:24px}
+  h2{font-size:18px;margin:32px 0 8px}
+  ol,ul{padding-left:20px} li{margin:6px 0}
+  .card{background:#fff;border:1px solid #ECEAE3;border-radius:14px;padding:20px 24px;margin-top:16px}
+  a{color:#5F7355;font-weight:600}
+  .muted{color:#6B6B63;font-size:14px}
+</style></head>
+<body><div class="wrap">
+  <div class="kicker">Aureve &middot; Privacy &amp; Data</div>
+  <h1>Delete your account &amp; data</h1>
+  <p>Aureve lets you permanently delete your account and all of your data at any time. This is immediate and cannot be undone.</p>
+
+  <div class="card">
+    <h2>Delete from inside the app (fastest)</h2>
+    <ol>
+      <li>Open <strong>Aureve</strong> and sign in.</li>
+      <li>Go to the <strong>Profile</strong> tab.</li>
+      <li>Scroll to <strong>Privacy &amp; data</strong>.</li>
+      <li>Tap <strong>Delete my account</strong> and confirm.</li>
+    </ol>
+    <p class="muted">Your account and all associated data are deleted right away.</p>
+  </div>
+
+  <div class="card">
+    <h2>Can&rsquo;t access the app?</h2>
+    <p>Email us from your account&rsquo;s email address at
+      <a href="mailto:support@aureve.app?subject=Delete%20my%20Aureve%20account">support@aureve.app</a>
+      with the subject &ldquo;Delete my account&rdquo;. We will delete your account and data within 30 days.</p>
+  </div>
+
+  <h2>What gets deleted</h2>
+  <ul>
+    <li>Your account and login details</li>
+    <li>Every wardrobe profile you created</li>
+    <li>All clothing items and photos</li>
+    <li>All saved outfits, collections and wear history</li>
+    <li>Style profile, preferences and usage records</li>
+    <li>Any connected calendar tokens and payment records held by us</li>
+  </ul>
+  <p class="muted">Deletion is permanent. Some limited records may be retained only where required by law (e.g. transaction receipts held by the app stores / payment providers).</p>
+</div></body></html>"""
+    return HTMLResponse(content=html)
+
+
+
 @api_router.post("/membership/trial")
 async def start_trial(account: dict = Depends(get_current_user)):
     """App-managed 7-day free trial — instant Premium, no card, once per account."""
