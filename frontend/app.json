@@ -24,6 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.wardrobeai.l0r5ay",
+      "versionCode": 103,
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",
