@@ -13,11 +13,13 @@ Developer/brand: **House of FMR** · Contact: **houseoffmr@gmail.com**
 - App version: see `frontend/app.json` → `expo.version`
 
 ## 2. Compliance URLs (live, public, no login)
-- Privacy Policy: `https://<DEPLOYED_DOMAIN>/api/privacy`
-- Account deletion: `https://<DEPLOYED_DOMAIN>/api/account-deletion`
+- Privacy Policy: `https://wardrobe-ai-311.preview.emergentagent.com/api/privacy`
+- Account deletion: `https://wardrobe-ai-311.preview.emergentagent.com/api/account-deletion`
 - Delete data URL: same as account deletion (`/api/account-deletion` covers full + partial deletion)
-- Current preview domain: `https://wardrobe-ai-311.preview.emergentagent.com`
+- Current live preview domain: `https://wardrobe-ai-311.preview.emergentagent.com`
 - Source: `backend/server.py` → `privacy_policy_page()` and `account_deletion_page()` (HTML served verbatim)
+
+> ⚠️ **Before final store submission:** Replace all `wardrobe-ai-311.preview.emergentagent.com` URLs above with the production domain. Update both the store listing metadata AND the backend deployment to serve from the final domain.
 
 ## 3. RevenueCat integration (in-app purchases)
 SDKs used (React Native, NOT SwiftUI): `react-native-purchases` + `react-native-purchases-ui`
@@ -37,7 +39,7 @@ Backend webhook receiver: `POST /api/webhooks/revenuecat` in `backend/server.py`
 
 ### Env vars for RevenueCat
 Frontend (`frontend/.env`):
-- `EXPO_PUBLIC_REVENUECAT_IOS_KEY` — currently the RC **Test Store** key `test_duioYdxNNsMzzaQXzFYpXolUnwp`. Replace with production **`appl_…`** key.
+- `EXPO_PUBLIC_REVENUECAT_IOS_KEY` — currently the RC **Test Store** key. Replace with production **`appl_…`** key.
 - `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` — currently the same test key. Replace with production **`goog_…`** key.
 - `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT=premium`
 
@@ -80,7 +82,7 @@ Needed so RevenueCat can verify Google Play purchases:
 ## 9. Store listing copy (ASO)
 - See `memory/ASO_store_listing.md` (title, subtitle, keywords, descriptions, screenshot captions)
 
-## 10. Outstanding back-of-house tasks for Maverick
+## 10. Outstanding back-of-house tasks
 - [ ] Create store subscription products + RevenueCat offering/entitlement (`premium`)
 - [ ] Google Cloud project + Play service account → upload JSON to RevenueCat
 - [ ] Swap test RC keys → production `appl_…` / `goog_…`
@@ -89,6 +91,7 @@ Needed so RevenueCat can verify Google Play purchases:
 - [ ] Fill Play Data Safety + Apple App Privacy using the URLs in §2
 - [ ] Generate builds via Emergent Publish; test IAP in TestFlight / Play internal testing
 - [ ] Apple: App Store Connect API key / shared secret into RevenueCat (iOS purchase verification)
+- [ ] Fill `ascAppId` and `appleTeamId` in `frontend/eas.json` once app record created
 
 ## Notes
 - IAP (paywall/customer center/purchases) only work in a real build — NOT Expo Go or web.
