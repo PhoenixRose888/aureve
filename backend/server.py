@@ -801,6 +801,61 @@ async def privacy_policy_page():
     return HTMLResponse(content=html)
 
 
+@api_router.get("/terms", response_class=HTMLResponse)
+async def terms_page():
+    """Aureve Terms of Use — publicly accessible (no login). Content mirrors the
+    in-app Terms screen for consistency."""
+    html = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Service for Aureve</title>
+<style>
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#FAF9F6;color:#232323;line-height:1.65}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 24px 96px}
+  h1{font-size:30px;letter-spacing:-0.5px;margin:0 0 4px}
+  .eff{color:#6B6B63;font-size:14px;margin-bottom:24px}
+  h2{font-size:20px;margin:34px 0 8px}
+  p{margin:10px 0}
+  a{color:#5F7355;font-weight:600}
+</style></head>
+<body><div class="wrap">
+<h1>Terms of Service for Aureve</h1>
+<p class="eff">Effective date: June 2026</p>
+
+<h2>Acceptance</h2>
+<p>By using Aureve you agree to these Terms. If you do not agree, please do not use the app. Effective June 2026.</p>
+
+<h2>Your account</h2>
+<p>You are responsible for keeping your login details secure and for activity under your account. You must provide accurate information when creating an account.</p>
+
+<h2>Acceptable use</h2>
+<p>Use Aureve for your personal styling only. Do not upload unlawful content, attempt to disrupt the service, or misuse the AI features.</p>
+
+<h2>Styling &amp; AI suggestions</h2>
+<p>Outfit, hair, makeup and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate &mdash; use your own judgement.</p>
+
+<h2>Subscriptions &amp; payments</h2>
+<p>Some features may require a paid subscription. Billing, renewals and refunds are handled by the store or payment provider you purchase through (Apple, Google, or Stripe), subject to their terms.</p>
+
+<h2>Your content</h2>
+<p>You keep ownership of the photos and details you add. You grant us a limited licence to process them only to provide the app's features to you.</p>
+
+<h2>Termination</h2>
+<p>You may delete your account at any time. We may suspend accounts that violate these Terms.</p>
+
+<h2>Disclaimer &amp; liability</h2>
+<p>The app is provided &ldquo;as is&rdquo;. To the extent permitted by law, we are not liable for indirect or incidental losses arising from use of the app.</p>
+
+<h2>Changes</h2>
+<p>We may update these Terms from time to time; continued use means you accept the updated version.</p>
+
+<h2>Contact</h2>
+<p>Questions about these Terms? Contact us at <a href="mailto:houseoffmr@gmail.com">houseoffmr@gmail.com</a>.</p>
+</div></body></html>"""
+    return HTMLResponse(content=html)
+
+
+
 
 @api_router.post("/membership/trial")
 async def start_trial(account: dict = Depends(get_current_user)):
