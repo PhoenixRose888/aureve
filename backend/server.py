@@ -15,6 +15,7 @@ import base64 as _b64
 from PIL import Image
 import httpx
 import bcrypt
+import jwt
 import hmac
 import hashlib
 import time as _time
@@ -40,6 +41,11 @@ EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 AI_MODEL = ("openai", "gpt-5.4")
 
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
+
+# Sign in with Apple — audiences must include the app bundle id AND
+# host.exp.Exponent (Expo Go). Configured via backend .env.
+APPLE_AUDIENCES = [a.strip() for a in os.environ.get('APPLE_AUDIENCES', '').split(',') if a.strip()]
+_APPLE_JWK_CLIENT = None
 
 GCAL_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '')
 GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '')
@@ -473,6 +479,72 @@ async def login_email(payload: EmailAuthRequest):
     session_token = await _mint_session(user["user_id"])
     safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash")}
     return {"session_token": session_token, "user": safe}
+
+
+class AppleAuthRequest(BaseModel):
+    identity_token: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    guest_token: Optional[str] = None  # optional guest session to migrate
+
+
+def _apple_jwk_client():
+    global _APPLE_JWK_CLIENT
+    if _APPLE_JWK_CLIENT is None:
+        _APPLE_JWK_CLIENT = jwt.PyJWKClient("https://appleid.apple.com/auth/keys")
+    return _APPLE_JWK_CLIENT
+
+
+@api_router.post("/auth/apple")
+async def apple_auth(payload: AppleAuthRequest):
+    """Verify a Sign in with Apple identity token against Apple's JWKS, upsert
+    the user by their stable Apple subject id, and return a bearer session.
+    This is the equivalent login option to Google required by Apple 5.1.1(v)."""
+    if not APPLE_AUDIENCES:
+        raise HTTPException(status_code=500, detail="Apple sign-in is not configured")
+    try:
+        signing_key = _apple_jwk_client().get_signing_key_from_jwt(payload.identity_token)
+        claims = jwt.decode(
+            payload.identity_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=APPLE_AUDIENCES,
+            issuer="https://appleid.apple.com",
+        )
+    except Exception as e:
+        logger.warning(f"Apple token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Apple identity token")
+
+    apple_sub = claims.get("sub")
+    if not apple_sub:
+        raise HTTPException(status_code=401, detail="Invalid Apple identity token")
+    token_email = claims.get("email")
+
+    existing = await db.users.find_one({"apple_sub": apple_sub}, {"_id": 0})
+    if existing:
+        user_id = existing["user_id"]
+    else:
+        # Name + email are returned by Apple ONLY on the first sign-in — persist
+        # them now; on later logins they arrive null and must not overwrite.
+        user_id = new_id("user")
+        await db.users.insert_one({
+            "user_id": user_id,
+            "apple_sub": apple_sub,
+            "email": _norm_email(payload.email) if payload.email else (token_email or f"{user_id}@privaterelay.appleid.local"),
+            "name": (payload.name or "").strip() or "Aureve Member",
+            "provider": "apple",
+            "created_at": now_utc().isoformat(),
+        })
+
+    if payload.guest_token:
+        try:
+            await migrate_guest_data(payload.guest_token, user_id)
+        except Exception as e:
+            logger.warning(f"Guest migration skipped: {e}")
+
+    session_token = await _mint_session(user_id)
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"session_token": session_token, "user": user}
 
 
 @api_router.get("/auth/me")

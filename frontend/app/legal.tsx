@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Linking } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -61,6 +61,15 @@ export default function Legal() {
             <Txt style={styles.b}>{s.b}</Txt>
           </View>
         ))}
+        <Pressable
+          testID="support-email"
+          onPress={() => Linking.openURL(`mailto:${CONTACT}`)}
+          hitSlop={8}
+          style={styles.contactRow}
+        >
+          <Feather name="mail" size={16} color={colors.onSurface} />
+          <Txt style={styles.contactLink}>{CONTACT}</Txt>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -74,4 +83,6 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.xl },
   h: { fontSize: 15, fontFamily: fonts.displayMedium, color: colors.onSurface, marginBottom: spacing.xs },
   b: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 22 },
+  contactRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xs },
+  contactLink: { fontSize: 14, color: colors.onSurface, textDecorationLine: "underline", fontFamily: fonts.displayMedium },
 });

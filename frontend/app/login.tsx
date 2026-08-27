@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/src/context/AuthContext";
 import { Display, Txt } from "@/src/components/Typography";
@@ -13,7 +14,7 @@ const HERO =
   "https://images.unsplash.com/photo-1578102718171-ec1f91680562?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaGljJTIwc3RyZWV0JTIwc3R5bGUlMjBvdXRmaXR8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
 
 export default function Login() {
-  const { user, login, guestLogin, loginEmail, registerEmail, signingIn, loading } = useAuth();
+  const { user, login, guestLogin, loginEmail, registerEmail, signingIn, loading, loginApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -23,10 +24,26 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+    }
+  }, []);
 
   useEffect(() => {
     if (user) router.replace("/(tabs)");
   }, [user, router]);
+
+  const submitApple = async () => {
+    setError("");
+    try {
+      await loginApple();
+    } catch (e: any) {
+      setError(e?.message || "Apple sign-in failed. Please try again.");
+    }
+  };
 
   const submitEmail = async () => {
     setError("");
@@ -103,6 +120,15 @@ export default function Login() {
             <View style={styles.line} /><Txt style={styles.or}>or</Txt><View style={styles.line} />
           </View>
 
+          {appleAvailable ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={radius.md}
+              style={styles.appleBtn}
+              onPress={submitApple}
+            />
+          ) : null}
           <Pressable testID="google-login-button" style={styles.googleBtn} onPress={login} disabled={signingIn || loading}>
             {signingIn ? (
               <ActivityIndicator color={colors.onSurface} />
@@ -158,6 +184,7 @@ const styles = StyleSheet.create({
   line: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.2)" },
   or: { color: "rgba(250,250,250,0.6)", fontSize: 12 },
   googleBtn: { backgroundColor: colors.surface, height: 54, borderRadius: radius.md, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  appleBtn: { height: 54, marginBottom: spacing.sm },
   googleTxt: { color: colors.onSurface, fontSize: 16, fontFamily: fonts.displayBold },
   guestBtn: { height: 50, borderRadius: radius.md, alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
   guestTxt: { color: colors.onSurfaceInverse, fontSize: 15, fontFamily: fonts.body, textDecorationLine: "underline" },

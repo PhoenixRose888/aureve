@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { api, setToken, clearToken, getToken } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
 import { initPurchases } from "@/src/services/purchases";
@@ -27,6 +28,7 @@ type AuthCtx = {
   loading: boolean;
   signingIn: boolean;
   login: () => Promise<void>;
+  loginApple: () => Promise<void>;
   guestLogin: () => Promise<void>;
   loginEmail: (email: string, password: string) => Promise<void>;
   registerEmail: (email: string, password: string, name?: string) => Promise<void>;
@@ -152,6 +154,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [processSessionId, stashGuestToken]);
 
+  const loginApple = useCallback(async () => {
+    setSigningIn(true);
+    try {
+      await stashGuestToken();
+      const cred = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!cred.identityToken) throw new Error("Apple sign-in did not return a token.");
+      const fullName = cred.fullName
+        ? [cred.fullName.givenName, cred.fullName.familyName].filter(Boolean).join(" ").trim()
+        : undefined;
+      let guest_token: string | undefined;
+      if (user?.is_guest) {
+        const t = await getToken();
+        if (t) guest_token = t;
+      }
+      const data = await api<{ session_token: string; user: User }>("/auth/apple", {
+        method: "POST",
+        auth: false,
+        body: {
+          identity_token: cred.identityToken,
+          name: fullName || undefined,
+          email: cred.email || undefined,
+          guest_token,
+        },
+      });
+      await setToken(data.session_token);
+      await storage.secureRemove(GUEST_MIGRATE_KEY);
+      setUser(data.user);
+    } catch (e: any) {
+      // User tapped Cancel on the native sheet — not an error worth surfacing.
+      if (e?.code === "ERR_REQUEST_CANCELED") return;
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, [user, stashGuestToken]);
+
   const logout = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -212,6 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         signingIn,
         login,
+        loginApple,
         guestLogin,
         loginEmail,
         registerEmail,

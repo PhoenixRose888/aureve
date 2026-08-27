@@ -11,7 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.emergent.wardrobeai.l0r5ay",
+      "usesAppleSignIn": true,
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Take photos of your clothes to catalogue them",
         "NSPhotoLibraryUsageDescription": "Add clothing photos from your library",
         "NSLocationWhenInUseUsageDescription": "Suggest weather-appropriate outfits for today"
@@ -39,6 +41,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform, Linking } from "react-native";
-import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -83,21 +82,21 @@ export default function Premium() {
         setLoading(false);
         return;
       }
-      // Web fallback — Stripe hosted checkout.
-      const origin =
-        Platform.OS === "web"
-          ? window.location.origin
-          : (process.env.EXPO_PUBLIC_BACKEND_URL as string);
-      const r = await api<{ url: string }>("/payments/checkout", {
-        method: "POST",
-        body: { plan, origin_url: origin },
-      });
+      // Web only — Stripe hosted checkout. On iOS/Android, digital
+      // subscriptions must go through StoreKit / Play Billing (via RevenueCat),
+      // never an external processor (Apple Guideline 3.1.1).
       if (Platform.OS === "web") {
+        const r = await api<{ url: string }>("/payments/checkout", {
+          method: "POST",
+          body: { plan, origin_url: window.location.origin },
+        });
         window.location.href = r.url;
-      } else {
-        await WebBrowser.openBrowserAsync(r.url);
-        await refreshUser();
+        setLoading(false);
+        return;
       }
+      // Native but RevenueCat/StoreKit is unavailable — show an unavailable
+      // state instead of falling back to Stripe.
+      setError("In-app purchases are temporarily unavailable. Please try again later.");
     } catch (e: any) {
       if (!/cancel/i.test(e?.message || "")) setError(e.message || "Couldn't start checkout");
     }

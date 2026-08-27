@@ -154,3 +154,12 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
   - Fix: bumped `react-native-purchases` -> 10.6.0 via `yarn expo install`. Both packages now aligned at 10.6.0; both require PurchasesHybridCommon 18.28.0. Verified in package.json, node_modules, yarn.lock.
 - NOTE: react-native-purchases has NO Expo config plugin (autolinked). Do NOT add it to app.json plugins — it breaks the Expo build.
 - User action required: re-trigger the iOS build via Publish; agent cannot start EAS builds directly.
+
+## App Store Readiness Fixes (2026-06)
+- Sign in with Apple added (Apple 5.1.1(v)): backend POST /api/auth/apple verifies identity token vs Apple JWKS (RS256, iss/aud/exp), upserts by apple_sub, mints 7-day session, migrates guest data. Env APPLE_AUDIENCES=<bundleid>,host.exp.Exponent. Frontend: AuthContext.loginApple() + native AppleAuthenticationButton on login.tsx (iOS only, gated by isAvailableAsync). app.json: ios.usesAppleSignIn=true + "expo-apple-authentication" plugin. Installed expo-apple-authentication.
+- app.json ios.infoPlist.ITSAppUsesNonExemptEncryption=false (app uses only HTTPS/TLS = exempt).
+- legal.tsx: support email houseoffmr@gmail.com now tappable via mailto:.
+- premium.tsx: iOS no longer falls back to Stripe — if RevenueCat/StoreKit unavailable it shows a purchases-unavailable state; Stripe kept for web only (Apple 3.1.1).
+- PrivacyInfo.xcprivacy: NOT missing — required-reason SDKs ship their own signed manifests, merged by Expo at prebuild. No change made.
+- OPEN (user/production): confirm live iOS RevenueCat key (appl_...) is set in Emergent Custom Keys so the production build doesn't ship a test key.
+- Requires: redeploy backend + generate a NEW iOS build (app.json entitlement + new native dep + backend changes).
