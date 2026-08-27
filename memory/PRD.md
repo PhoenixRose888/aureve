@@ -147,3 +147,10 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - No mocked APIs. All AI + weather + auth are live.
 - Test session seeded for automated backend testing: `Authorization: Bearer test-session-token-aura-123` (user_testaura01). Real users get their own user_id via Google.
 - Features needing a native build to fully test: none blocking; camera/photos/location handled via expo APIs and work in Expo Go (Google OAuth login works in Expo Go too).
+
+## Deployment Fix — iOS EAS Build (2026-06)
+- BLOCKER (resolved): iOS EAS build failed at CocoaPods INSTALL_PODS — `PurchasesHybridCommon` version conflict.
+  - Cause: `react-native-purchases@10.4.4` (needs PurchasesHybridCommon 18.22.2) vs `react-native-purchases-ui@10.6.0` (needs 18.28.0).
+  - Fix: bumped `react-native-purchases` -> 10.6.0 via `yarn expo install`. Both packages now aligned at 10.6.0; both require PurchasesHybridCommon 18.28.0. Verified in package.json, node_modules, yarn.lock.
+- NOTE: react-native-purchases has NO Expo config plugin (autolinked). Do NOT add it to app.json plugins — it breaks the Expo build.
+- User action required: re-trigger the iOS build via Publish; agent cannot start EAS builds directly.
