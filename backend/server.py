@@ -2819,14 +2819,77 @@ async def seed_reviewer_account():
                 "premium_source": "reviewer",
                 "created_at": now_utc().isoformat(),
             })
-        # Ensure representative content: a default profile with a demo wardrobe.
+        # Ensure representative content: a default profile with a clean demo
+        # wardrobe, reconciled deterministically (see below) so repeated
+        # startups/redeploys can never create duplicates.
         prof = await ensure_default_profile(user_id, "Reviewer")
-        has_items = await db.items.find_one({"profile_id": prof["id"]})
-        if not has_items:
-            await seed_demo_wardrobe(prof["id"])
+        await reconcile_reviewer_wardrobe(prof["id"])
         logger.info(f"Reviewer account ready: {email}")
     except Exception as e:
         logger.warning(f"Reviewer account seeding skipped: {e}")
+
+
+async def reconcile_reviewer_wardrobe(profile_id: str):
+    """Ensure EXACTLY one clean copy of each intended demo item exists on the
+    reviewer profile. Uses deterministic ids (``revdemo-<index>``) + upserts so
+    restarting/redeploying the backend updates in place instead of inserting
+    fresh copies. Any other wardrobe rows on THIS profile (old random-id
+    duplicates, demo or not) are pruned. Strictly scoped to the given reviewer
+    profile — no other account or data is touched."""
+    try:
+        from demo_wardrobe import DEMO_ITEMS
+    except Exception as e:
+        logger.warning(f"Demo wardrobe unavailable: {e}")
+        return
+    now = now_utc().isoformat()
+    canonical_ids = []
+    for i, g in enumerate(DEMO_ITEMS):
+        item_id = f"revdemo-{i}"
+        canonical_ids.append(item_id)
+        await db.items.update_one(
+            {"id": item_id},
+            {
+                "$set": {
+                    "id": item_id,
+                    "user_id": profile_id,
+                    "name": g["name"],
+                    "category": g["category"],
+                    "colour": g.get("colour", ""),
+                    "fabric": g.get("fabric", ""),
+                    "season": g.get("season", "All"),
+                    "pattern": "",
+                    "style": g.get("style", ""),
+                    "sleeve_length": "",
+                    "formality": g.get("formality", ""),
+                    "tone": g.get("tone", ""),
+                    "fit_notes": "",
+                    "brand": "",
+                    "size": "",
+                    "price": None,
+                    "condition": "",
+                    "availability": "Ready",
+                    "photo": g["photo"],
+                    "worn_photo": None,
+                    "flatters": g.get("flatters", True),
+                    "wear_count": 0,
+                    "last_worn": None,
+                    "demo": True,
+                },
+                "$setOnInsert": {"created_at": now},
+            },
+            upsert=True,
+        )
+    # Prune every other wardrobe row on this reviewer profile (leaves exactly
+    # the canonical 16), plus any stale demo outfits/wear logs referencing them.
+    removed = await db.items.delete_many(
+        {"user_id": profile_id, "id": {"$nin": canonical_ids}}
+    )
+    await db.outfits.delete_many({"user_id": profile_id, "demo": True})
+    await db.wear_logs.delete_many({"user_id": profile_id, "demo": True})
+    logger.info(
+        f"Reviewer wardrobe reconciled: {len(canonical_ids)} canonical items, "
+        f"pruned {removed.deleted_count} duplicates"
+    )
 
 
 @app.on_event("shutdown")
