@@ -2780,6 +2780,53 @@ async def startup():
     await db.user_sessions.create_index("session_token", unique=True)
     await db.user_sessions.create_index("user_id")
     await db.items.create_index("user_id")
+    await seed_reviewer_account()
+
+
+async def seed_reviewer_account():
+    """Idempotently ensure a dedicated App Store review account exists in
+    whatever database this backend is connected to (preview OR production).
+
+    The reviewer signs in with email/password, is granted Premium via an
+    explicit far-future ``premium_until`` (so it does NOT depend on
+    TRIAL_UNLOCK_ALL), and gets a representative 16-item demo wardrobe so every
+    feature — including Premium-only ones — is reachable during Apple review.
+    Credentials can be overridden via env; sensible defaults are baked in so the
+    account is guaranteed present in production after a redeploy."""
+    email = _norm_email(os.environ.get("REVIEWER_EMAIL", "review@aureve.app"))
+    password = os.environ.get("REVIEWER_PASSWORD", "AureveTest2026")
+    premium_until = "2099-01-01T00:00:00+00:00"
+    try:
+        existing = await db.users.find_one({"email": email})
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+        if existing:
+            user_id = existing["user_id"]
+            # Keep the known password valid and Premium active for the reviewer.
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"password_hash": pw_hash, "premium_until": premium_until,
+                          "premium_source": "reviewer", "provider": "email"}},
+            )
+        else:
+            user_id = new_id("user")
+            await db.users.insert_one({
+                "user_id": user_id,
+                "email": email,
+                "name": "Aureve Reviewer",
+                "provider": "email",
+                "password_hash": pw_hash,
+                "premium_until": premium_until,
+                "premium_source": "reviewer",
+                "created_at": now_utc().isoformat(),
+            })
+        # Ensure representative content: a default profile with a demo wardrobe.
+        prof = await ensure_default_profile(user_id, "Reviewer")
+        has_items = await db.items.find_one({"profile_id": prof["id"]})
+        if not has_items:
+            await seed_demo_wardrobe(prof["id"])
+        logger.info(f"Reviewer account ready: {email}")
+    except Exception as e:
+        logger.warning(f"Reviewer account seeding skipped: {e}")
 
 
 @app.on_event("shutdown")
