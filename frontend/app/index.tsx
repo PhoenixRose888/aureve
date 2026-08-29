@@ -14,7 +14,7 @@ export default function Index() {
     storage.getItem<boolean>("aureve_onboarded", false).then((v) => setOnboarded(!!v));
     storage.getItem<boolean>("aureve_launched", false).then((v) => setLaunched(!!v));
     // Hold the branded splash long enough for the logo to fade in and be read.
-    const t = setTimeout(() => setMinSplashDone(true), 2400);
+    const t = setTimeout(() => setMinSplashDone(true), 2900);
     return () => clearTimeout(t);
   }, []);
 
