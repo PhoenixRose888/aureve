@@ -27,8 +27,6 @@ export default function Profile() {
     .toUpperCase();
   const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [missing, setMissing] = useState<any>(null);
-  const [missingLoading, setMissingLoading] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [newName, setNewName] = useState("");
   const [calConnected, setCalConnected] = useState(false);
@@ -54,22 +52,6 @@ export default function Profile() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
-  };
-
-  const findMissing = async () => {
-    if (!premium) {
-      router.push("/premium");
-      return;
-    }
-    setMissingLoading(true);
-    setMissing(null);
-    try {
-      const r = await api<any>("/insights/missing-piece", { method: "POST" });
-      setMissing(r);
-    } catch (e: any) {
-      if (e.status === 402) router.push("/premium");
-    }
-    setMissingLoading(false);
   };
 
   const unworn = data ? (data.least_worn || []).filter((i: any) => (i.wear_count || 0) === 0) : [];
@@ -241,36 +223,24 @@ export default function Profile() {
             {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
-          {/* Missing Piece — the honest gap analyzer */}
-          <View style={styles.missingCard}>
-            <Txt style={styles.missingKicker}>THE MISSING PIECE</Txt>
+          {/* Shopping Intelligence — Missing Pieces lives inside as gap analysis */}
+          <Pressable
+            style={styles.missingCard}
+            testID="shopping-intelligence-profile"
+            onPress={() => router.push(premium ? "/shop" : "/premium")}
+          >
+            <Txt style={styles.missingKicker}>SHOPPING INTELLIGENCE</Txt>
             <Display weight="medium" style={styles.missingTitle}>
-              What would actually make your wardrobe work harder?
+              Find the missing pieces worth buying
             </Display>
-            {missing ? (
-              <View style={{ marginTop: spacing.md }}>
-                <Txt style={styles.missingItem}>{missing.recommendation}</Txt>
-                {missing.reason ? <Txt style={styles.missingReason}>{missing.reason}</Txt> : null}
-                {missing.avoid ? (
-                  <View style={styles.avoidRow}>
-                    <Feather name="alert-triangle" size={13} color={colors.warning} />
-                    <Txt style={styles.avoidTxt}>{missing.avoid}</Txt>
-                  </View>
-                ) : null}
-                <Pressable style={styles.missingRedo} onPress={findMissing} testID="missing-redo">
-                  <Txt style={styles.missingRedoTxt}>Re-analyze</Txt>
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable style={styles.missingBtn} testID="find-missing-button" onPress={findMissing} disabled={missingLoading}>
-                {missingLoading ? (
-                  <ActivityIndicator color={colors.onBrandPrimary} />
-                ) : (
-                  <Txt style={styles.missingBtnTxt}>Find my missing piece</Txt>
-                )}
-              </Pressable>
-            )}
-          </View>
+            <Txt style={styles.missingReason}>
+              Aureve reads what you already own and surfaces the gaps that would add the most outfits — never duplicates.
+            </Txt>
+            <View style={styles.missingRedo}>
+              <Txt style={styles.missingRedoTxt}>{premium ? "Open Shopping Intelligence" : "Unlock with Premium"}</Txt>
+              <Feather name={premium ? "arrow-right" : "lock"} size={14} color={colors.brandTertiary} />
+            </View>
+          </Pressable>
 
           {/* Confidence scores */}
           {data?.avg_confidence != null && (
@@ -597,7 +567,7 @@ const styles = StyleSheet.create({
   avoidTxt: { flex: 1, fontSize: 13, color: colors.warning, lineHeight: 19 },
   missingBtn: { backgroundColor: colors.surface, height: 48, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", marginTop: spacing.lg },
   missingBtnTxt: { color: colors.onSurface, fontSize: 15 },
-  missingRedo: { marginTop: spacing.lg, alignSelf: "flex-start" },
+  missingRedo: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.lg, alignSelf: "flex-start" },
   missingRedoTxt: { color: colors.brandTertiary, fontSize: 13, textDecorationLine: "underline" },
   section: { marginTop: spacing["2xl"] },
   sectionTitle: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginBottom: spacing.lg },

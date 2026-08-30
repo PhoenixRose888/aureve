@@ -172,3 +172,8 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Packing Assistant references removed from user-facing copy: premium.tsx feature list + looks.tsx empty state. Dormant code kept (app/packing.tsx, _layout Stack.Screen, backend /packing/plan) for a future version.
 - Tested iteration 25: backend 4/4, frontend 6/6, 100%. No new build needed for backend; frontend needs redeploy + new iOS build to reach devices.
 - OPEN: memory/ASO_store_listing.md store copy STILL mentions "packing/packing lists/packing capsules" — must be updated in App Store Connect before listing, since Packing is now deferred.
+
+## Reviewer Premium fix + Shopping Intelligence naming (2026-06)
+- BUG (reviewer not premium in-app): login flows set user from raw /auth/login response, which lacks the COMPUTED `premium` flag (only /auth/me derives it from premium_until). So reviewer (premium_until=2099) appeared non-premium → paywall. FIX: AuthContext now hydrates user from /auth/me right after token set in email, Google-session, and Apple login. Backend unchanged (grant was already correct).
+- Naming: Profile "THE MISSING PIECE" card rebranded to "SHOPPING INTELLIGENCE" entry that routes to /shop (premium) or /premium (free); removed inline duplicate missing-piece analysis + unused state. Inside /shop the gap section labelled "MISSING PIECES · WARDROBE GAP ANALYSIS". /insights/missing-piece endpoint retained.
+- Verified iteration 26: reviewer premium recognised immediately, Shopping Intelligence opens without paywall, guest still gated. FRONTEND-ONLY changes → requires a NEW iOS build to reach devices; redeploy backend only needed to ensure reviewer account+premium exists in production.

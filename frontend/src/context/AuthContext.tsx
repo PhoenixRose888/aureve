@@ -59,7 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await setToken(data.session_token);
     if (guestToken) await storage.secureRemove(GUEST_MIGRATE_KEY);
-    setUser(data.user);
+    // Hydrate from /auth/me so computed fields (e.g. premium) are present.
+    setUser(await api<User>("/auth/me"));
   }, []);
 
   const checkExisting = useCallback(async () => {
@@ -185,7 +186,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       await setToken(data.session_token);
       await storage.secureRemove(GUEST_MIGRATE_KEY);
-      setUser(data.user);
+      // Hydrate from /auth/me so computed fields (e.g. premium) are present.
+      setUser(await api<User>("/auth/me"));
     } catch (e: any) {
       // User tapped Cancel on the native sheet — not an error worth surfacing.
       if (e?.code === "ERR_REQUEST_CANCELED") return;
@@ -217,7 +219,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         { method: "POST", auth: false, body: { email, password, name, guest_token } }
       );
       await setToken(data.session_token);
-      setUser(data.user);
+      // Hydrate from /auth/me so computed fields (e.g. premium) are present.
+      setUser(await api<User>("/auth/me"));
     } finally {
       setSigningIn(false);
     }

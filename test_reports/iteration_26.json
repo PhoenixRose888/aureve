@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 26 — Reviewer premium recognition fix + Shopping Intelligence naming validated end-to-end. Backend (4/4 pytest passed): reviewer /auth/me returns premium=true; guest /auth/me premium=false; POST /api/insights/shopping-intelligence returns 200 with recommendations for reviewer and 402 for guest. Frontend (Expo web, mobile viewport 390x844): after email/password login as review@aureve.app / AureveTest2026 the app immediately recognises the account as PREMIUM (AuthContext now hydrates from /auth/me). Wardrobe tab shopping-intelligence-entry renders chevron-right (Feather glyph \\uf130) and tap navigates to /shop. On /shop the analyse-wardrobe button label is 'Analyse my wardrobe' (no lock/Unlock text) and tapping it produces gap-result cards populated with pieces, priority pills, 'why', ~N outfits it could unlock, and pairs_with chips referencing owned items — no /premium redirect. Profile tab card testID shopping-intelligence-profile has kicker 'SHOPPING INTELLIGENCE' (NOT 'THE MISSING PIECE'), CTA reads 'Open Shopping Intelligence' for reviewer, and tapping opens /shop (not /premium). Guest gating still correct: wardrobe entry shows lock (Feather glyph \\uf193) and routes to /premium; profile card CTA reads 'Unlock with Premium' and routes to /premium; /shop analyse-wardrobe button shows lock + 'Unlock with Premium' and taps route to /premium. No red-screen or blocking console errors (only benign RN Web deprecation warnings for shadow*/pointerEvents already noted in prior iterations).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration25_shopping_intel.py",
+    "/app/test_reports/pytest/pytest_iteration26.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AuthContext.tsx: login/register/apple/session flows now correctly hydrate the user from /auth/me after setting the token — fixes the reviewer-showing-as-non-premium bug since the raw /auth/login response omits the computed `premium` field. Good defensive fix in one place (also covers register + Apple).",
+    "AuthContext.tsx line 248: refreshUser has a formatting quirk — `useCallback(async () => {    try {` places `try` on the same line as the arrow-open. Cosmetic only.",
+    "profile.tsx line 226-243: single 'Shopping Intelligence' card correctly replaces the standalone 'Missing Piece' card; kicker + CTA correctly branch on premium. No competing entry points to /premium or /shop for the same feature.",
+    "wardrobe.tsx line 145-160: banner correctly uses `router.push(premium ? '/shop' : '/premium')` and icon toggles chevron-right vs lock via premium flag — matches the profile card behaviour."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. Used the auto-seeded reviewer account (review@aureve.app) and POST /api/auth/guest (fresh guest with 16-item demo wardrobe).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "AuthContext.tsx hydration from /auth/me after login is the critical guard for premium recognition; any future auth path (Apple, Google, register, email) MUST call `setUser(await api('/auth/me'))` instead of using the raw session response. To assert lock vs chevron in Feather icons over web: chevron-right glyph is \\uf130 and lock glyph is \\uf193 (do NOT use \\uf112). /shop is a hidden tab (href:null) reached via Wardrobe banner or Profile card — always navigate via testID taps or direct URL. Reviewer login skips onboarding automatically because /login is reachable once aureve_launched + aureve_onboarded are set in storage; the test helper sets both keys and posts directly to /login.",
+  "rca_of_issue": "Root cause of the reviewer-showing-as-non-premium bug: POST /api/auth/login returns the raw user document from the users collection, which does NOT include the computed `premium` boolean (only `premium_until`). Only GET /api/auth/me post-processes premium_until into a `premium` boolean. Previously the frontend called `setUser(data.user)` from the /auth/login response, so `user.premium` was undefined and !!user?.premium evaluated false — the reviewer was treated as free despite premium_until=2099. Fix: after token is stored, call `setUser(await api('/auth/me'))` in all four login paths (email login, email register, Apple, Google session). Verified: reviewer immediately sees chevron on Shopping Intelligence entry, /shop opens without paywall, and profile card shows 'Open Shopping Intelligence'."
+}
