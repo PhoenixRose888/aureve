@@ -41,9 +41,15 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Restore the persisted active profile into the API client FIRST, before
+      // any /profiles or /items request — otherwise the first wardrobe fetch on
+      // relaunch goes out with no X-Profile-Id and resolves to the default
+      // (earliest) profile, making items appear "lost" and showing another
+      // profile's data. This restore closes that scoping/timing gap.
+      const stored = await storage.getItem<string | null>(KEY, null);
+      if (stored) setActiveProfileId(stored);
       const list = await api<Profile[]>("/profiles");
       setProfiles(list);
-      const stored = await storage.getItem<string | null>(KEY, null);
       const chosen = list.find((p) => p.id === stored)?.id || list[0]?.id || null;
       await applyActive(chosen);
     } catch {}

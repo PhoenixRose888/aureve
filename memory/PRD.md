@@ -183,3 +183,12 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Evidence: add-item.tsx L93-94 apply AI name/category ONLY if (!name)/(CATEGORIES.includes); L134 fallback "New {category}". CATEGORIES already has Accessories/Bags/Jewellery so category-drop is NOT a missing-enum issue.
 - Prime suspect: BULK-ADD path ("Several" button in screenshot) not carrying AI name/category into save payload -> defaults Tops + "New tops"; and likely partial/non-persist or wrong profile scoping on reload causing count drop.
 - NEXT (do NOT wipe data): inspect app/bulk-add.tsx save payload; backend POST/GET /items (id gen, profile scoping via get_scope, any limit/truncation); confirm images persist in object storage; verify persistence across reload with testing_agent. Then P3 Dress Me week variety (add cross-day used-item awareness).
+
+## WARDROBE PERSISTENCE RCA — FIXED & VERIFIED (iteration 27)
+- ROOT CAUSE: items scope per profile via X-Profile-Id header. ProfileContext.load() set the header only AFTER /profiles fetched, so first /items (and early uploads) on relaunch had NO header -> get_scope fell back to DEFAULT/earliest profile. Multi-profile (premium/household) accounts thus saw a DIFFERENT profile (old/generic "New tops" items) and their real named items were hidden -> looked like data loss + wrong names. Backend persists name/category faithfully (verified).
+- FIX (frontend only): ProfileContext.load() restores persisted active profile into API client BEFORE any request; Wardrobe waits for profileLoading=false before GET /items.
+- Verified: relaunch sends correct X-Profile-Id on first /profiles+/items; names/categories persist; no leakage; counts stable.
+- Deliverable: backend/scripts/diagnose_wardrobe.py (READ-ONLY prod diagnostic).
+- Optional hardening (not done): get_scope could 400/404 on foreign X-Profile-Id instead of silent default fallback.
+- P3 (Dress Me / Week Ahead styling repetition) NOT yet done — deferred to next pass per user order. Needs cross-day used-item awareness + occasion weighting in the weekly plan generator.
+- Requires NEW iOS BUILD (frontend fix); backend unchanged so no redeploy strictly needed for the fix (redeploy still needed if reviewer account not yet in prod).

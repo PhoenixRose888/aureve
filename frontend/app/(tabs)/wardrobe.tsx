@@ -9,6 +9,7 @@ import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts, CATEGORIES } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
+import { useProfiles } from "@/src/context/ProfileContext";
 import GarmentImage from "@/src/components/GarmentImage";
 
 const GUTTER = spacing.md;
@@ -23,6 +24,7 @@ export default function Wardrobe() {
   const router = useRouter();
   const { user } = useAuth();
   const premium = !!user?.premium;
+  const { active, loading: profileLoading } = useProfiles();
   const { width } = useWindowDimensions();
   const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
   const [items, setItems] = useState<any[]>([]);
@@ -41,8 +43,10 @@ export default function Wardrobe() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      // Wait until the active profile is resolved so /items is always scoped to
+      // the correct profile (never a null-header fallback to the default one).
+      if (!profileLoading) load();
+    }, [load, profileLoading, active?.id])
   );
 
   const notReady = items.filter((i) => (i.availability || "Ready") !== "Ready");
