@@ -1260,6 +1260,7 @@ class SuggestRequest(BaseModel):
     temperature: Optional[float] = None
     weather: Optional[str] = None
     notes: Optional[str] = ""
+    avoid_item_ids: Optional[List[str]] = None  # items already used elsewhere this week
 
 
 class WearLog(BaseModel):
@@ -1650,7 +1651,7 @@ async def stylist_suggest(payload: SuggestRequest, user: dict = Depends(get_scop
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "stylist")
-    return await _build_outfit(user, payload.occasion, payload.temperature, payload.weather, payload.notes)
+    return await _build_outfit(user, payload.occasion, payload.temperature, payload.weather, payload.notes, payload.avoid_item_ids)
 
 
 STYLIST_CHAT_SYSTEM = (
@@ -1715,7 +1716,8 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
 
 
 async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
-                        weather: Optional[str], notes: Optional[str]):
+                        weather: Optional[str], notes: Optional[str],
+                        avoid_item_ids: Optional[List[str]] = None):
     items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 2:
@@ -1725,13 +1727,29 @@ async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
     weather_line = ""
     if temperature is not None:
         weather_line = f"Temperature: {temperature}°C. Conditions: {weather or 'n/a'}."
+    # Cross-day variety: name the pieces already worn elsewhere this week so the
+    # stylist intentionally varies looks instead of repeating the same hero items.
+    variety_line = ""
+    if avoid_item_ids:
+        avoid = set(avoid_item_ids)
+        used = [it for it in items if it.get("id") in avoid]
+        if used:
+            names = ", ".join(f"{it.get('name')} ({it.get('category')})" for it in used)
+            variety_line = (
+                f"ALREADY WORN elsewhere this week: {names}.\n"
+                "Deliberately create a DIFFERENT look: vary the silhouette, colour palette, footwear and "
+                "accessories, and avoid reusing the same hero pieces (tops, bottoms, dresses, outerwear, shoes, bags) "
+                "unless there is a clear styling reason. Versatile basics may be reused only if styled noticeably "
+                "differently. Make genuine use of the wider wardrobe.\n"
+            )
     prompt = (
         f"Occasion: {occasion}\n{weather_line}\n"
         f"Extra notes: {notes or 'none'}\n"
+        f"{variety_line}"
         f"{profile_context(user)}\n"
         f"Learned preferences: {prefs}\n\n"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
-        "Build one cohesive, weather-appropriate outfit. Return JSON only."
+        "Build one cohesive, weather- and occasion-appropriate outfit. Return JSON only."
     )
     chat = await ai_chat(f"stylist-{user['user_id']}-{uuid.uuid4().hex[:6]}", STYLIST_SYSTEM)
     try:

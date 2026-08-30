@@ -81,9 +81,19 @@ export default function Planner() {
     if (!activeDate) return;
     setStyling(true);
     try {
+      // Collect pieces already planned on OTHER days this week so the stylist
+      // can intentionally vary the look instead of repeating hero items.
+      const outfitById: Record<string, any> = {};
+      outfits.forEach((o) => { outfitById[o.id] = o; });
+      const avoid = new Set<string>();
+      Object.entries(plans).forEach(([date, p]: [string, any]) => {
+        if (date === activeDate || !p) return;
+        const ids = p.item_ids || outfitById[p.outfit_id]?.item_ids || [];
+        ids.forEach((id: string) => avoid.add(id));
+      });
       const r = await api<any>("/stylist/suggest", {
         method: "POST",
-        body: { occasion: occasion || "everyday" },
+        body: { occasion: occasion || "everyday", avoid_item_ids: Array.from(avoid) },
       });
       const ids = (r.resolved_items || []).map((x: any) => x.item.id);
       if (ids.length) {

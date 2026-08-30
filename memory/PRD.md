@@ -198,3 +198,9 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - add-item.tsx: captures r.confidence; when <60 shows a non-blocking "please confirm name/category" banner (testID low-confidence-banner) above the editable category chips. Best AI guess is always preserved and easy to correct; nothing is silently trusted.
 - NOTE: real-photo recognition ACCURACY can only be validated on-device with real garment photos; cannot be meaningfully curl/browser tested. Low-confidence UX + editability are in place.
 - Part of the combined redeploy + new iOS build (backend prompt + frontend UX).
+
+## Week Ahead styling diversity — FIXED (P3, 2026-06)
+- ROOT CAUSE: planner styled each day via an INDEPENDENT /stylist/suggest call with only occasion -> AI kept picking the same top-ranked "safe" hero items every day (no cross-day awareness).
+- FIX: SuggestRequest.avoid_item_ids added; _build_outfit injects an "ALREADY WORN this week" instruction telling the stylist to vary silhouette/colour/footwear/accessories and not reuse hero pieces (tops/bottoms/dresses/outerwear/shoes/bags) without reason (basics may be reused if styled differently). Frontend planner.autoStyle now collects item_ids from all OTHER days in the week (resolving outfit_id via /outfits) and passes them as avoid_item_ids. Not randomized.
+- VERIFIED (reviewer wardrobe): Day1 work=Black blouse/black trousers/tan boots/black tote/brown belt; Day2 date-night avoiding those = Floral wrap dress/camel overcoat/white sneakers -> 0 overlap, occasion-appropriate.
+- Combined redeploy + new iOS build covers P1 persistence, P2 recognition robustness, P3 weekly variety.
