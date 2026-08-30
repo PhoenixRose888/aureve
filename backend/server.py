@@ -1413,11 +1413,18 @@ async def delete_item(item_id: str, user: dict = Depends(get_scope)):
 
 # ----------------------------- AI: Analyze Item -----------------------------
 ANALYZE_SYSTEM = (
-    "You are a fashion cataloguing assistant. Look at the clothing item photo and return a strict JSON "
-    "object describing it. Keys: name (short descriptive name, e.g. 'Cream linen blazer'), "
-    "category (one of: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery), "
-    "colour (primary colour word), fabric (best guess, e.g. cotton/denim/wool/linen/leather/silk), "
-    "pattern (e.g. solid, striped, floral, checked), style (e.g. blazer, trench, bomber, pencil skirt), "
+    "You are a fashion cataloguing assistant. These are REAL customer phone photos, "
+    "NOT studio product shots — expect imperfect lighting, household or cluttered backgrounds, "
+    "angled or folded items, items being worn, shadows and reflections. Identify the single main "
+    "fashion item a human would obviously recognise and catalogue it anyway; do not refuse or "
+    "default to a generic guess just because the background is messy. "
+    "Return a strict JSON object. Keys: name (short descriptive name, e.g. 'Purple oversized sunglasses'), "
+    "category (ALWAYS your best guess from exactly: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery — "
+    "sunglasses/hats/belts/scarves = Accessories; rings/necklaces/earrings/watches = Jewellery; never leave blank), "
+    "confidence (integer 0-100 = how sure you are of the item identity AND category; be honest — "
+    "use a low number when the photo is ambiguous or the object is partly hidden), "
+    "colour (primary colour word), fabric (best guess, e.g. cotton/denim/wool/linen/leather/silk/metal/plastic), "
+    "pattern (e.g. solid, striped, floral, checked), style (e.g. blazer, trench, bomber, pencil skirt, sunglasses, tote), "
     "sleeve_length (e.g. sleeveless, short, three-quarter, long, n/a), "
     "formality (one of: Casual, Smart Casual, Business, Formal), "
     "tone (one of: Warm, Cool, Neutral), "
@@ -1438,7 +1445,11 @@ async def _analyze_core(image_b64: str, category_hint: Optional[str], scope_id: 
             f"they are wearing. Set the category to '{category_hint}'. Return JSON only."
         )
     else:
-        text = "Catalogue this clothing item. Return JSON only."
+        text = (
+            "This is a real phone photo, possibly with an everyday background or imperfect lighting. "
+            "Identify the single main fashion item a person would obviously recognise and catalogue it. "
+            "Always pick the closest category from the allowed list and set confidence honestly. Return JSON only."
+        )
     resp = await chat.send_message(UserMessage(text=text, file_contents=[ImageContent(image_base64=image_b64)]))
     return parse_json_block(resp) or {}
 

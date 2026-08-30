@@ -40,6 +40,7 @@ export default function AddItem() {
   const [pickerTarget, setPickerTarget] = useState<null | "photo" | "worn_photo">(null);
   const [hintPhoto, setHintPhoto] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [lowConf, setLowConf] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [duplicates, setDuplicates] = useState<any[]>([]);
@@ -92,6 +93,9 @@ export default function AddItem() {
         }
         if (r.name && !name) setName(r.name);
         if (r.category && CATEGORIES.includes(r.category) && !hint) setCategory(r.category);
+        // Real-world photos: if the AI is unsure, keep its best guess but ask the
+        // user to confirm the category rather than silently trusting it.
+        setLowConf(typeof r.confidence === "number" && r.confidence < 60);
         if (r.colour) setColour(r.colour);
         if (r.fabric) setFabric(r.fabric);
         if (r.pattern) setPattern(r.pattern);
@@ -257,6 +261,14 @@ export default function AddItem() {
         <Field label="Name (optional — AI fills it)" value={name} onChangeText={setName} placeholder="e.g. Cream linen blazer" testID="field-name" />
 
         <Txt style={styles.groupLabel}>CATEGORY</Txt>
+        {lowConf ? (
+          <View style={styles.confirmBanner} testID="low-confidence-banner">
+            <Feather name="help-circle" size={15} color={colors.warning} />
+            <Txt style={styles.confirmTxt}>
+              Aureve is not fully sure about this one — please check the name and category below before saving.
+            </Txt>
+          </View>
+        ) : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
           {CATEGORIES.map((c) => (
             <Pressable key={c} testID={`cat-${c}`} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
@@ -446,6 +458,8 @@ const styles = StyleSheet.create({
   row2: { flexDirection: "row", gap: spacing.lg },
   groupLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginTop: spacing.xl, marginBottom: spacing.md },
   chipContent: { gap: spacing.sm, paddingRight: spacing.xl },
+  confirmBanner: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md },
+  confirmTxt: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 18 },
   chip: {
     height: 36,
     flexShrink: 0,

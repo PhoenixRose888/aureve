@@ -192,3 +192,9 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - Optional hardening (not done): get_scope could 400/404 on foreign X-Profile-Id instead of silent default fallback.
 - P3 (Dress Me / Week Ahead styling repetition) NOT yet done — deferred to next pass per user order. Needs cross-day used-item awareness + occasion weighting in the weekly plan generator.
 - Requires NEW iOS BUILD (frontend fix); backend unchanged so no redeploy strictly needed for the fix (redeploy still needed if reviewer account not yet in prod).
+
+## Real-world photo recognition robustness (2026-06)
+- ANALYZE_SYSTEM prompt rewritten: told these are REAL phone photos (imperfect lighting, cluttered/household backgrounds, angled/worn items); must identify the obvious main item anyway, ALWAYS pick closest category (sunglasses/belts/scarves->Accessories; rings/watches->Jewellery), and return an honest confidence 0-100. _analyze_core no-hint prompt strengthened similarly.
+- add-item.tsx: captures r.confidence; when <60 shows a non-blocking "please confirm name/category" banner (testID low-confidence-banner) above the editable category chips. Best AI guess is always preserved and easy to correct; nothing is silently trusted.
+- NOTE: real-photo recognition ACCURACY can only be validated on-device with real garment photos; cannot be meaningfully curl/browser tested. Low-confidence UX + editability are in place.
+- Part of the combined redeploy + new iOS build (backend prompt + frontend UX).
