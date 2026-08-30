@@ -2414,6 +2414,60 @@ async def missing_piece(user: dict = Depends(get_scope)):
     return result
 
 
+SHOPPING_SYSTEM = (
+    "You are Aureve's Shopping Intelligence — a sharp, honest wardrobe-gap and "
+    "purchase advisor. Given the user's full wardrobe, recommend 3-4 NEW pieces "
+    "that would add the MOST value: genuine gaps that unlock the most new outfits, "
+    "never duplicates of what they already own well. Prefer versatile, foundational "
+    "pieces that bridge existing items. "
+    "Return STRICT JSON with keys: "
+    "summary (one honest sentence reading their wardrobe's strengths and gaps), "
+    "recommendations (array of 3-4 objects, each with: "
+    "piece (specific item, e.g. 'A tailored navy blazer'), "
+    "category (one wardrobe category), "
+    "priority (one of 'High','Medium','Low'), "
+    "why (2 sentences on the value it adds, referencing what they already own), "
+    "pairs_with (array of 2-4 EXACT names of items they ALREADY own that it would combine with), "
+    "outfits_added (integer estimate of new workable outfits it enables)), "
+    "avoid (one honest sentence about a category they already over-own). "
+    "Only reference items that exist in the wardrobe for pairs_with. Return ONLY JSON."
+)
+
+
+@api_router.post("/insights/shopping-intelligence")
+async def shopping_intelligence(user: dict = Depends(get_scope)):
+    """Premium wardrobe-gap shopping advisor: analyses what the user owns and
+    recommends the highest-value NEW pieces (genuine gaps, not duplicates), why
+    each helps, what it pairs with, and how many outfits it could unlock. Builds
+    on the same wardrobe analysis as the Missing Piece insight."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    await enforce_limit(user, "shop")
+    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
+    if len(items) < 3:
+        raise HTTPException(status_code=400, detail="Add a few more pieces so Aureve can find your real wardrobe gaps")
+    wardrobe = summarize_items_for_ai(items)
+    counts: dict = {}
+    for it in items:
+        counts[it.get("category", "Other")] = counts.get(it.get("category", "Other"), 0) + 1
+    breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items())
+    prompt = (
+        f"Wardrobe breakdown by count: {breakdown}\n\n"
+        f"Full wardrobe:\n{wardrobe}\n\n"
+        "Recommend the highest-value pieces to buy next. Return JSON only."
+    )
+    chat = await ai_chat(f"shopiq-{user['user_id']}-{uuid.uuid4().hex[:6]}", SHOPPING_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("shopping-intelligence failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp)
+    if not result or not result.get("recommendations"):
+        raise HTTPException(status_code=502, detail="Could not analyze your wardrobe")
+    return result
+
+
 # ----------------------------- AI: Packing Capsule -----------------------------
 class PackingRequest(BaseModel):
     destination: str

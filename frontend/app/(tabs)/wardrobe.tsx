@@ -8,6 +8,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts, CATEGORIES } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { useAuth } from "@/src/context/AuthContext";
 import GarmentImage from "@/src/components/GarmentImage";
 
 const GUTTER = spacing.md;
@@ -20,6 +21,8 @@ const EMPTY_IMG =
 export default function Wardrobe() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
+  const premium = !!user?.premium;
   const { width } = useWindowDimensions();
   const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
   const [items, setItems] = useState<any[]>([]);
@@ -136,6 +139,23 @@ export default function Wardrobe() {
             {laundryMode ? "Showing laundry only" : `${notReady.length} in the laundry`}
           </Txt>
           <Feather name={laundryMode ? "x" : "chevron-right"} size={16} color={laundryMode ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
+        </Pressable>
+      )}
+
+      {!laundryMode && (
+        <Pressable
+          style={styles.shopIqBanner}
+          testID="shopping-intelligence-entry"
+          onPress={() => router.push(premium ? "/shop" : "/premium")}
+        >
+          <View style={styles.shopIqIcon}>
+            <Feather name="trending-up" size={16} color={colors.brand} />
+          </View>
+          <View style={styles.shopIqText}>
+            <Txt style={styles.shopIqTitle}>Shopping Intelligence</Txt>
+            <Txt style={styles.shopIqSub} numberOfLines={1}>Find the gaps worth filling — shop smarter</Txt>
+          </View>
+          <Feather name={premium ? "chevron-right" : "lock"} size={16} color={colors.onSurfaceTertiary} />
         </Pressable>
       )}
 
@@ -286,6 +306,26 @@ const styles = StyleSheet.create({
   },
   laundryBannerActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   laundryBannerTxt: { flex: 1, fontSize: 13, color: colors.onBrandTertiary },
+  shopIqBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  shopIqIcon: {
+    width: 34, height: 34, borderRadius: radius.pill,
+    backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center",
+  },
+  shopIqText: { flex: 1 },
+  shopIqTitle: { fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium },
+  shopIqSub: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   cardName: { fontSize: 14, color: colors.onSurface, marginTop: spacing.sm },
   cardMeta: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },

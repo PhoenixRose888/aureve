@@ -84,7 +84,7 @@ export default function Looks() {
         <View style={styles.center}><ActivityIndicator color={colors.onSurface} /></View>
       ) : tab === "saved" ? (
         outfits.length === 0 ? (
-          <Empty icon="bookmark" text="No saved looks yet. Save outfits from the Stylist or capsules from Packing." />
+          <Empty icon="bookmark" text="No saved looks yet. Save outfits from the Stylist to see them here." />
         ) : (
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
             {outfits.map((o) => (

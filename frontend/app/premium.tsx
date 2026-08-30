@@ -12,7 +12,6 @@ import { isPurchasesAvailable, restorePurchases, presentPaywall, presentCustomer
 const FEATURES = [
   "Unlimited AI styling & outfits",
   "Dress Me — one tap every morning",
-  "Packing Assistant for any trip",
   "Shopping Intelligence (skip duplicates)",
   "Colour analysis + hair & makeup",
   "Capsule wardrobes & occasion planning",

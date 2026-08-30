@@ -163,3 +163,12 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - PrivacyInfo.xcprivacy: NOT missing — required-reason SDKs ship their own signed manifests, merged by Expo at prebuild. No change made.
 - OPEN (user/production): confirm live iOS RevenueCat key (appl_...) is set in Emergent Custom Keys so the production build doesn't ship a test key.
 - Requires: redeploy backend + generate a NEW iOS build (app.json entitlement + new native dep + backend changes).
+
+## Shopping Intelligence + Packing removal (2026-06)
+- NEW Premium feature "Shopping Intelligence" (built on wardrobe-gap analysis, reuses existing 'premium' entitlement — no new purchase system).
+  - Backend: POST /api/insights/shopping-intelligence, gated by enforce_limit(user,'shop') → 402 for free. Returns {summary, recommendations[{piece,category,priority,why,pairs_with[owned item names],outfits_added}], avoid}.
+  - Frontend: repurposed hidden /(tabs)/shop.tsx into "Shopping Intelligence" (gap analysis section on top + existing photo shop-check below). Entry banner added on Wardrobe tab (testID shopping-intelligence-entry): premium → /shop, free → /premium (lock icon).
+  - Existing /insights/missing-piece (Profile card, health-report) left intact.
+- Packing Assistant references removed from user-facing copy: premium.tsx feature list + looks.tsx empty state. Dormant code kept (app/packing.tsx, _layout Stack.Screen, backend /packing/plan) for a future version.
+- Tested iteration 25: backend 4/4, frontend 6/6, 100%. No new build needed for backend; frontend needs redeploy + new iOS build to reach devices.
+- OPEN: memory/ASO_store_listing.md store copy STILL mentions "packing/packing lists/packing capsules" — must be updated in App Store Connect before listing, since Packing is now deferred.

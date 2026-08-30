@@ -25,6 +25,31 @@ export default function Shop() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
 
+  // Wardrobe gap analysis (Shopping Intelligence core)
+  const [gapLoading, setGapLoading] = useState(false);
+  const [gap, setGap] = useState<any>(null);
+  const [gapError, setGapError] = useState("");
+
+  const analyseWardrobe = async () => {
+    if (!premium) {
+      router.push("/premium");
+      return;
+    }
+    setGapError("");
+    setGapLoading(true);
+    try {
+      const r = await api<any>("/insights/shopping-intelligence", { method: "POST" });
+      setGap(r);
+    } catch (e: any) {
+      if (e.status === 402) {
+        router.push("/premium");
+      } else {
+        setGapError(e.message || "Couldn't analyse your wardrobe");
+      }
+    }
+    setGapLoading(false);
+  };
+
   const openPicker = () => {
     if (!premium) {
       router.push("/premium");
@@ -60,11 +85,78 @@ export default function Shop() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Txt style={styles.kicker}>BEFORE YOU BUY</Txt>
-        <Display weight="medium" style={styles.title}>Shop check</Display>
+        <Txt style={styles.kicker}>SHOPPING INTELLIGENCE</Txt>
+        <Display weight="medium" style={styles.title}>Shop smarter</Display>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* --- Wardrobe gap analysis: the core of Shopping Intelligence --- */}
+        <View style={styles.gapBlock}>
+          <Txt style={styles.sectionLabel}>WARDROBE GAP ANALYSIS</Txt>
+          <Txt style={styles.gapIntro}>
+            Aureve reads what you already own and recommends the pieces that would add the most value — real gaps worth filling, never duplicates.
+          </Txt>
+          {!gap ? (
+            <Pressable style={styles.analyseBtn} testID="analyse-wardrobe" onPress={analyseWardrobe} disabled={gapLoading}>
+              {gapLoading ? (
+                <ActivityIndicator color={colors.onBrandPrimary} />
+              ) : (
+                <>
+                  <Feather name={premium ? "trending-up" : "lock"} size={16} color={colors.onBrandPrimary} />
+                  <Txt style={styles.analyseBtnTxt}>{premium ? "Analyse my wardrobe" : "Unlock with Premium"}</Txt>
+                </>
+              )}
+            </Pressable>
+          ) : null}
+          {gapError ? <Txt style={styles.error} testID="gap-error">{gapError}</Txt> : null}
+          {gap ? (
+            <View testID="gap-result" style={styles.gapResult}>
+              {gap.summary ? <Txt style={styles.gapSummary}>{gap.summary}</Txt> : null}
+              {(gap.recommendations || []).map((rec: any, i: number) => (
+                <View key={i} style={styles.recCard}>
+                  <View style={styles.recTop}>
+                    <Display weight="medium" style={styles.recPiece}>{rec.piece}</Display>
+                    {rec.priority ? (
+                      <View style={styles.priorityPill}>
+                        <Txt style={styles.priorityTxt}>{String(rec.priority).toUpperCase()}</Txt>
+                      </View>
+                    ) : null}
+                  </View>
+                  {rec.category ? <Txt style={styles.recCategory}>{rec.category}</Txt> : null}
+                  {rec.why ? <Txt style={styles.recWhy}>{rec.why}</Txt> : null}
+                  {typeof rec.outfits_added === "number" ? (
+                    <View style={styles.recStat}>
+                      <Feather name="plus-circle" size={14} color={colors.brand} />
+                      <Txt style={styles.recStatTxt}>~{rec.outfits_added} new outfits it could unlock</Txt>
+                    </View>
+                  ) : null}
+                  {(rec.pairs_with || []).length > 0 ? (
+                    <View style={styles.pairsWrap}>
+                      <Txt style={styles.pairsLabel}>Works with what you own</Txt>
+                      <View style={styles.pairsChips}>
+                        {rec.pairs_with.map((p: string, j: number) => (
+                          <View key={j} style={styles.pairChip}><Txt style={styles.pairChipTxt}>{p}</Txt></View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+              {gap.avoid ? (
+                <View style={styles.avoidNote}>
+                  <Feather name="alert-circle" size={14} color={colors.warning} />
+                  <Txt style={styles.avoidTxt}>{gap.avoid}</Txt>
+                </View>
+              ) : null}
+              <Pressable style={styles.newCheckBtn} testID="gap-refresh" onPress={analyseWardrobe}>
+                <Txt style={styles.newCheckTxt}>Re-analyse wardrobe</Txt>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.divider} />
+        <Txt style={styles.sectionLabel}>CHECK A SPECIFIC ITEM</Txt>
         {!image ? (
           <Pressable style={styles.dropzone} testID="shop-upload-button" onPress={openPicker}>
             <View style={styles.dropIcon}>
@@ -184,6 +276,34 @@ const styles = StyleSheet.create({
   kicker: { fontSize: 11, letterSpacing: 2, color: colors.onSurfaceTertiary, marginBottom: 2 },
   title: { fontSize: 34 },
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
+  gapBlock: { marginBottom: spacing.lg },
+  sectionLabel: { fontSize: 11, letterSpacing: 2, color: colors.onSurfaceTertiary, marginBottom: spacing.sm },
+  gapIntro: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21, marginBottom: spacing.lg },
+  analyseBtn: {
+    backgroundColor: colors.brandPrimary,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm,
+    height: 52, borderRadius: radius.sm,
+  },
+  analyseBtnTxt: { color: colors.onBrandPrimary, fontSize: 15 },
+  gapResult: { marginTop: spacing.xs },
+  gapSummary: { fontSize: 15, color: colors.onSurface, lineHeight: 22, marginBottom: spacing.lg, fontStyle: "italic" },
+  recCard: { borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  recTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  recPiece: { fontSize: 19, flex: 1, lineHeight: 24 },
+  priorityPill: { borderWidth: 0.5, borderColor: colors.borderStrong, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 3 },
+  priorityTxt: { fontSize: 10, letterSpacing: 1, color: colors.onSurfaceSecondary },
+  recCategory: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 2 },
+  recWhy: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 21, marginTop: spacing.sm },
+  recStat: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
+  recStatTxt: { fontSize: 13, color: colors.onSurface },
+  pairsWrap: { marginTop: spacing.md },
+  pairsLabel: { fontSize: 11, letterSpacing: 1, color: colors.onSurfaceTertiary, marginBottom: spacing.sm },
+  pairsChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  pairChip: { backgroundColor: colors.brandTertiary, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 5 },
+  pairChipTxt: { fontSize: 12, color: colors.onBrandTertiary },
+  avoidNote: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs, marginBottom: spacing.md, backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderRadius: radius.sm },
+  avoidTxt: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  divider: { height: 0.5, backgroundColor: colors.divider, marginVertical: spacing.xl },
   dropzone: {
     borderWidth: 0.5,
     borderColor: colors.border,
