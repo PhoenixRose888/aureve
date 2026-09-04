@@ -204,3 +204,14 @@ A digital wardrobe app that solves three problems: (1) cataloguing what you own 
 - FIX: SuggestRequest.avoid_item_ids added; _build_outfit injects an "ALREADY WORN this week" instruction telling the stylist to vary silhouette/colour/footwear/accessories and not reuse hero pieces (tops/bottoms/dresses/outerwear/shoes/bags) without reason (basics may be reused if styled differently). Frontend planner.autoStyle now collects item_ids from all OTHER days in the week (resolving outfit_id via /outfits) and passes them as avoid_item_ids. Not randomized.
 - VERIFIED (reviewer wardrobe): Day1 work=Black blouse/black trousers/tan boots/black tote/brown belt; Day2 date-night avoiding those = Floral wrap dress/camel overcoat/white sneakers -> 0 overlap, occasion-appropriate.
 - Combined redeploy + new iOS build covers P1 persistence, P2 recognition robustness, P3 weekly variety.
+
+## CHECKPOINT (handoff)
+Aureve (Expo+FastAPI+Mongo), prod live, prepping App Store iOS+Play.
+DONE in PREVIEW, pending ONE combined redeploy+new iOS build:
+- iOS RevenueCat: frontend/.env now LIVE appl_(iOS)+goog_(Android), entitlement=premium (verified masked). TestFlight still has old test_ key -> rebuild needed.
+- P1 wardrobe data-loss FIXED (profile-scope header timing: ProfileContext.load + wardrobe.tsx gate). backend/scripts/diagnose_wardrobe.py READ-ONLY diag (user not run yet; find scattered items under another profile before safe re-scope, NO deletes).
+- P2 recognition FIXED (ANALYZE_SYSTEM real-photo prompt+confidence 0-100; add-item.tsx confirm banner <60). needs on-device check.
+- P3 Week Ahead variety FIXED (SuggestRequest.avoid_item_ids + cross-day prompt; planner passes other-day ids).
+- Shopping Intelligence Premium live; Missing Pieces=subsection; Packing refs removed(dormant); Sign in with Apple added; reviewer review@aureve.app/AureveTest2026 premium_until=2099.
+NEXT: user runs diag -> re-scope; combined redeploy+build; on-device verify.
+CONSTRAINTS: dont change RevenueCat config/prices/ids, entitlement premium, bundle com.emergent.wardrobeai.l0r5ay, auth, reviewer creds, legal; never expose full keys; no data wipes.
