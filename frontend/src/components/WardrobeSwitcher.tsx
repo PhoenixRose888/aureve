@@ -5,7 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { useProfiles } from "@/src/context/ProfileContext";
-import { useAuth } from "@/src/context/AuthContext";
+import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 
 /** The one place to switch between wardrobes and add a family wardrobe.
  *  Premium belongs to the subscribing account — family wardrobes are managed
@@ -18,8 +18,7 @@ export default function WardrobeSwitcher({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { user } = useAuth();
-  const premium = !!user?.premium;
+  const { accountPremium } = usePremiumAccess();
   const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,7 +37,7 @@ export default function WardrobeSwitcher({
   };
 
   const add = async () => {
-    if (!premium) return goPremium();
+    if (!accountPremium) return goPremium();
     const name = newName.trim();
     if (!name) {
       setError("Give the wardrobe a name first (e.g. David).");
@@ -78,9 +77,9 @@ export default function WardrobeSwitcher({
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Display weight="medium" style={styles.title}>Wardrobes</Display>
           <Txt style={styles.sub}>
-            {premium
-              ? "Your Premium plan covers the whole household — each wardrobe is a profile under your account, kept completely separate."
-              : "Family wardrobes come with Premium. One plan covers everyone in the household."}
+            {accountPremium
+              ? "Your subscription runs on your main wardrobe. Family wardrobes are managed profiles under your account — full wardrobe management, kept completely separate, and not separate Premium seats."
+              : "Family wardrobes come with Premium. Premium features stay on your own main wardrobe."}
           </Txt>
 
           {profiles.map((p) => (
@@ -97,6 +96,7 @@ export default function WardrobeSwitcher({
                   <Txt style={styles.emoji}>{p.emoji || "👤"}</Txt>
                 </View>
                 <Txt style={styles.name}>{p.name}</Txt>
+                {p.is_primary ? <Txt style={styles.primaryTag}>MAIN</Txt> : null}
                 {active?.id === p.id ? <Feather name="check" size={18} color={colors.brand} /> : null}
               </Pressable>
               {profiles.length > 1 ? (
@@ -132,7 +132,7 @@ export default function WardrobeSwitcher({
               }}
               placeholder="New wardrobe name (e.g. David)"
               placeholderTextColor={colors.onSurfaceTertiary}
-              editable={premium && !busy}
+              editable={accountPremium && !busy}
               onSubmitEditing={add}
               returnKeyType="done"
               testID="new-profile-input"
@@ -143,8 +143,8 @@ export default function WardrobeSwitcher({
               <ActivityIndicator color={colors.onBrandPrimary} />
             ) : (
               <>
-                <Feather name={premium ? "plus" : "lock"} size={16} color={colors.onBrandPrimary} />
-                <Txt style={styles.addTxt}>{premium ? "Add wardrobe" : "Add wardrobe with Premium"}</Txt>
+                <Feather name={accountPremium ? "plus" : "lock"} size={16} color={colors.onBrandPrimary} />
+                <Txt style={styles.addTxt}>{accountPremium ? "Add wardrobe" : "Add wardrobe with Premium"}</Txt>
               </>
             )}
           </Pressable>
@@ -178,6 +178,11 @@ const styles = StyleSheet.create({
   avatarActive: { borderColor: colors.brand },
   emoji: { fontSize: 18 },
   name: { flex: 1, fontSize: 16, color: colors.onSurface },
+  primaryTag: {
+    fontSize: 9, letterSpacing: 1, color: colors.onSurfaceTertiary,
+    borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.pill,
+    paddingHorizontal: 6, paddingVertical: 2, overflow: "hidden",
+  },
   confirmRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   confirmYes: { fontSize: 14, color: colors.error },
   confirmNo: { fontSize: 14, color: colors.onSurfaceTertiary },

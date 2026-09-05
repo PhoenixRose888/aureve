@@ -5,9 +5,9 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
-import { useAuth } from "@/src/context/AuthContext";
 import { useWeather } from "@/src/hooks/useWeather";
 import { api } from "@/src/api/client";
+import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import GarmentImage from "@/src/components/GarmentImage";
 import * as haptics from "@/src/utils/haptics";
 
@@ -20,9 +20,8 @@ const SLOTS = [
 export default function OutfitBuilder() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
   const { weather } = useWeather();
-  const premium = !!user?.premium;
+  const { premium } = usePremiumAccess();
 
   const [items, setItems] = useState<any[]>([]);
   const [selected, setSelected] = useState<Record<string, any>>({});

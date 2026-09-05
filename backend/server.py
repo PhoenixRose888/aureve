@@ -176,13 +176,23 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
         )
     if not prof:
         prof = await ensure_default_profile(account_id, account.get("name"))
+    # The subscription belongs to the account and its PRIMARY (first) wardrobe.
+    # Family wardrobes are managed profiles: full wardrobe management, but they
+    # are not independent Premium seats.
+    primary = await db.profiles.find(
+        {"user_id": account_id}, {"_id": 0, "id": 1}
+    ).sort("created_at", 1).to_list(1)
+    is_primary = bool(primary) and primary[0]["id"] == prof["id"]
+    account_premium = is_premium(account)
     return {
         "user_id": prof["id"],       # data scope = profile id
         "account_id": account_id,
         "profile_id": prof["id"],
         "profile_name": prof.get("name"),
         "profile": prof.get("profile") or {},
-        "premium": is_premium(account),
+        "is_primary": is_primary,
+        "account_premium": account_premium,
+        "premium": account_premium and is_primary,
         # Sample/practice pieces belong to Guest mode and the Apple review
         # account only — never to a real signed-in wardrobe.
         "show_demo": bool(account.get("is_guest")) or _norm_email(account.get("email") or "") == REVIEWER_EMAIL,
@@ -238,6 +248,9 @@ async def enforce_limit(scope: dict, feature: str):
         return
     cfg = FREE_LIMITS.get(feature)
     msg = PREMIUM_MESSAGES.get(feature, "This is a Premium feature.")
+    if scope.get("account_premium") and not scope.get("is_primary"):
+        msg = ("Premium features run on your main wardrobe. Switch back to it to use this — "
+               "family wardrobes keep full wardrobe management.")
     if cfg is None:
         raise HTTPException(status_code=402, detail=msg)
     now = now_utc()
@@ -1150,6 +1163,8 @@ async def list_profiles(account: dict = Depends(get_current_user)):
     if not profs:
         prof = await ensure_default_profile(account["user_id"], account.get("name"))
         profs = [prof]
+    for i, pr in enumerate(profs):
+        pr["is_primary"] = i == 0
     return profs
 
 
@@ -1172,6 +1187,7 @@ async def create_profile(payload: ProfileCreate, account: dict = Depends(get_cur
     }
     await db.profiles.insert_one({**prof})
     prof.pop("_id", None)
+    prof["is_primary"] = False
     return prof
 
 
@@ -1365,7 +1381,7 @@ async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
     has_image = bool((payload.photo or "").strip()) or bool((payload.worn_photo or "").strip())
     if not has_image:
         raise HTTPException(status_code=400, detail="A photo is required to add an item.")
-    if not user.get("premium"):
+    if not user.get("account_premium"):
         active = await db.items.count_documents(items_scope(user))
         if active >= FREE_ITEM_CAP:
             raise HTTPException(
@@ -2203,6 +2219,79 @@ async def my_wardrobe_audit(account: dict = Depends(get_current_user)):
         "items_total_all_wardrobes": sum(w["items_total"] for w in wardrobes) + stranded,
         "other_accounts_same_email": others,
         "recent_items": recent_list,
+        "read_only": True,
+    }
+
+
+@api_router.get("/diag/wardrobe-scan")
+async def wardrobe_scan(email: Optional[str] = None, account: dict = Depends(get_current_user)):
+    """STRICTLY READ-ONLY scan to locate a wardrobe that is not showing up in the
+    app (e.g. catalogued under a different sign-in method or under a guest
+    session that was never migrated). Requires a valid session. Returns counts
+    and coarse metadata only — no item names, no photos, emails partially
+    masked. Diagnostic aid; makes no writes."""
+    def mask(e: Optional[str]) -> str:
+        if not e or "@" not in e:
+            return e or ""
+        name, dom = e.split("@", 1)
+        return f"{name[:2]}***@{dom}"
+
+    async def wardrobes_of(uid: str):
+        out = []
+        for pr in await db.profiles.find({"user_id": uid}, {"_id": 0}).sort("created_at", 1).to_list(20):
+            total = await db.items.count_documents({"user_id": pr["id"]})
+            demo = await db.items.count_documents({"user_id": pr["id"], "demo": True})
+            last = await db.items.find({"user_id": pr["id"]}, {"_id": 0, "created_at": 1}).sort("created_at", -1).to_list(1)
+            out.append({
+                "profile_id": pr["id"],
+                "name": pr.get("name"),
+                "items_total": total,
+                "items_real": total - demo,
+                "items_demo": demo,
+                "last_item_at": (last[0].get("created_at") if last else None),
+            })
+        return out
+
+    matches = []
+    if email:
+        for u in await db.users.find({"email": _norm_email(email)}, {"_id": 0, "password_hash": 0}).to_list(10):
+            matches.append({
+                "account_id": u["user_id"],
+                "email": mask(u.get("email")),
+                "provider": u.get("provider") or "email",
+                "is_guest": bool(u.get("is_guest")),
+                "created_at": u.get("created_at"),
+                "wardrobes": await wardrobes_of(u["user_id"]),
+            })
+
+    # Largest wardrobes in this database that hold REAL (non-demo) pieces. This
+    # is how an unmigrated guest wardrobe gets found — guests have no email.
+    biggest = []
+    pipeline = [
+        {"$match": {"demo": {"$ne": True}}},
+        {"$group": {"_id": "$user_id", "n": {"$sum": 1}, "last": {"$max": "$created_at"}}},
+        {"$sort": {"n": -1}},
+        {"$limit": 10},
+    ]
+    async for row in db.items.aggregate(pipeline):
+        pr = await db.profiles.find_one({"id": row["_id"]}, {"_id": 0})
+        owner = await db.users.find_one({"user_id": pr["user_id"]}, {"_id": 0}) if pr else None
+        biggest.append({
+            "scope": row["_id"],
+            "real_items": row["n"],
+            "last_item_at": row.get("last"),
+            "wardrobe_name": (pr or {}).get("name"),
+            "owner_account_id": (pr or {}).get("user_id"),
+            "owner_email": mask((owner or {}).get("email")),
+            "owner_provider": (owner or {}).get("provider") or ("guest" if (owner or {}).get("is_guest") else "email"),
+            "owner_is_guest": bool((owner or {}).get("is_guest")),
+            "orphaned": pr is None,
+        })
+
+    return {
+        "queried_email": email,
+        "accounts_for_email": matches,
+        "largest_real_wardrobes": biggest,
         "read_only": True,
     }
 

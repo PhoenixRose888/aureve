@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -29,6 +29,20 @@ export default function AuditScreen() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [scanEmail, setScanEmail] = useState("");
+  const [scan, setScan] = useState<any>(null);
+  const [scanning, setScanning] = useState(false);
+
+  const runScan = useCallback(async () => {
+    setScanning(true);
+    try {
+      const q = scanEmail.trim() ? `?email=${encodeURIComponent(scanEmail.trim())}` : "";
+      setScan(await api<any>(`/diag/wardrobe-scan${q}`, { timeoutMs: 60000 }));
+    } catch (e: any) {
+      setError(e?.message || "Couldn't run the scan.");
+    }
+    setScanning(false);
+  }, [scanEmail]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,6 +129,61 @@ export default function AuditScreen() {
             </View>
           ) : null}
 
+          <View style={styles.card}>
+            <Txt style={styles.kicker}>FIND PIECES THAT AREN&apos;T SHOWING</Txt>
+            <Txt style={styles.dim}>
+              Enter the email you signed up with. Aureve will look for other sign-in methods and for wardrobes left behind in guest mode.
+            </Txt>
+            <TextInput
+              style={styles.input}
+              value={scanEmail}
+              onChangeText={setScanEmail}
+              placeholder="you@email.com"
+              placeholderTextColor={colors.onSurfaceTertiary}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              testID="scan-email-input"
+            />
+            <Pressable style={styles.scanBtn} testID="run-scan" onPress={runScan} disabled={scanning}>
+              {scanning ? (
+                <ActivityIndicator color={colors.onBrandPrimary} />
+              ) : (
+                <Txt style={styles.scanTxt}>Find my pieces</Txt>
+              )}
+            </Pressable>
+          </View>
+
+          {scan ? (
+            <View style={styles.card} testID="scan-results">
+              <Txt style={styles.kicker}>ACCOUNTS FOUND FOR THAT EMAIL</Txt>
+              {(scan.accounts_for_email || []).length === 0 ? (
+                <Txt style={styles.dim}>None.</Txt>
+              ) : (
+                scan.accounts_for_email.map((a: any) => (
+                  <View key={a.account_id} style={{ marginTop: 4 }}>
+                    <Txt style={styles.line}>{a.email} · {a.provider}</Txt>
+                    {(a.wardrobes || []).map((w: any) => (
+                      <Txt key={w.profile_id} style={styles.dim}>
+                        {w.name}: {w.items_real} yours / {w.items_demo} sample
+                      </Txt>
+                    ))}
+                  </View>
+                ))
+              )}
+
+              <Txt style={styles.kicker}>LARGEST WARDROBES IN THE DATABASE</Txt>
+              {(scan.largest_real_wardrobes || []).map((w: any) => (
+                <Txt key={w.scope} style={styles.dim}>
+                  {w.real_items} pieces · {w.wardrobe_name || "(no wardrobe)"} · {w.owner_provider}
+                  {w.owner_is_guest ? " (guest — never signed in)" : ""} · last {day(w.last_item_at)}
+                </Txt>
+              ))}
+              <Txt style={styles.warn}>
+                Send this to Aureve support and the matching wardrobe can be re-linked to your account. Nothing is changed by this scan.
+              </Txt>
+            </View>
+          ) : null}
+
           <Txt style={styles.kicker}>MOST RECENT {(data.recent_items || []).length} PIECES</Txt>
           {(data.recent_items || []).map((it: any, i: number) => (
             <View key={`${it.name}-${i}`} style={styles.row}>
@@ -153,6 +222,16 @@ const styles = StyleSheet.create({
   id: { fontSize: 10, color: colors.onSurfaceTertiary, marginTop: 4 },
   warn: { fontSize: 12, color: colors.warning, lineHeight: 18, marginTop: 4 },
   error: { fontSize: 14, color: colors.error, textAlign: "center" },
+  input: {
+    height: 46, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, color: colors.onSurface, fontSize: 15,
+    backgroundColor: colors.surface, marginTop: spacing.md,
+  },
+  scanBtn: {
+    height: 46, borderRadius: radius.sm, backgroundColor: colors.brandPrimary,
+    alignItems: "center", justifyContent: "center", marginTop: spacing.sm,
+  },
+  scanTxt: { color: colors.onBrandPrimary, fontSize: 15 },
   row: { paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.divider },
   rowName: { fontSize: 14, color: colors.onSurface },
   rowMeta: { fontSize: 11, color: colors.onSurfaceTertiary, marginTop: 2 },

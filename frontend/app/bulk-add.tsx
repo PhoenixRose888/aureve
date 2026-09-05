@@ -21,15 +21,26 @@ export default function BulkAdd() {
   const [progress, setProgress] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState("");
+  const [opening, setOpening] = useState(false);
   const busy = useRef(false);
 
   const run = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
     setError("");
-    const picked = await pickMultipleFromLibrary(15);
+    setOpening(true);
+    diag("bulk.picker.open");
+    let picked;
+    try {
+      picked = await pickMultipleFromLibrary(15);
+    } catch (e: any) {
+      diag("bulk.picker.failed", { error: String(e?.message || e) });
+      picked = { error: "failed" as const };
+    }
+    setOpening(false);
     if ("error" in picked) {
       busy.current = false;
+      diag("bulk.picker.cancelled", { reason: picked.error });
       if (picked.error === "blocked") {
         setError("Photo access is off. Enable it in Settings to add several at once.");
       } else if (picked.error !== "cancelled") {
@@ -38,6 +49,7 @@ export default function BulkAdd() {
       return;
     }
     const imgs = picked.images;
+    diag("bulk.picker.picked", { count: imgs.length });
     setTotal(imgs.length);
     setProgress(0);
     setRows([]);
@@ -85,9 +97,6 @@ export default function BulkAdd() {
     busy.current = false;
   }, []);
 
-  // Kick off the picker on first mount.
-  React.useEffect(() => { run(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const added = rows.filter((r) => r.status === "done").length;
   const dupes = rows.filter((r) => r.status === "done" && r.dupe).length;
 
@@ -105,7 +114,12 @@ export default function BulkAdd() {
         {phase === "processing" ? (
           <>
             <Display weight="medium" style={styles.title}>Cataloguing your pieces…</Display>
-            <Txt style={styles.sub}>Auto-tagging and cleaning up each photo. {progress} of {total} done.</Txt>
+            <Txt style={styles.sub}>
+              Uploading and analysing {progress + 1 > total ? total : progress + 1} of {total} — {progress} done.
+            </Txt>
+            <Txt style={styles.note}>
+              Please stay on this screen. Larger batches can take up to a minute depending on your connection.
+            </Txt>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${total ? (progress / total) * 100 : 0}%` }]} />
             </View>
@@ -122,9 +136,15 @@ export default function BulkAdd() {
             <Txt style={styles.sub}>
               Pick up to 15 photos of your pieces and Aureve will name, categorise and catalogue each one for you.
             </Txt>
-            <Pressable style={styles.chooseBtn} testID="bulk-choose-photos" onPress={run}>
-              <Feather name="image" size={17} color={colors.onBrandPrimary} />
-              <Txt style={styles.chooseTxt}>Choose photos</Txt>
+            <Pressable style={styles.chooseBtn} testID="bulk-choose-photos" onPress={run} disabled={opening}>
+              {opening ? (
+                <ActivityIndicator color={colors.onBrandPrimary} />
+              ) : (
+                <>
+                  <Feather name="image" size={17} color={colors.onBrandPrimary} />
+                  <Txt style={styles.chooseTxt}>Choose photos</Txt>
+                </>
+              )}
             </Pressable>
           </>
         )}
@@ -183,6 +203,7 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   title: { fontSize: 28, color: colors.onSurface },
   sub: { fontSize: 14, color: colors.onSurfaceSecondary, marginTop: spacing.sm, lineHeight: 21 },
+  note: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: spacing.sm, lineHeight: 18 },
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surfaceTertiary, marginTop: spacing.xl, overflow: "hidden" },
   progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
   errBox: { marginTop: spacing.xl, gap: spacing.md },

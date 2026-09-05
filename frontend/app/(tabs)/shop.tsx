@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
-import { useAuth } from "@/src/context/AuthContext";
+import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
 import GarmentImage from "@/src/components/GarmentImage";
 
@@ -17,8 +17,7 @@ const verdictColor = (v: string) =>
 export default function Shop() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
-  const premium = !!user?.premium;
+  const { premium } = usePremiumAccess();
   const [picker, setPicker] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

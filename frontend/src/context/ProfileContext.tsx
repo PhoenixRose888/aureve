@@ -9,6 +9,8 @@ export type Profile = {
   emoji?: string;
   kind?: string;
   profile?: any;
+  /** True for the account's original wardrobe, which holds the subscription. */
+  is_primary?: boolean;
 };
 
 type Ctx = {

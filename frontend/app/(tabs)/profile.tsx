@@ -8,6 +8,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
 import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
@@ -18,7 +19,7 @@ export default function Profile() {
   const router = useRouter();
   const { user, logout, login, isGuest, signingIn, deleteAccount } = useAuth();
   const { profiles, active } = useProfiles();
-  const premium = !!user?.premium;
+  const { premium } = usePremiumAccess();
   const initials = (user?.name || user?.email || "?")
     .split(/\s+/)
     .map((w: string) => w[0])

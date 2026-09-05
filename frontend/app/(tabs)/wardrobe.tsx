@@ -8,7 +8,7 @@ import { Display, Txt } from "@/src/components/Typography";
 import BrandMark from "@/src/components/BrandMark";
 import { colors, spacing, radius, fonts, CATEGORIES } from "@/src/theme";
 import { api } from "@/src/api/client";
-import { useAuth } from "@/src/context/AuthContext";
+import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import { useProfiles } from "@/src/context/ProfileContext";
 import GarmentImage from "@/src/components/GarmentImage";
 import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
@@ -23,8 +23,7 @@ const EMPTY_IMG =
 export default function Wardrobe() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
-  const premium = !!user?.premium;
+  const { premium } = usePremiumAccess();
   const { active, profiles, loading: profileLoading } = useProfiles();
   const { width } = useWindowDimensions();
   const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
