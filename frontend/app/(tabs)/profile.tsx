@@ -319,6 +319,11 @@ export default function Profile() {
           {/* Legal & data */}
           <View style={styles.section}>
             <Txt style={styles.sectionTitle}>PRIVACY & DATA</Txt>
+            <Pressable style={styles.acctRow} testID="wardrobe-audit" onPress={() => router.push("/audit")}>
+              <Feather name="search" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>Wardrobe audit</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
             <Pressable style={styles.acctRow} testID="privacy-policy" onPress={() => router.push({ pathname: "/legal", params: { doc: "privacy" } })}>
               <Feather name="shield" size={18} color={colors.onSurface} />
               <Txt style={styles.acctTxt}>Privacy Policy</Txt>

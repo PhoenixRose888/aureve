@@ -2109,14 +2109,102 @@ async def calendar_status(account: dict = Depends(get_current_user)):
 
 
 def _gcal_redirect_uri(request: Request) -> str:
-    """The OAuth redirect must exactly match the host the user is on, otherwise
-    Google returns redirect_uri_mismatch. Derived from the incoming request
-    (works for preview AND production); the env var is only a fallback."""
-    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").split(",")[0].strip()
+    """The OAuth redirect must match the registered URI EXACTLY (scheme, host,
+    path) or Google returns redirect_uri_mismatch. Derived from the incoming
+    request so preview and production each send their own host; the scheme is
+    forced to https for real hosts because TLS is terminated at the ingress and
+    the app server only ever sees http."""
     host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
-    if host:
-        return f"{proto}://{host}/api/calendar/callback"
-    return GCAL_REDIRECT_URI
+    if not host:
+        return GCAL_REDIRECT_URI
+    local = host.startswith("localhost") or host.startswith("127.0.0.1")
+    # Drop the default port so the URI matches what is registered.
+    if host.endswith(":443") or host.endswith(":80"):
+        host = host.rsplit(":", 1)[0]
+    scheme = "http" if local else "https"
+    return f"{scheme}://{host}/api/calendar/callback"
+
+
+@api_router.get("/diag/my-wardrobe-audit")
+async def my_wardrobe_audit(account: dict = Depends(get_current_user)):
+    """STRICTLY READ-ONLY audit of the CALLER'S OWN account: every wardrobe
+    (profile) they own, how many items sit in each, how many are real vs seeded
+    demo, and whether any items are stranded on a scope the app no longer shows.
+    Makes no writes of any kind."""
+    account_id = account["user_id"]
+    profiles = await db.profiles.find({"user_id": account_id}, {"_id": 0}).sort("created_at", 1).to_list(50)
+    wardrobes = []
+    for p in profiles:
+        total = await db.items.count_documents({"user_id": p["id"]})
+        demo = await db.items.count_documents({"user_id": p["id"], "demo": True})
+        no_photo = await db.items.count_documents(
+            {"user_id": p["id"], "$or": [{"photo": None}, {"photo": ""}]}
+        )
+        first = await db.items.find({"user_id": p["id"]}, {"_id": 0, "created_at": 1}).sort("created_at", 1).to_list(1)
+        last = await db.items.find({"user_id": p["id"]}, {"_id": 0, "created_at": 1}).sort("created_at", -1).to_list(1)
+        wardrobes.append({
+            "profile_id": p["id"],
+            "name": p.get("name"),
+            "created_at": p.get("created_at"),
+            "items_total": total,
+            "items_real": total - demo,
+            "items_demo_seeded": demo,
+            "items_without_photo": no_photo,
+            "first_item_at": (first[0].get("created_at") if first else None),
+            "last_item_at": (last[0].get("created_at") if last else None),
+        })
+
+    # Items written against the raw account id instead of a profile id would be
+    # invisible in the app — surface them rather than silently losing them.
+    stranded = await db.items.count_documents({"user_id": account_id})
+
+    recent = await db.items.find(
+        {"user_id": {"$in": [p["id"] for p in profiles] + [account_id]}},
+        {"_id": 0, "name": 1, "category": 1, "created_at": 1, "user_id": 1, "photo": 1, "demo": 1},
+    ).sort("created_at", -1).to_list(60)
+    recent_list = [{
+        "name": it.get("name"),
+        "category": it.get("category"),
+        "created_at": it.get("created_at"),
+        "scope": it.get("user_id"),
+        "has_photo": bool(it.get("photo")),
+        "demo": bool(it.get("demo")),
+    } for it in recent]
+
+    # Same email signed up through a different provider = a SECOND account whose
+    # wardrobe would look "missing". Restricted to the caller's own email.
+    others = []
+    email = _norm_email(account.get("email") or "")
+    if email:
+        dupes = await db.users.find(
+            {"email": email, "user_id": {"$ne": account_id}}, {"_id": 0, "password_hash": 0}
+        ).to_list(10)
+        for d in dupes:
+            d_profiles = await db.profiles.find({"user_id": d["user_id"]}, {"_id": 0}).to_list(20)
+            wl = []
+            for dp in d_profiles:
+                tot = await db.items.count_documents({"user_id": dp["id"]})
+                dem = await db.items.count_documents({"user_id": dp["id"], "demo": True})
+                wl.append({"name": dp.get("name"), "items_total": tot, "items_real": tot - dem})
+            others.append({
+                "user_id": d["user_id"],
+                "provider": d.get("provider"),
+                "created_at": d.get("created_at"),
+                "wardrobes": wl,
+            })
+
+    return {
+        "account_email": account.get("email"),
+        "account_id": account_id,
+        "provider": account.get("provider"),
+        "is_guest": bool(account.get("is_guest")),
+        "wardrobes": wardrobes,
+        "items_stranded_on_account_id": stranded,
+        "items_total_all_wardrobes": sum(w["items_total"] for w in wardrobes) + stranded,
+        "other_accounts_same_email": others,
+        "recent_items": recent_list,
+        "read_only": True,
+    }
 
 
 @api_router.get("/calendar/config")
@@ -2126,11 +2214,15 @@ async def calendar_config(request: Request):
     what is registered on the Google Cloud OAuth client. The client id is public
     (it appears in the OAuth URL); the client secret is never returned."""
     cid = GCAL_CLIENT_ID or ""
+    sent = _gcal_redirect_uri(request)
     return {
-        "redirect_uri_sent_to_google": _gcal_redirect_uri(request),
+        "redirect_uri_sent_to_google": sent,
+        "register_this_exact_uri_in_google_console": sent,
         "client_id": cid,
-        "client_id_tail": cid[-14:] if cid else "",
+        "client_id_prefix": cid[:20],
+        "client_id_length": len(cid),
         "client_secret_present": bool(GCAL_CLIENT_SECRET),
+        "client_secret_length": len(GCAL_CLIENT_SECRET or ""),
         "env_redirect_uri_fallback": GCAL_REDIRECT_URI,
         "request_host": request.headers.get("host"),
         "forwarded_host": request.headers.get("x-forwarded-host"),
