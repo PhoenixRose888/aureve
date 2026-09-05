@@ -44,11 +44,34 @@ const AUTH_URL = "https://auth.emergentagent.com/";
 // Token stashed when a guest starts Google sign-in so the backend can migrate
 // their wardrobe into the new account (survives the web redirect reload).
 const GUEST_MIGRATE_KEY = "aura_guest_migrate_token";
+// Last known user, so a cold start on a flaky connection opens signed-in
+// instead of bouncing a valid session out to the login screen.
+const CACHED_USER_KEY = "aureve_cached_user";
+
+async function cacheUser(u: User) {
+  if (u) await storage.setItem(CACHED_USER_KEY, JSON.stringify(u));
+  else await storage.removeItem(CACHED_USER_KEY);
+}
+
+async function readCachedUser(): Promise<User> {
+  const raw = await storage.getItem<string>(CACHED_USER_KEY, "");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    return null;
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User>(null);
+  const [user, setUserState] = useState<User>(null);
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
+
+  const setUser = useCallback((u: User) => {
+    setUserState(u);
+    cacheUser(u);
+  }, []);
 
   const processSessionId = useCallback(async (sessionId: string) => {
     const guestToken = await storage.secureGet<string>(GUEST_MIGRATE_KEY, "");
@@ -61,20 +84,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (guestToken) await storage.secureRemove(GUEST_MIGRATE_KEY);
     // Hydrate from /auth/me so computed fields (e.g. premium) are present.
     setUser(await api<User>("/auth/me"));
-  }, []);
+  }, [setUser]);
 
   const checkExisting = useCallback(async () => {
     const token = await getToken();
     if (!token) return false;
     try {
-      const me = await api<User>("/auth/me");
+      const me = await api<User>("/auth/me", { timeoutMs: 20000 });
       setUser(me);
       return true;
-    } catch {
-      await clearToken();
+    } catch (e: any) {
+      // ONLY a definitive rejection ends the session. A timeout or network
+      // hiccup on a cold start must never sign a returning user out.
+      if (e?.status === 401 || e?.status === 403) {
+        await clearToken();
+        await cacheUser(null);
+        return false;
+      }
+      const cached = await readCachedUser();
+      if (cached) {
+        setUserState(cached);
+        // Revalidate quietly once the connection recovers.
+        api<User>("/auth/me")
+          .then((me) => setUser(me))
+          .catch(() => {});
+        return true;
+      }
       return false;
     }
-  }, []);
+  }, [setUser]);
 
   // On mount: web -> parse session_id from URL first; then check existing token.
   useEffect(() => {
@@ -103,8 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         await checkExisting();
-      } catch (e) {
-        // ignore
+      } catch {
+        // ignore — checkExisting keeps a valid session on transient failures
       } finally {
         setLoading(false);
       }
@@ -130,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSigningIn(false);
     }
-  }, []);
+  }, [setUser]);
 
   const login = useCallback(async () => {
     setSigningIn(true);
@@ -195,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSigningIn(false);
     }
-  }, [user, stashGuestToken]);
+  }, [user, stashGuestToken, setUser]);
 
   const logout = useCallback(async () => {
     try {
@@ -204,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearToken();
     await storage.secureRemove(GUEST_MIGRATE_KEY);
     setUser(null);
-  }, []);
+  }, [setUser]);
 
   const emailAuth = useCallback(async (mode: "login" | "register", email: string, password: string, name?: string) => {
     setSigningIn(true);
@@ -224,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSigningIn(false);
     }
-  }, [user]);
+  }, [user, setUser]);
 
   const loginEmail = useCallback((email: string, password: string) => emailAuth("login", email, password), [emailAuth]);
   const registerEmail = useCallback((email: string, password: string, name?: string) => emailAuth("register", email, password, name), [emailAuth]);
@@ -243,12 +281,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearToken();
     await storage.secureRemove(GUEST_MIGRATE_KEY);
     setUser(null);
-  }, []);
+  }, [setUser]);
 
-  const refreshUser = useCallback(async () => {    try {
+  const refreshUser = useCallback(async () => {
+    try {
       setUser(await api<User>("/auth/me"));
     } catch {}
-  }, []);
+  }, [setUser]);
 
   return (
     <Ctx.Provider

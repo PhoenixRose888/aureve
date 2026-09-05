@@ -51,9 +51,11 @@ async def main(email: str):
     grand = 0
     for sid in all_scopes:
         c = await db.items.count_documents({"user_id": sid})
+        demo = await db.items.count_documents({"user_id": sid, "demo": True})
+        seeded = await db.items.count_documents({"user_id": sid, "id": {"$regex": "^revdemo-"}})
         grand += c
         label = "PROFILE" if sid in scope_ids else "ACCOUNT_ID(legacy)"
-        print(f"  [{label}] {sid}: {c} items")
+        print(f"  [{label}] {sid}: {c} items  (demo-flagged={demo}, reviewer-seeded={seeded}, real={c - demo})")
     print(f"  => TOTAL across all known scopes: {grand}")
 
     # Recent items across ALL of this account's scopes.

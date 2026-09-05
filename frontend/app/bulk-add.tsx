@@ -35,7 +35,6 @@ export default function BulkAdd() {
       } else if (picked.error !== "cancelled") {
         setError("Couldn't open your photos.");
       }
-      if (phase === "idle") router.back();
       return;
     }
     const imgs = picked.images;
@@ -68,7 +67,6 @@ export default function BulkAdd() {
             pattern: a.pattern || "",
             season: a.season || "All",
             condition: a.condition || "",
-            price: a.estimated_value ? Number(a.estimated_value) : null,
             photo,
             style: a.style || "",
             sleeve_length: a.sleeve_length || "",
@@ -85,7 +83,7 @@ export default function BulkAdd() {
     }
     setPhase("done");
     busy.current = false;
-  }, [phase, router]);
+  }, []);
 
   // Kick off the picker on first mount.
   React.useEffect(() => { run(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -99,7 +97,7 @@ export default function BulkAdd() {
         <Pressable onPress={() => router.back()} testID="bulk-back" hitSlop={12}>
           <Feather name="arrow-left" size={24} color={colors.onSurface} />
         </Pressable>
-        <Txt style={styles.kicker}>ADD SEVERAL</Txt>
+        <Txt style={styles.kicker}>BULK ADD</Txt>
         <View style={{ width: 24 }} />
       </View>
 
@@ -119,7 +117,16 @@ export default function BulkAdd() {
             <Txt style={styles.sub}>{dupes > 0 ? `All set — ${dupes} may be a duplicate of something you own (flagged below). Review and delete any you don't need.` : "All set — they're in your wardrobe now."}</Txt>
           </>
         ) : (
-          <Display weight="medium" style={styles.title}>Choose photos…</Display>
+          <>
+            <Display weight="medium" style={styles.title}>Add several pieces at once</Display>
+            <Txt style={styles.sub}>
+              Pick up to 15 photos of your pieces and Aureve will name, categorise and catalogue each one for you.
+            </Txt>
+            <Pressable style={styles.chooseBtn} testID="bulk-choose-photos" onPress={run}>
+              <Feather name="image" size={17} color={colors.onBrandPrimary} />
+              <Txt style={styles.chooseTxt}>Choose photos</Txt>
+            </Pressable>
+          </>
         )}
 
         <PhotoTips />
@@ -168,6 +175,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.border },
   kicker: { fontSize: 11, letterSpacing: 2, color: colors.onSurfaceTertiary },
+  chooseBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm,
+    height: 52, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, marginTop: spacing.xl,
+  },
+  chooseTxt: { color: colors.onBrandPrimary, fontSize: 16 },
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   title: { fontSize: 28, color: colors.onSurface },
   sub: { fontSize: 14, color: colors.onSurfaceSecondary, marginTop: spacing.sm, lineHeight: 21 },

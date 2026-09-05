@@ -11,6 +11,7 @@ import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
 import GarmentImage from "@/src/components/GarmentImage";
+import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
 
 const GUTTER = spacing.md;
 
@@ -24,17 +25,17 @@ export default function Wardrobe() {
   const router = useRouter();
   const { user } = useAuth();
   const premium = !!user?.premium;
-  const { active, loading: profileLoading } = useProfiles();
+  const { active, profiles, loading: profileLoading } = useProfiles();
   const { width } = useWindowDimensions();
   const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
   const [items, setItems] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
-  const [laundryMode, setLaundryMode] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,9 +54,7 @@ export default function Wardrobe() {
     }, [load, profileLoading, active?.id])
   );
 
-  const notReady = items.filter((i) => (i.availability || "Ready") !== "Ready");
-  const base = laundryMode ? notReady : items;
-  const filtered = filter === "All" ? base : base.filter((i) => i.category === filter);
+  const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
 
   const exitSelect = () => {
     setSelectMode(false);
@@ -82,7 +81,6 @@ export default function Wardrobe() {
   };
 
   const renderItem = ({ item, index }: { item: any; index: number }) => {
-    const status = item.availability || "Ready";
     const isSel = selected.includes(item.id);
     return (
     <Pressable
@@ -102,16 +100,9 @@ export default function Wardrobe() {
           {isSel ? <Feather name="check" size={13} color={colors.onBrandPrimary} /> : null}
         </View>
       )}
-      {status !== "Ready" && (
-        <View style={styles.laundryBadge}>
-          <Feather name="droplet" size={11} color={colors.onSurfaceInverse} />
-          <Txt style={styles.laundryBadgeTxt}>{status}</Txt>
-        </View>
-      )}
-      {status === "Ready" && (item.pairs_count || 0) > 0 && (
+      {(item.pairs_count || 0) > 0 && (
         <View style={styles.pairsBadge}>
-          <Feather name="link-2" size={10} color={colors.onSurfaceInverse} />
-          <Txt style={styles.pairsBadgeTxt}>{item.pairs_count}</Txt>
+          <Txt style={styles.pairsBadgeTxt}>Pairs with {item.pairs_count}</Txt>
         </View>
       )}
       <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
@@ -129,7 +120,15 @@ export default function Wardrobe() {
         <BrandMark style={{ alignSelf: "center", marginBottom: spacing.sm }} />
         <View style={styles.headerRow}>
           <View>
-            <Txt style={styles.kicker}>{selectMode ? `${selected.length} SELECTED` : `${items.length} PIECES`}</Txt>
+            {selectMode ? (
+              <Txt style={styles.kicker}>{selected.length} SELECTED</Txt>
+            ) : (
+              <Pressable style={styles.switcherChip} testID="wardrobe-switcher-chip" onPress={() => setShowSwitcher(true)}>
+                <Txt style={styles.switcherTxt}>{active?.name || "My wardrobe"}</Txt>
+                <Feather name="chevron-down" size={13} color={colors.onSurfaceSecondary} />
+                {profiles.length > 1 ? <Txt style={styles.switcherCount}>{profiles.length}</Txt> : null}
+              </Pressable>
+            )}
             <Display weight="semibold" style={styles.title}>Wardrobe</Display>
           </View>
           {selectMode ? (
@@ -152,23 +151,11 @@ export default function Wardrobe() {
           ) : (
           <View style={styles.headerActions}>
             <Pressable
-              style={styles.laundryIconBtn}
+              style={styles.iconBtn}
               testID="wardrobe-select-button"
               onPress={() => setSelectMode(true)}
             >
               <Feather name="check-square" size={19} color={colors.onSurface} />
-            </Pressable>
-            <Pressable
-              style={[styles.laundryIconBtn, laundryMode && styles.laundryIconBtnActive]}
-              testID="wardrobe-laundry-button"
-              onPress={() => setLaundryMode((m) => !m)}
-            >
-              <Feather name="droplet" size={19} color={laundryMode ? colors.onBrandPrimary : colors.onSurface} />
-              {notReady.length > 0 && !laundryMode && (
-                <View style={styles.laundryCountBadge}>
-                  <Txt style={styles.laundryCountTxt}>{notReady.length}</Txt>
-                </View>
-              )}
             </Pressable>
             <Pressable style={styles.addBtn} testID="wardrobe-add-button" onPress={() => router.push("/add-item")}>
               <Feather name="plus" size={20} color={colors.onBrandPrimary} />
@@ -198,21 +185,7 @@ export default function Wardrobe() {
         </ScrollView>
       </View>
 
-      {notReady.length > 0 && (
-        <Pressable
-          style={[styles.laundryBanner, laundryMode && styles.laundryBannerActive]}
-          testID="laundry-banner"
-          onPress={() => setLaundryMode((m) => !m)}
-        >
-          <Feather name="droplet" size={15} color={laundryMode ? colors.onBrandPrimary : colors.brand} />
-          <Txt style={[styles.laundryBannerTxt, laundryMode && { color: colors.onBrandPrimary }]}>
-            {laundryMode ? "Showing laundry only" : `${notReady.length} in the laundry`}
-          </Txt>
-          <Feather name={laundryMode ? "x" : "chevron-right"} size={16} color={laundryMode ? colors.onBrandPrimary : colors.onSurfaceTertiary} />
-        </Pressable>
-      )}
-
-      {!laundryMode && !selectMode && (
+      {!selectMode && (
         <Pressable
           style={styles.shopIqBanner}
           testID="shopping-intelligence-entry"
@@ -233,29 +206,14 @@ export default function Wardrobe() {
         <View style={styles.center}><ActivityIndicator color={colors.onSurface} /></View>
       ) : filtered.length === 0 ? (
         <ScrollView contentContainerStyle={styles.emptyWrap}>
-          {laundryMode ? (
-            <>
-              <View style={styles.laundryEmptyIcon}>
-                <Feather name="droplet" size={28} color={colors.brand} />
-              </View>
-              <Display weight="semibold" style={styles.emptyTitle}>Laundry basket is empty</Display>
-              <Txt style={styles.emptySub}>Nothing is in the wash. Mark a piece as Washing from its detail screen and it will appear here.</Txt>
-              <Pressable style={styles.emptyBtn} testID="laundry-empty-back" onPress={() => setLaundryMode(false)}>
-                <Txt style={styles.emptyBtnTxt}>Back to wardrobe</Txt>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
-              <Display weight="semibold" style={styles.emptyTitle}>
-                {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
-              </Display>
-              <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
-              <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>
-                <Txt style={styles.emptyBtnTxt}>Add first piece</Txt>
-              </Pressable>
-            </>
-          )}
+          <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
+          <Display weight="semibold" style={styles.emptyTitle}>
+            {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
+          </Display>
+          <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
+          <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>
+            <Txt style={styles.emptyBtnTxt}>Add first piece</Txt>
+          </Pressable>
         </ScrollView>
       ) : (
         <FlatList
@@ -268,6 +226,8 @@ export default function Wardrobe() {
           columnWrapperStyle={{ justifyContent: "flex-start" }}
         />
       )}
+
+      <WardrobeSwitcher visible={showSwitcher} onClose={() => setShowSwitcher(false)} />
 
       <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
         <Pressable style={styles.backdrop} onPress={() => setConfirmDelete(false)}>
@@ -306,7 +266,7 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  laundryIconBtn: {
+  iconBtn: {
     width: 44,
     height: 44,
     borderRadius: radius.pill,
@@ -315,20 +275,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  laundryIconBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  laundryCountBadge: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    backgroundColor: colors.brand,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  laundryCountTxt: { color: colors.onSurfaceInverse, fontSize: 10, fontWeight: "600" },
   kicker: { fontSize: 11, letterSpacing: 2, color: colors.onSurfaceTertiary, marginBottom: 2 },
   title: { fontSize: 30, color: colors.onSurface, letterSpacing: -0.5 },
   addBtn: {
@@ -366,6 +312,12 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   selectDotOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  switcherChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, minHeight: 28 },
+  switcherTxt: { fontSize: 12, letterSpacing: 1, color: colors.onSurfaceSecondary, textTransform: "uppercase" },
+  switcherCount: {
+    fontSize: 10, color: colors.onSurfaceTertiary, borderWidth: 0.5, borderColor: colors.border,
+    borderRadius: radius.pill, paddingHorizontal: 5, paddingVertical: 1, overflow: "hidden",
+  },
   textBtn: { height: 44, paddingHorizontal: spacing.sm, justifyContent: "center" },
   textBtnTxt: { fontSize: 14, color: colors.onSurfaceSecondary },
   btnDisabled: { opacity: 0.4 },
@@ -382,19 +334,6 @@ const styles = StyleSheet.create({
   keepBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   keepTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
   placeholder: { alignItems: "center", justifyContent: "center" },
-  laundryBadge: {
-    position: "absolute",
-    top: spacing.sm,
-    left: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(26,26,26,0.65)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-  },
-  laundryBadgeTxt: { color: colors.onSurfaceInverse, fontSize: 10 },
   pairsBadge: {
     position: "absolute",
     bottom: 44,
@@ -408,21 +347,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   pairsBadgeTxt: { color: colors.onSurfaceInverse, fontSize: 10, fontWeight: "600" },
-  laundryBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.sm,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    backgroundColor: colors.brandTertiary,
-  },
-  laundryBannerActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  laundryBannerTxt: { flex: 1, fontSize: 13, color: colors.onBrandTertiary },
   shopIqBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -448,15 +372,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   emptyWrap: { padding: spacing.xl, alignItems: "center", paddingTop: spacing["2xl"] },
   emptyImg: { width: "100%", height: 260, borderRadius: radius.md, marginBottom: spacing.xl },
-  laundryEmptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brandTertiary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.xl,
-  },
   emptyTitle: { fontSize: 20, textAlign: "center", marginBottom: spacing.sm, letterSpacing: -0.3 },
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", marginBottom: spacing.xl },
   emptyBtn: {

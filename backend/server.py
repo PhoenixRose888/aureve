@@ -1362,7 +1362,8 @@ def compress_b64(b64: Optional[str], max_side: int = 1024, quality: int = 72) ->
 
 @api_router.post("/items")
 async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
-    if not (payload.photo and payload.photo.strip()):
+    has_image = bool((payload.photo or "").strip()) or bool((payload.worn_photo or "").strip())
+    if not has_image:
         raise HTTPException(status_code=400, detail="A photo is required to add an item.")
     if not user.get("premium"):
         active = await db.items.count_documents(items_scope(user))
@@ -1479,9 +1480,17 @@ ANALYZE_SYSTEM = (
 )
 
 
-async def _analyze_core(image_b64: str, category_hint: Optional[str], scope_id: str) -> dict:
+async def _analyze_core(image_b64: str, category_hint: Optional[str], scope_id: str,
+                        worn: bool = False) -> dict:
     chat = await ai_chat(f"analyze-{scope_id}-{uuid.uuid4().hex[:6]}", ANALYZE_SYSTEM)
-    if category_hint:
+    if worn and not category_hint:
+        text = (
+            "This is a real phone photo of a person WEARING the item. Catalogue the single most "
+            "prominent garment they are wearing (ignore the person, the background and secondary "
+            "layers). Always pick the closest category from the allowed list and set confidence "
+            "honestly. Return JSON only."
+        )
+    elif category_hint:
         text = (
             f"The person in the photo may be wearing several garments. Focus ONLY on the "
             f"{category_hint} and catalogue that single item, ignoring everything else "
@@ -1534,6 +1543,8 @@ class CaptureRequest(BaseModel):
     image: str
     category_hint: Optional[str] = None
     clean: bool = True
+    # True when the photo shows the item being worn (worn-photo slot).
+    worn: bool = False
 
 
 def _norm(v) -> str:
@@ -1588,7 +1599,7 @@ async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope))
     logger.info("capture: received image %sKB clean=%s hint=%s user=%s",
                 kb, payload.clean, payload.category_hint, user["user_id"])
     started = _time.monotonic()
-    tasks = [_analyze_core(payload.image, payload.category_hint, user["user_id"])]
+    tasks = [_analyze_core(payload.image, payload.category_hint, user["user_id"], payload.worn)]
     if payload.clean:
         tasks.append(_clean_photo(payload.image))
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -2106,6 +2117,26 @@ def _gcal_redirect_uri(request: Request) -> str:
     if host:
         return f"{proto}://{host}/api/calendar/callback"
     return GCAL_REDIRECT_URI
+
+
+@api_router.get("/calendar/config")
+async def calendar_config(request: Request):
+    """Read-only OAuth diagnostic: shows the EXACT redirect_uri this environment
+    sends to Google and which client id is in use, so it can be compared with
+    what is registered on the Google Cloud OAuth client. The client id is public
+    (it appears in the OAuth URL); the client secret is never returned."""
+    cid = GCAL_CLIENT_ID or ""
+    return {
+        "redirect_uri_sent_to_google": _gcal_redirect_uri(request),
+        "client_id": cid,
+        "client_id_tail": cid[-14:] if cid else "",
+        "client_secret_present": bool(GCAL_CLIENT_SECRET),
+        "env_redirect_uri_fallback": GCAL_REDIRECT_URI,
+        "request_host": request.headers.get("host"),
+        "forwarded_host": request.headers.get("x-forwarded-host"),
+        "forwarded_proto": request.headers.get("x-forwarded-proto"),
+        "scope": GCAL_SCOPE,
+    }
 
 
 @api_router.get("/calendar/authorize")
@@ -3089,18 +3120,17 @@ async def reconcile_reviewer_wardrobe(profile_id: str):
                     "photo": g["photo"],
                     "worn_photo": None,
                     "flatters": g.get("flatters", True),
-                    "wear_count": 0,
-                    "last_worn": None,
                     "demo": True,
                 },
-                "$setOnInsert": {"created_at": now},
+                "$setOnInsert": {"created_at": now, "wear_count": 0, "last_worn": None},
             },
             upsert=True,
         )
-    # Prune every other wardrobe row on this reviewer profile (leaves exactly
-    # the canonical 16), plus any stale demo outfits/wear logs referencing them.
+    # Prune only STALE DEMO rows on this reviewer profile (old random-id demo
+    # duplicates). Items the reviewer/user added themselves are NEVER deleted —
+    # a redeploy must not wipe real uploads made while signed in as this account.
     removed = await db.items.delete_many(
-        {"user_id": profile_id, "id": {"$nin": canonical_ids}}
+        {"user_id": profile_id, "demo": True, "id": {"$nin": canonical_ids}}
     )
     await db.outfits.delete_many({"user_id": profile_id, "demo": True})
     await db.wear_logs.delete_many({"user_id": profile_id, "demo": True})

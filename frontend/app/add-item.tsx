@@ -102,18 +102,18 @@ export default function AddItem() {
   }, []);
 
   const runAnalyze = useCallback(
-    async (base64: string) => {
+    async (base64: string, worn = false) => {
       setLastPhoto(base64);
       setAnalyzing(true);
       setError("");
       const kb = Math.round((base64.length * 3) / 4 / 1024);
-      diag("analyze.start", { kb });
+      diag("analyze.start", { kb, worn });
       let res: any = null;
       for (let attempt = 1; attempt <= 2 && !res; attempt++) {
         try {
           res = await api<any>("/capture", {
             method: "POST",
-            body: { image: base64, clean: false },
+            body: { image: base64, clean: false, worn },
             timeoutMs: 60000,
           });
         } catch (e: any) {
@@ -143,20 +143,23 @@ export default function AddItem() {
       if (r.pattern) setPattern(r.pattern);
       if (r.season && SEASONS.includes(r.season)) setSeason(r.season);
       if (r.condition) setCondition(r.condition);
-      if (r.estimated_value && !price) setPrice(String(r.estimated_value));
       setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
       setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
       haptics.success();
-      // Tidy the photo in the background once the details are already filled in.
-      runClean(base64);
+      // Tidy the hanging photo in the background once details are filled in.
+      // Worn photos are kept exactly as shot (they show the item on a person).
+      if (!worn) runClean(base64);
     },
-    [name, price, runClean]
+    [name, runClean]
   );
 
   const onPicked = useCallback(
     async (base64: string) => {
       if (pickerTarget === "worn_photo") {
         setPhotos((p) => ({ ...p, worn_photo: base64 }));
+        // A worn photo is a valid source on its own: if there's no hanging photo
+        // yet, read the garment straight off the worn shot.
+        if (!photos.photo) runAnalyze(base64, true);
         return;
       }
       setPhotos((p) => ({ ...p, photo: base64 }));
@@ -164,11 +167,11 @@ export default function AddItem() {
       // Aureve reads the photo straight away — no questions asked first.
       runAnalyze(base64);
     },
-    [pickerTarget, runAnalyze]
+    [pickerTarget, runAnalyze, photos.photo]
   );
 
   const save = async () => {
-    if (!photos.photo) {
+    if (!photos.photo && !photos.worn_photo) {
       setError("Add a photo of the item before saving.");
       haptics.warn();
       return;
@@ -219,8 +222,9 @@ export default function AddItem() {
         {editing ? (
           <View style={{ width: 56 }} />
         ) : (
-          <Pressable onPress={() => router.replace("/bulk-add")} testID="add-item-bulk" hitSlop={8}>
-            <Txt style={styles.bulkLink}>Several</Txt>
+          <Pressable style={styles.bulkBtn} onPress={() => router.replace("/bulk-add")} testID="add-item-bulk" hitSlop={8}>
+            <Feather name="layers" size={13} color={colors.onSurface} />
+            <Txt style={styles.bulkLink}>Bulk Add</Txt>
           </Pressable>
         )}
       </View>
@@ -275,7 +279,7 @@ export default function AddItem() {
               <View style={styles.photoEmpty}>
                 <Feather name="user" size={22} color={colors.onSurfaceTertiary} />
                 <Txt style={styles.photoLabel}>Worn photo</Txt>
-                <Txt style={styles.photoHint}>Helps Aureve learn what flatters you</Txt>
+                <Txt style={styles.photoHint}>Optional — Aureve can read the piece from this too</Txt>
               </View>
             )}
           </Pressable>
@@ -337,11 +341,7 @@ export default function AddItem() {
 
         <View style={styles.row2}>
           <Field label="Colour" value={colour} onChangeText={setColour} placeholder="Cream" flex testID="field-colour" />
-          <Field label="Brand" value={brand} onChangeText={setBrand} placeholder="—" flex testID="field-brand" />
-        </View>
-        <View style={styles.row2}>
           <Field label="Pattern" value={pattern} onChangeText={setPattern} placeholder="Solid" flex testID="field-pattern" />
-          <Field label="Price" value={price} onChangeText={setPrice} placeholder="0" keyboardType="numeric" flex testID="field-price" />
         </View>
 
         <Txt style={styles.groupLabel}>SEASON</Txt>
@@ -354,24 +354,6 @@ export default function AddItem() {
         </ScrollView>
 
         <Field label="Fit notes" value={fitNotes} onChangeText={setFitNotes} placeholder="Runs small, flattering waist…" multiline testID="field-fit" />
-
-        <Txt style={styles.groupLabel}>DOES IT FLATTER YOU?</Txt>
-        <View style={styles.flatterRow}>
-          {[
-            { v: true, label: "Yes", icon: "thumbs-up" },
-            { v: false, label: "Not really", icon: "thumbs-down" },
-          ].map((o) => (
-            <Pressable
-              key={o.label}
-              testID={`flatter-${o.label}`}
-              style={[styles.flatterBtn, flatters === o.v && styles.flatterActive]}
-              onPress={() => setFlatters(o.v)}
-            >
-              <Feather name={o.icon as any} size={16} color={flatters === o.v ? colors.onBrandPrimary : colors.onSurface} />
-              <Txt style={[styles.flatterTxt, flatters === o.v && { color: colors.onBrandPrimary }]}>{o.label}</Txt>
-            </Pressable>
-          ))}
-        </View>
       </KeyboardAwareScrollView>
 
       <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
@@ -429,6 +411,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerTitle: { fontSize: 22 },
+  bulkBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderWidth: 0.5, borderColor: colors.borderStrong, borderRadius: radius.pill,
+    paddingHorizontal: spacing.md, height: 32,
+  },
   bulkLink: { fontSize: 14, color: colors.brand },
   dupBanner: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 0.5, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.lg },
   dupHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },

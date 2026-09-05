@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, TextInput } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -10,13 +10,14 @@ import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
+import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
 import GarmentImage from "@/src/components/GarmentImage";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout, login, isGuest, signingIn, deleteAccount } = useAuth();
-  const { profiles, active, switchTo, createProfile, deleteProfile } = useProfiles();
+  const { profiles, active } = useProfiles();
   const premium = !!user?.premium;
   const initials = (user?.name || user?.email || "?")
     .split(/\s+/)
@@ -28,7 +29,6 @@ export default function Profile() {
   const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
-  const [newName, setNewName] = useState("");
   const [calConnected, setCalConnected] = useState(false);
 
   const load = useCallback(async () => {
@@ -144,7 +144,7 @@ export default function Profile() {
               </View>
               <View style={{ flex: 1 }}>
                 <Txt style={styles.guestTitle}>Back up your wardrobe</Txt>
-                <Txt style={styles.guestBody}>You're exploring as a guest. Sign in with Google and everything you've added moves to your account.</Txt>
+                <Txt style={styles.guestBody}>You&apos;re exploring as a guest. Sign in with Google and everything you&apos;ve added moves to your account.</Txt>
               </View>
               {signingIn ? (
                 <ActivityIndicator color={colors.sage} />
@@ -363,72 +363,7 @@ export default function Profile() {
         </View>
       </ScrollView>
 
-      <Modal visible={showSwitcher} transparent animationType="slide" onRequestClose={() => setShowSwitcher(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setShowSwitcher(false)}>
-          <Pressable style={styles.switchSheet} onPress={(e) => e.stopPropagation()}>
-            <Display weight="medium" style={styles.switchTitle}>Wardrobes</Display>
-            <Txt style={styles.switchSub}>
-              {premium ? "One account, a wardrobe for everyone in the household." : "Add family wardrobes with Premium."}
-            </Txt>
-            {profiles.map((p) => (
-              <View key={p.id} style={styles.profRow}>
-                <Pressable
-                  style={styles.profMain}
-                  testID={`switch-profile-${p.id}`}
-                  onPress={async () => { await switchTo(p.id); setShowSwitcher(false); load(); }}
-                >
-                  <View style={[styles.profAvatar, active?.id === p.id && styles.profAvatarActive]}>
-                    <Txt style={styles.avatarEmoji}>{p.emoji || "👤"}</Txt>
-                  </View>
-                  <Txt style={styles.profName}>{p.name}</Txt>
-                  {active?.id === p.id && <Feather name="check" size={18} color={colors.brand} />}
-                </Pressable>
-                {profiles.length > 1 && (
-                  <Pressable onPress={() => deleteProfile(p.id)} testID={`delete-profile-${p.id}`} hitSlop={8}>
-                    <Feather name="trash-2" size={16} color={colors.onSurfaceTertiary} />
-                  </Pressable>
-                )}
-              </View>
-            ))}
-            <View style={styles.addRow}>
-              <TextInput
-                style={styles.addInput}
-                value={newName}
-                onChangeText={setNewName}
-                placeholder="Add a wardrobe (e.g. David, Emily)"
-                placeholderTextColor={colors.onSurfaceTertiary}
-                testID="new-profile-input"
-              />
-              <Pressable
-                style={styles.addBtn}
-                testID="add-profile-button"
-                onPress={async () => {
-                  if (!premium) {
-                    setShowSwitcher(false);
-                    router.push("/premium");
-                    return;
-                  }
-                  if (!newName.trim()) return;
-                  try {
-                    await createProfile(newName.trim(), "👤", "individual");
-                  } catch (e: any) {
-                    if (e.status === 402) {
-                      setShowSwitcher(false);
-                      router.push("/premium");
-                      return;
-                    }
-                  }
-                  setNewName("");
-                  setShowSwitcher(false);
-                  load();
-                }}
-              >
-                <Feather name={premium ? "plus" : "lock"} size={18} color={colors.onBrandPrimary} />
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <WardrobeSwitcher visible={showSwitcher} onClose={() => { setShowSwitcher(false); load(); }} />
     </View>
   );
 }

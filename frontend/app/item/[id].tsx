@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Modal } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -7,13 +7,6 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
-
-const LAUNDRY = [
-  { key: "Ready", icon: "check-circle" },
-  { key: "Dirty", icon: "alert-circle" },
-  { key: "Washing", icon: "droplet" },
-  { key: "Drying", icon: "wind" },
-];
 
 export default function ItemDetail() {
   const insets = useSafeAreaInsets();
@@ -28,8 +21,9 @@ export default function ItemDetail() {
   const [compat, setCompat] = useState<any>(null);
   const [compatLoading, setCompatLoading] = useState(false);
   const [compatError, setCompatError] = useState("");
-  const [savingStatus, setSavingStatus] = useState(false);
-  const [showLaundryPrompt, setShowLaundryPrompt] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const intelY = useRef(0);
+  const bodyY = useRef(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,7 +45,6 @@ export default function ItemDetail() {
     try {
       await api("/wear", { method: "POST", body: { item_ids: [id], occasion: item?.name } });
       setLogged(true);
-      if ((item?.availability || "Ready") === "Ready") setShowLaundryPrompt(true);
       load();
     } catch {}
   };
@@ -68,19 +61,14 @@ export default function ItemDetail() {
     setCompatError("");
     try {
       setCompat(await api<any>(`/items/${id}/compatibility`, { method: "POST" }));
+      // Land straight on the intelligence content instead of the metadata above it.
+      requestAnimationFrame(() =>
+        scrollRef.current?.scrollTo({ y: Math.max(0, bodyY.current + intelY.current - 12), animated: true })
+      );
     } catch (e: any) {
       setCompatError(e.message || "Couldn't analyze pairings");
     }
     setCompatLoading(false);
-  };
-
-  const setStatus = async (availability: string) => {
-    setSavingStatus(true);
-    setItem((prev: any) => ({ ...prev, availability }));
-    try {
-      await api(`/items/${id}`, { method: "PUT", body: { availability } });
-    } catch {}
-    setSavingStatus(false);
   };
 
   if (loading) {
@@ -95,11 +83,9 @@ export default function ItemDetail() {
     );
   }
 
-  const cpw = item.price && item.wear_count > 0 ? (item.price / item.wear_count).toFixed(2) : null;
-
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing["3xl"] }}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing["3xl"] }}>
         {/* Gallery */}
         <View style={[styles.gallery, { height: width * 1.15 }]}>
           {photos.length > 0 ? (
@@ -141,8 +127,8 @@ export default function ItemDetail() {
           )}
         </View>
 
-        <View style={styles.body}>
-          <Txt style={styles.category}>{item.category?.toUpperCase()}{item.brand ? ` · ${item.brand}` : ""}</Txt>
+        <View style={styles.body} onLayout={(e) => { bodyY.current = e.nativeEvent.layout.y; }}>
+          <Txt style={styles.category}>{item.category?.toUpperCase()}</Txt>
           <Display weight="medium" style={styles.name}>{item.name}</Display>
 
           {/* Stats */}
@@ -151,51 +137,6 @@ export default function ItemDetail() {
               <Display weight="medium" style={styles.statNum}>{item.wear_count || 0}</Display>
               <Txt style={styles.statLabel}>times worn</Txt>
             </View>
-            <View style={styles.statDiv} />
-            <View style={styles.stat}>
-              <Display weight="medium" style={styles.statNum}>{cpw ? `$${cpw}` : "—"}</Display>
-              <Txt style={styles.statLabel}>cost / wear</Txt>
-            </View>
-            <View style={styles.statDiv} />
-            <View style={styles.stat}>
-              <Display weight="medium" style={styles.statNum}>{item.price ? `$${item.price}` : "—"}</Display>
-              <Txt style={styles.statLabel}>bought for</Txt>
-            </View>
-          </View>
-
-          {/* Flatter tag */}
-          {item.flatters != null && (
-            <View style={[styles.flatterTag, { backgroundColor: item.flatters ? colors.brandTertiary : colors.surfaceSecondary }]}>
-              <Feather name={item.flatters ? "thumbs-up" : "thumbs-down"} size={14} color={item.flatters ? colors.brand : colors.onSurfaceTertiary} />
-              <Txt style={[styles.flatterTagTxt, { color: item.flatters ? colors.onBrandTertiary : colors.onSurfaceTertiary }]}>
-                {item.flatters ? "This flatters you" : "Not the most flattering"}
-              </Txt>
-            </View>
-          )}
-
-          {/* Laundry availability */}
-          <View style={styles.laundry}>
-            <Txt style={styles.notesLabel}>AVAILABILITY</Txt>
-            <View style={styles.laundryRow}>
-              {LAUNDRY.map((s) => {
-                const active = (item.availability || "Ready") === s.key;
-                return (
-                  <Pressable
-                    key={s.key}
-                    testID={`status-${s.key}`}
-                    style={[styles.statusBtn, active && styles.statusActive]}
-                    onPress={() => setStatus(s.key)}
-                    disabled={savingStatus}
-                  >
-                    <Feather name={s.icon as any} size={14} color={active ? colors.onBrandPrimary : colors.onSurfaceSecondary} />
-                    <Txt style={[styles.statusTxt, active && { color: colors.onBrandPrimary }]}>{s.key}</Txt>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {(item.availability || "Ready") !== "Ready" && (
-              <Txt style={styles.laundryHint}>In the laundry — hidden from outfit suggestions until marked Ready.</Txt>
-            )}
           </View>
 
           {/* Attributes */}
@@ -204,7 +145,6 @@ export default function ItemDetail() {
             <Attr label="Fabric" value={item.fabric} />
             <Attr label="Pattern" value={item.pattern} />
             <Attr label="Season" value={item.season} />
-            <Attr label="Size" value={item.size} />
             <Attr label="Formality" value={item.formality} />
             <Attr label="Tone" value={item.tone} />
             <Attr label="Style" value={item.style} />
@@ -219,7 +159,7 @@ export default function ItemDetail() {
           ) : null}
 
           {/* Wardrobe Intelligence */}
-          <View style={styles.intel}>
+          <View style={styles.intel} onLayout={(e) => { intelY.current = e.nativeEvent.layout.y; }}>
             <Txt style={styles.notesLabel}>WARDROBE INTELLIGENCE</Txt>
             {!compat && !compatLoading && (
               <Pressable style={styles.intelBtn} testID="compatibility-button" onPress={loadCompat}>
@@ -268,23 +208,6 @@ export default function ItemDetail() {
             <Txt style={styles.wearTxt}>{logged ? "Logged today" : "I wore this today"}</Txt>
           </Pressable>
 
-          {showLaundryPrompt && (
-            <View style={styles.laundryPrompt} testID="laundry-prompt">
-              <Txt style={styles.laundryPromptTxt}>Add this to the laundry so it is hidden from suggestions?</Txt>
-              <View style={styles.laundryPromptRow}>
-                <Pressable
-                  style={styles.laundryPromptBtn}
-                  testID="prompt-add-laundry"
-                  onPress={() => { setStatus("Dirty"); setShowLaundryPrompt(false); }}
-                >
-                  <Txt style={styles.laundryPromptBtnTxt}>Add to laundry</Txt>
-                </Pressable>
-                <Pressable style={styles.laundryPromptDismiss} onPress={() => setShowLaundryPrompt(false)}>
-                  <Txt style={styles.laundryPromptDismissTxt}>Not now</Txt>
-                </Pressable>
-              </View>
-            </View>
-          )}
         </View>
       </ScrollView>
 
@@ -343,28 +266,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 32, marginTop: spacing.xs, lineHeight: 36 },
   statRow: { flexDirection: "row", alignItems: "center", marginTop: spacing.xl, paddingVertical: spacing.lg, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: colors.divider },
   stat: { flex: 1, alignItems: "center", gap: 4 },
-  statDiv: { width: 0.5, height: 36, backgroundColor: colors.divider },
   statNum: { fontSize: 24, color: colors.onSurface },
   statLabel: { fontSize: 11, color: colors.onSurfaceTertiary },
-  flatterTag: { flexDirection: "row", alignItems: "center", gap: spacing.sm, alignSelf: "flex-start", paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill, marginTop: spacing.lg },
-  flatterTagTxt: { fontSize: 13 },
   attrs: { marginTop: spacing.xl },
-  laundry: { marginTop: spacing.xl },
-  laundryRow: { flexDirection: "row", gap: spacing.sm },
-  statusBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    height: 40,
-    borderRadius: radius.sm,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-  },
-  statusActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  statusTxt: { fontSize: 11, color: colors.onSurfaceSecondary },
-  laundryHint: { fontSize: 12, color: colors.warning, marginTop: spacing.sm, lineHeight: 17 },
   attrRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: spacing.md, borderBottomWidth: 0.5, borderColor: colors.divider },
   attrLabel: { fontSize: 13, color: colors.onSurfaceTertiary },
   attrValue: { fontSize: 14, color: colors.onSurface, textTransform: "capitalize" },
@@ -391,13 +295,6 @@ const styles = StyleSheet.create({
   pairReason: { fontSize: 12, color: colors.onSurfaceTertiary, lineHeight: 17, marginTop: 2 },
   wearBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, height: 54, borderRadius: radius.sm, marginTop: spacing["2xl"] },
   wearTxt: { color: colors.onBrandPrimary, fontSize: 16 },
-  laundryPrompt: { marginTop: spacing.lg, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg },
-  laundryPromptTxt: { fontSize: 13, color: colors.onBrandTertiary, marginBottom: spacing.md, lineHeight: 19 },
-  laundryPromptRow: { flexDirection: "row", gap: spacing.md, alignItems: "center" },
-  laundryPromptBtn: { flex: 1, backgroundColor: colors.brandPrimary, height: 44, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  laundryPromptBtnTxt: { color: colors.onBrandPrimary, fontSize: 14 },
-  laundryPromptDismiss: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  laundryPromptDismissTxt: { color: colors.onBrandTertiary, fontSize: 14 },
   backdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },
   confirmSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: spacing["2xl"] },
   confirmTitle: { fontSize: 24, marginBottom: spacing.sm },
