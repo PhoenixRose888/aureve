@@ -215,3 +215,33 @@ DONE in PREVIEW, pending ONE combined redeploy+new iOS build:
 - Shopping Intelligence Premium live; Missing Pieces=subsection; Packing refs removed(dormant); Sign in with Apple added; reviewer review@aureve.app/AureveTest2026 premium_until=2099.
 NEXT: user runs diag -> re-scope; combined redeploy+build; on-device verify.
 CONSTRAINTS: dont change RevenueCat config/prices/ids, entitlement premium, bundle com.emergent.wardrobeai.l0r5ay, auth, reviewer creds, legal; never expose full keys; no data wipes.
+
+## LAUNCH-CRITICAL BATCH (Priority 1, iteration 28) — IMPLEMENTED & VERIFIED
+Approved 24-item product brief; only Priority-1 items built. Multi-photo per item DEFERRED. Priority 2/3 NOT started.
+
+**B1 — Recognition reliability (frontend+backend, needs redeploy + NEW iOS build)**
+- RCA: backend AI was fine (1.3s, 96-98% confidence on real photos). Failures were transport: raw ~2-4MB iPhone base64 + recognition and Gemini background-removal in ONE /capture request (10-30s) with no timeout/retry, plus a blocking "Which piece is this?" category modal.
+- `src/utils/image.ts`: on-device downscale to 1280px longest edge, JPEG q0.7 (expo-image-manipulator) → ~100-300KB uploads.
+- `src/utils/diag.ts` + `POST /api/diag/log`: stage logs (capture.picked, compress.done/failed, analyze.start/done/error, clean.start/done/failed, bulk.*) shipped to backend log so TestFlight failures are isolatable.
+- add-item: photo → auto-analyse immediately (no modal), `/capture {clean:false}` 60s timeout + 1 retry + "Try again" button; background removal moved to new `POST /api/clean-photo` (90s) fired AFTER details are filled, non-blocking ("Tidying photo…" pill). Low-confidence (<60) confirm banner kept.
+- bulk-add: clean=false (fast/reliable), per-photo stage logs.
+- Size + Fabric inputs REMOVED from add/edit form; backend fields + AI fabric detection preserved and still fed to the stylist.
+- New `PhotoTips` collapsible (collapsed by default) on Add Item + Bulk Add.
+
+**B2 — Wardrobe (backend redeploy + new build)**
+- Demo isolation: `items_scope(user)` excludes `demo:true` for every account except guest sessions and REVIEWER_EMAIL; applied to all 20 db.items queries (items, laundry, insights, health, shopping intelligence, compatibility, stylist). NOTHING deleted.
+- `POST /api/items/bulk-delete` + Wardrobe Select mode (long-press or select button, count, Select all on filtered set, Cancel, confirm sheet, refresh).
+
+**B3 — Intelligence + tone + tiers (backend redeploy + new build)**
+- Stylist: `summarize_items_for_ai` now includes worn count + last_worn; new `underused_line()` (pieces worn <=1) and `recent_looks_line()` (last 6 worn combos) injected into `_build_outfit`; prompt tells it to rotate the wardrobe and favour suitable forgotten pieces but never at the cost of relevance. Cross-day `avoid_item_ids` diversity preserved.
+- Health report: `wasted_summary` → `underused_summary`; neutral prompt/UI copy ("Pieces worth revisiting", "Underused pieces + your smartest next buy").
+- Shopping Intelligence labels: "SHOULD I BUY THIS?" (photo/item evaluation) + "WHAT SHOULD I ADD?" (gap analysis). "Missing Pieces" removed as a user-facing name.
+- Free tier per brief: stylist 5/MONTH, dressme 5/MONTH, `FREE_ITEM_CAP=100` active items (402 on POST /items; deleting frees slots). Premium unlimited.
+
+**B4 — Google Calendar (backend redeploy only)**
+- RCA: `GCAL_REDIRECT_URI` env was hard-coded to the PREVIEW host → `redirect_uri_mismatch` in production.
+- `_gcal_redirect_uri(request)` derives `{x-forwarded-proto}://{x-forwarded-host|host}/api/calendar/callback`; stored on the oauth state doc and reused in the token exchange. Env var is now only a fallback.
+- USER ACTION: add `https://wardrobe-ai-311.emergent.host/api/calendar/callback` (and keep the preview one) to the Google Cloud OAuth client's Authorised redirect URIs.
+
+Testing: iteration_28.json — 16/18 backend pass (1 skip, 1 preview ingress artifact), all frontend checks pass.
+Still required from user: (a) Google redirect URI registration, (b) one combined redeploy, (c) ONE new iOS build, (d) real-device photo recognition validation across tops/bottoms/dresses/outerwear/shoes/bags/sunglasses/jewellery.

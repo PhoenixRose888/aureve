@@ -92,9 +92,9 @@ export default function Shop() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* --- Wardrobe gap analysis: the core of Shopping Intelligence --- */}
         <View style={styles.gapBlock}>
-          <Txt style={styles.sectionLabel}>MISSING PIECES · WARDROBE GAP ANALYSIS</Txt>
+          <Txt style={styles.sectionLabel}>WHAT SHOULD I ADD?</Txt>
           <Txt style={styles.gapIntro}>
-            Aureve reads what you already own and surfaces your missing pieces — the gaps that would add the most value, never duplicates of what you have.
+            Aureve reads what you already own and finds the gaps worth filling — the pieces that would unlock the most new outfits, never duplicates of what you have.
           </Txt>
           {!gap ? (
             <Pressable style={styles.analyseBtn} testID="analyse-wardrobe" onPress={analyseWardrobe} disabled={gapLoading}>
@@ -156,7 +156,7 @@ export default function Shop() {
         </View>
 
         <View style={styles.divider} />
-        <Txt style={styles.sectionLabel}>CHECK A SPECIFIC ITEM</Txt>
+        <Txt style={styles.sectionLabel}>SHOULD I BUY THIS?</Txt>
         {!image ? (
           <Pressable style={styles.dropzone} testID="shop-upload-button" onPress={openPicker}>
             <View style={styles.dropIcon}>

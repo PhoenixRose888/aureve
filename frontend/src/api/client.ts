@@ -28,21 +28,38 @@ type Options = {
   method?: string;
   body?: any;
   auth?: boolean;
+  /** Abort the request after this many ms (default 45s). */
+  timeoutMs?: number;
 };
 
 export async function api<T = any>(path: string, opts: Options = {}): Promise<T> {
-  const { method = "GET", body, auth = true } = opts;
+  const { method = "GET", body, auth = true, timeoutMs = 45000 } = opts;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (auth) {
     const token = await getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
     if (activeProfileId) headers["X-Profile-Id"] = activeProfileId;
   }
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    const e = new Error(
+      err?.name === "AbortError" ? "Request timed out" : "Network error"
+    ) as any;
+    e.status = 0;
+    e.timeout = err?.name === "AbortError";
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401) {
     // Don't wipe the stored token here — a transient 401 on one call
     // shouldn't log the user out of the whole app. Auth bootstrap

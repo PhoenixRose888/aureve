@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator, TextInput, ScrollView, Modal } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, TextInput, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -9,6 +9,8 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts, CATEGORIES, SEASONS } from "@/src/theme";
 import { api } from "@/src/api/client";
 import PhotoPickerModal from "@/src/components/PhotoPickerModal";
+import PhotoTips from "@/src/components/PhotoTips";
+import { diag } from "@/src/utils/diag";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
 import GarmentImage from "@/src/components/GarmentImage";
@@ -38,17 +40,17 @@ export default function AddItem() {
   const [ai, setAi] = useState<{ style?: string; sleeve_length?: string; formality?: string; tone?: string }>({});
 
   const [pickerTarget, setPickerTarget] = useState<null | "photo" | "worn_photo">(null);
-  const [hintPhoto, setHintPhoto] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [lowConf, setLowConf] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<any[]>([]);
 
   const analyzeMsg = useRotatingMessage(analyzing, [
     "Reading the piece…",
     "Identifying colour & fabric…",
-    "Removing the background…",
     "Tidying up the details…",
   ]);
 
@@ -75,43 +77,80 @@ export default function AddItem() {
     })();
   }, [editing, id]);
 
+  /** Background removal: fired AFTER recognition, never blocking the user. */
+  const runClean = useCallback(async (base64: string) => {
+    setCleaning(true);
+    diag("clean.start");
+    try {
+      const res = await api<any>("/clean-photo", {
+        method: "POST",
+        body: { image: base64 },
+        timeoutMs: 90000,
+      });
+      if (res.clean_image) {
+        setOrigPhoto(base64);
+        setPhotos((p) => (p.photo === base64 ? { ...p, photo: res.clean_image } : p));
+        diag("clean.done");
+      } else {
+        diag("clean.empty");
+      }
+    } catch (e: any) {
+      // Cosmetic only — the original photo stays.
+      diag("clean.failed", { error: String(e?.message || e), status: e?.status });
+    }
+    setCleaning(false);
+  }, []);
+
   const runAnalyze = useCallback(
-    async (base64: string, hint?: string) => {
-      if (hint && CATEGORIES.includes(hint)) setCategory(hint);
+    async (base64: string) => {
+      setLastPhoto(base64);
       setAnalyzing(true);
       setError("");
-      try {
-        const res = await api<any>("/capture", {
-          method: "POST",
-          body: { image: base64, category_hint: hint || null, clean: true },
-        });
-        const r = res.analysis || {};
-        // Swap in the clean, background-removed photo (fall back to the original).
-        if (res.clean_image) {
-          setOrigPhoto(base64);
-          setPhotos((p) => ({ ...p, photo: res.clean_image }));
+      const kb = Math.round((base64.length * 3) / 4 / 1024);
+      diag("analyze.start", { kb });
+      let res: any = null;
+      for (let attempt = 1; attempt <= 2 && !res; attempt++) {
+        try {
+          res = await api<any>("/capture", {
+            method: "POST",
+            body: { image: base64, clean: false },
+            timeoutMs: 60000,
+          });
+        } catch (e: any) {
+          diag("analyze.error", { attempt, status: e?.status, timeout: !!e?.timeout, error: String(e?.message || e) });
+          if (attempt === 2) {
+            setError("Couldn't auto-detect this one. Add the details below, or try again.");
+            haptics.warn();
+          }
         }
-        if (r.name && !name) setName(r.name);
-        if (r.category && CATEGORIES.includes(r.category) && !hint) setCategory(r.category);
-        // Real-world photos: if the AI is unsure, keep its best guess but ask the
-        // user to confirm the category rather than silently trusting it.
-        setLowConf(typeof r.confidence === "number" && r.confidence < 60);
-        if (r.colour) setColour(r.colour);
-        if (r.fabric) setFabric(r.fabric);
-        if (r.pattern) setPattern(r.pattern);
-        if (r.season && SEASONS.includes(r.season)) setSeason(r.season);
-        if (r.condition) setCondition(r.condition);
-        if (r.estimated_value && !price) setPrice(String(r.estimated_value));
-        setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
-        setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
-        haptics.success();
-      } catch {
-        setError("Couldn't auto-detect. Fill details manually.");
-        haptics.warn();
       }
       setAnalyzing(false);
+      if (!res) return;
+      const r = res.analysis || {};
+      diag("analyze.done", { name: r.name, category: r.category, confidence: r.confidence });
+      if (!r.name && !r.category) {
+        setError("Couldn't auto-detect this one. Add the details below, or try again.");
+        haptics.warn();
+        return;
+      }
+      if (r.name && !name) setName(r.name);
+      if (r.category && CATEGORIES.includes(r.category)) setCategory(r.category);
+      // Real-world photos: if the AI is unsure, keep its best guess but ask the
+      // user to confirm the category rather than silently trusting it.
+      setLowConf(typeof r.confidence === "number" && r.confidence < 60);
+      if (r.colour) setColour(r.colour);
+      if (r.fabric) setFabric(r.fabric);
+      if (r.pattern) setPattern(r.pattern);
+      if (r.season && SEASONS.includes(r.season)) setSeason(r.season);
+      if (r.condition) setCondition(r.condition);
+      if (r.estimated_value && !price) setPrice(String(r.estimated_value));
+      setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
+      setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
+      haptics.success();
+      // Tidy the photo in the background once the details are already filled in.
+      runClean(base64);
     },
-    [name, price]
+    [name, price, runClean]
   );
 
   const onPicked = useCallback(
@@ -121,10 +160,11 @@ export default function AddItem() {
         return;
       }
       setPhotos((p) => ({ ...p, photo: base64 }));
-      // Ask which piece to focus on before AI reads it (handles worn / multi-garment photos)
-      setHintPhoto(base64);
+      setOrigPhoto(null);
+      // Aureve reads the photo straight away — no questions asked first.
+      runAnalyze(base64);
     },
-    [pickerTarget]
+    [pickerTarget, runAnalyze]
   );
 
   const save = async () => {
@@ -208,6 +248,12 @@ export default function AddItem() {
                 <Txt style={styles.analyzeTxt}>{analyzeMsg}</Txt>
               </View>
             )}
+            {!analyzing && cleaning ? (
+              <View style={styles.cleanPill} testID="cleaning-pill">
+                <ActivityIndicator size="small" color={colors.onSurfaceInverse} />
+                <Txt style={styles.cleanTxt}>Tidying photo…</Txt>
+              </View>
+            ) : null}
             {!analyzing && origPhoto && photos.photo ? (
               <Pressable
                 style={styles.revertPill}
@@ -235,7 +281,19 @@ export default function AddItem() {
           </Pressable>
         </View>
 
-        {error ? <Txt style={styles.error} testID="add-item-error">{error}</Txt> : null}
+        {error ? (
+          <View style={styles.errorRow}>
+            <Txt style={styles.error} testID="add-item-error">{error}</Txt>
+            {lastPhoto ? (
+              <Pressable style={styles.retryBtn} testID="analyze-retry" onPress={() => runAnalyze(lastPhoto)}>
+                <Feather name="refresh-cw" size={13} color={colors.onSurface} />
+                <Txt style={styles.retryTxt}>Try again</Txt>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        <PhotoTips />
 
         {duplicates.length > 0 ? (
           <View style={styles.dupBanner} testID="add-item-duplicates">
@@ -279,11 +337,7 @@ export default function AddItem() {
 
         <View style={styles.row2}>
           <Field label="Colour" value={colour} onChangeText={setColour} placeholder="Cream" flex testID="field-colour" />
-          <Field label="Fabric" value={fabric} onChangeText={setFabric} placeholder="Linen" flex testID="field-fabric" />
-        </View>
-        <View style={styles.row2}>
           <Field label="Brand" value={brand} onChangeText={setBrand} placeholder="—" flex testID="field-brand" />
-          <Field label="Size" value={size} onChangeText={setSize} placeholder="M" flex testID="field-size" />
         </View>
         <View style={styles.row2}>
           <Field label="Pattern" value={pattern} onChangeText={setPattern} placeholder="Solid" flex testID="field-pattern" />
@@ -338,45 +392,6 @@ export default function AddItem() {
         onPicked={onPicked}
         title={pickerTarget === "worn_photo" ? "Add a worn photo" : "Add item photo"}
       />
-
-      <Modal visible={hintPhoto !== null} transparent animationType="fade" onRequestClose={() => setHintPhoto(null)}>
-        <View style={styles.hintBackdrop}>
-          <View style={styles.hintSheet}>
-            <Display weight="medium" style={styles.hintTitle}>Which piece is this?</Display>
-            <Txt style={styles.hintSub}>
-              Wearing more than one thing? Tell Aureve which garment to focus on for an accurate read.
-            </Txt>
-            <View style={styles.hintChips}>
-              {CATEGORIES.map((c) => (
-                <Pressable
-                  key={c}
-                  testID={`hint-${c}`}
-                  style={styles.hintChip}
-                  onPress={() => {
-                    const b64 = hintPhoto!;
-                    setHintPhoto(null);
-                    runAnalyze(b64, c);
-                  }}
-                >
-                  <Txt style={styles.hintChipTxt}>{c}</Txt>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable
-              style={styles.hintAuto}
-              testID="hint-auto"
-              onPress={() => {
-                const b64 = hintPhoto!;
-                setHintPhoto(null);
-                runAnalyze(b64);
-              }}
-            >
-              <Feather name="zap" size={16} color={colors.onBrandPrimary} />
-              <Txt style={styles.hintAutoTxt}>Just detect it for me</Txt>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -443,7 +458,19 @@ const styles = StyleSheet.create({
   analyzeTxt: { color: colors.onSurfaceInverse, fontSize: 12 },
   revertPill: { position: "absolute", bottom: 6, right: 6, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brandPrimary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill },
   revertTxt: { color: colors.onBrandPrimary, fontSize: 10 },
-  error: { color: colors.error, fontSize: 13, marginTop: spacing.lg },
+  error: { color: colors.error, fontSize: 13, flex: 1, lineHeight: 18 },
+  errorRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg },
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderWidth: 0.5, borderColor: colors.borderStrong, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, height: 36,
+  },
+  retryTxt: { fontSize: 13, color: colors.onSurface },
+  cleanPill: {
+    position: "absolute", bottom: 6, left: 6, flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(26,26,26,0.6)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill,
+  },
+  cleanTxt: { color: colors.onSurfaceInverse, fontSize: 10 },
   field: { marginTop: spacing.xl },
   fieldLabel: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginBottom: spacing.sm },
   input: {
@@ -502,36 +529,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   saveTxt: { color: colors.onBrandPrimary, fontSize: 16, fontFamily: fonts.displayBold },
-  hintBackdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.5)", justifyContent: "flex-end" },
-  hintSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: spacing.xl,
-    paddingBottom: spacing["2xl"],
-  },
-  hintTitle: { fontSize: 24 },
-  hintSub: { fontSize: 13, color: colors.onSurfaceTertiary, marginTop: 4, marginBottom: spacing.lg, lineHeight: 19 },
-  hintChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  hintChip: {
-    paddingHorizontal: spacing.lg,
-    height: 40,
-    borderRadius: radius.pill,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hintChipTxt: { fontSize: 14, color: colors.onSurface },
-  hintAuto: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    height: 50,
-    borderRadius: radius.sm,
-    backgroundColor: colors.brandPrimary,
-    marginTop: spacing.lg,
-  },
-  hintAutoTxt: { color: colors.onBrandPrimary, fontSize: 15 },
 });

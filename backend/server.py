@@ -42,6 +42,10 @@ AI_MODEL = ("openai", "gpt-5.4")
 
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
 
+# Dedicated App Store review account — the only signed-in account allowed to
+# keep the seeded demo wardrobe.
+REVIEWER_EMAIL = (os.environ.get('REVIEWER_EMAIL', 'review@aureve.app') or '').strip().lower()
+
 # Sign in with Apple — audiences must include the app bundle id AND
 # host.exp.Exponent (Expo Go). Configured via backend .env.
 APPLE_AUDIENCES = [a.strip() for a in os.environ.get('APPLE_AUDIENCES', '').split(',') if a.strip()]
@@ -59,12 +63,14 @@ PREMIUM_PLANS = {
 }
 # Free tier: unlimited wardrobe + a taste of AI. Metered features:
 FREE_LIMITS = {
-    "stylist": {"period": "day", "max": 5},
+    # Free is genuinely useful: a monthly allowance of the AI features plus a
+    # 100-piece active wardrobe. Premium removes every cap.
+    "stylist": {"period": "month", "max": 5},
     "beauty": {"period": "month", "max": 1},
-    # Dress Me is available to everyone (flagship experience) with a generous
-    # daily cap so it stays usable for demos/judging.
-    "dressme": {"period": "day", "max": 50},
+    "dressme": {"period": "month", "max": 5},
 }
+# Free wardrobes hold up to this many ACTIVE pieces (deleting frees slots).
+FREE_ITEM_CAP = 100
 # Everything not in FREE_LIMITS is Premium-only (packing, capsule, shop, missing, health, compatibility).
 
 app = FastAPI()
@@ -177,7 +183,19 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
         "profile_name": prof.get("name"),
         "profile": prof.get("profile") or {},
         "premium": is_premium(account),
+        # Sample/practice pieces belong to Guest mode and the Apple review
+        # account only — never to a real signed-in wardrobe.
+        "show_demo": bool(account.get("is_guest")) or _norm_email(account.get("email") or "") == REVIEWER_EMAIL,
     }
+
+
+def items_scope(user: dict) -> dict:
+    """Mongo filter for a scope's wardrobe. Real signed-in accounts never see
+    auto-seeded demo pieces (the records are kept, just excluded everywhere)."""
+    q = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        q["demo"] = {"$ne": True}
+    return q
 
 
 def is_premium(account: dict) -> bool:
@@ -199,15 +217,15 @@ def is_premium(account: dict) -> bool:
 
 
 PREMIUM_MESSAGES = {
-    "stylist": "You've used your 5 free AI outfits today. Go Premium for unlimited styling.",
+    "stylist": "You've used your 5 free AI stylist sessions this month. Go Premium for unlimited styling.",
     "beauty": "Colour analysis is 1/month on Free. Go Premium for unlimited analyses.",
     "packing": "The Packing Assistant is a Premium feature.",
     "capsule": "Capsule wardrobes are a Premium feature.",
     "shop": "Shopping Intelligence is a Premium feature.",
-    "missing": "The Missing Piece analysis is a Premium feature.",
+    "missing": "Shopping Intelligence is a Premium feature.",
     "health": "The Wardrobe Health Report is a Premium feature.",
     "compatibility": "Wardrobe compatibility is a Premium feature.",
-    "dressme": "Dress Me is a Premium feature.",
+    "dressme": "You've used your 5 free Dress Me looks this month. Go Premium for unlimited.",
     "tryon": "Virtual Try-On is a Premium feature.",
     "household": "Household wardrobes are a Premium feature — one subscription covers everyone.",
 }
@@ -1346,6 +1364,16 @@ def compress_b64(b64: Optional[str], max_side: int = 1024, quality: int = 72) ->
 async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
     if not (payload.photo and payload.photo.strip()):
         raise HTTPException(status_code=400, detail="A photo is required to add an item.")
+    if not user.get("premium"):
+        active = await db.items.count_documents(items_scope(user))
+        if active >= FREE_ITEM_CAP:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"Free wardrobes hold up to {FREE_ITEM_CAP} pieces. "
+                    "Delete a piece to free a slot, or go Premium for unlimited."
+                ),
+            )
     item = payload.dict()
     item["photo"] = compress_b64(item.get("photo"))
     item["worn_photo"] = compress_b64(item.get("worn_photo"))
@@ -1361,7 +1389,7 @@ async def create_item(payload: ItemCreate, user: dict = Depends(get_scope)):
 
 @api_router.get("/items")
 async def list_items(category: Optional[str] = None, user: dict = Depends(get_scope)):
-    all_items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    all_items = await db.items.find(items_scope(user), {"_id": 0}).sort("created_at", -1).to_list(1000)
     counts = compute_pairs_counts(all_items)
     if category and category.lower() != "all":
         items = [it for it in all_items if it.get("category") == category]
@@ -1375,14 +1403,14 @@ async def list_items(category: Optional[str] = None, user: dict = Depends(get_sc
 @api_router.get("/laundry")
 async def laundry(user: dict = Depends(get_scope)):
     items = await db.items.find(
-        {"user_id": user["user_id"], "availability": {"$in": ["Dirty", "Washing", "Drying"]}}, {"_id": 0}
+        {**items_scope(user), "availability": {"$in": ["Dirty", "Washing", "Drying"]}}, {"_id": 0}
     ).sort("name", 1).to_list(1000)
     return items
 
 
 @api_router.get("/items/{item_id}")
 async def get_item(item_id: str, user: dict = Depends(get_scope)):
-    item = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
+    item = await db.items.find_one({**items_scope(user), "id": item_id}, {"_id": 0})
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item
@@ -1410,6 +1438,20 @@ async def update_item(item_id: str, payload: ItemUpdate, user: dict = Depends(ge
 async def delete_item(item_id: str, user: dict = Depends(get_scope)):
     await db.items.delete_one({"id": item_id, "user_id": user["user_id"]})
     return {"ok": True}
+
+
+class BulkDeleteRequest(BaseModel):
+    item_ids: List[str]
+
+
+@api_router.post("/items/bulk-delete")
+async def bulk_delete_items(payload: BulkDeleteRequest, user: dict = Depends(get_scope)):
+    """Delete several of the scope's own wardrobe items in one go."""
+    ids = [i for i in (payload.item_ids or []) if i]
+    if not ids:
+        raise HTTPException(status_code=400, detail="No items selected")
+    res = await db.items.delete_many({"user_id": user["user_id"], "id": {"$in": ids}})
+    return {"deleted": res.deleted_count}
 
 
 # ----------------------------- AI: Analyze Item -----------------------------
@@ -1537,18 +1579,27 @@ def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> Lis
 
 @api_router.post("/capture")
 async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope)):
-    """One-shot capture: auto-tag the garment AND clean its background in parallel,
-    so adding a piece needs near-zero manual work."""
+    """Recognition pass for a captured garment photo. Background removal is a
+    separate call (/clean-photo) so recognition stays fast and reliable on real
+    mobile networks; pass clean=true only if both are wanted in one request."""
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    kb = int(len(payload.image or "") * 3 / 4 / 1024)
+    logger.info("capture: received image %sKB clean=%s hint=%s user=%s",
+                kb, payload.clean, payload.category_hint, user["user_id"])
+    started = _time.monotonic()
     tasks = [_analyze_core(payload.image, payload.category_hint, user["user_id"])]
     if payload.clean:
         tasks.append(_clean_photo(payload.image))
     results = await asyncio.gather(*tasks, return_exceptions=True)
     analysis = results[0]
     if isinstance(analysis, Exception) or not analysis:
-        logger.warning("capture analyze failed: %s", analysis)
+        logger.warning("capture: analyze FAILED after %.1fs: %s", _time.monotonic() - started, analysis)
         analysis = {}
+    else:
+        logger.info("capture: analyzed in %.1fs -> name=%r category=%r confidence=%s",
+                    _time.monotonic() - started, analysis.get("name"),
+                    analysis.get("category"), analysis.get("confidence"))
     clean_img = None
     if payload.clean and len(results) > 1:
         cr = results[1]
@@ -1558,9 +1609,45 @@ async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope))
             clean_img = cr
     duplicates = []
     if analysis:
-        existing = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+        existing = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
         duplicates = find_similar_items(analysis, existing)
     return {"analysis": analysis, "clean_image": clean_img, "duplicates": duplicates}
+
+
+class CleanPhotoRequest(BaseModel):
+    image: str
+
+
+@api_router.post("/clean-photo")
+async def clean_photo(payload: CleanPhotoRequest, user: dict = Depends(get_scope)):
+    """Background-removed, catalogue-style version of a garment photo. Called
+    separately (and non-blockingly) after recognition so a slow or failed
+    background removal can never break adding an item."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    started = _time.monotonic()
+    try:
+        img = await _clean_photo(payload.image)
+    except Exception as e:
+        logger.warning("clean-photo failed after %.1fs: %s", _time.monotonic() - started, e)
+        raise HTTPException(status_code=502, detail="Couldn't clean up the photo")
+    logger.info("clean-photo: done in %.1fs (image=%s)", _time.monotonic() - started, bool(img))
+    return {"clean_image": img}
+
+
+class ClientLogRequest(BaseModel):
+    stage: str
+    data: Optional[dict] = None
+    platform: Optional[str] = None
+
+
+@api_router.post("/diag/log")
+async def diag_log(payload: ClientLogRequest):
+    """Stage-level client diagnostics. Console logs are invisible on TestFlight,
+    so the app ships each pipeline stage here to land in the server log."""
+    logger.info("CLIENT[%s] %s %s", payload.platform or "?", payload.stage,
+                json.dumps(payload.data or {})[:600])
+    return {"ok": True}
 
 
 # ----------------------------- AI: Stylist Suggest -----------------------------
@@ -1572,9 +1659,30 @@ def summarize_items_for_ai(items: List[dict]) -> str:
             f"colour:{it.get('colour','')} | fabric:{it.get('fabric','')} | "
             f"season:{it.get('season','All')} | formality:{it.get('formality','')} | "
             f"tone:{it.get('tone','')} | fit:{it.get('fit_notes','')} | "
-            f"flatters:{it.get('flatters')}"
+            f"flatters:{it.get('flatters')} | worn:{it.get('wear_count', 0) or 0}x | "
+            f"last_worn:{(it.get('last_worn') or 'never')[:10]}"
         )
     return "\n".join(lines)
+
+
+def underused_line(items: List[dict], limit: int = 10) -> str:
+    """Name the pieces the user owns but rarely (or never) wears, so the stylist
+    can help them rediscover their own wardrobe instead of recycling favourites."""
+    ranked = sorted(items, key=lambda it: ((it.get("wear_count", 0) or 0), it.get("last_worn") or ""))
+    picks = [it for it in ranked if (it.get("wear_count", 0) or 0) <= 1][:limit]
+    if not picks:
+        return ""
+    names = ", ".join(f"{it.get('name')} ({it.get('category')}, worn {it.get('wear_count', 0) or 0}x)" for it in picks)
+    return f"UNDERUSED / FORGOTTEN pieces they own: {names}.\n"
+
+
+async def recent_looks_line(user_id: str, limit: int = 6) -> str:
+    """Summarise the most recent outfits so the stylist doesn't rebuild them."""
+    logs = await db.wear_logs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    combos = [",".join(lg.get("item_ids", [])) for lg in logs if lg.get("item_ids")]
+    if not combos:
+        return ""
+    return "RECENTLY WORN combinations (do not simply rebuild these): " + " | ".join(combos) + "\n"
 
 
 def available_items(items: List[dict]) -> List[dict]:
@@ -1632,6 +1740,8 @@ STYLIST_SYSTEM = (
     "user's wardrobe (referenced by their exact id). Never invent items that are not in the list. "
     "Actively include styling accessories (belts, scarves, bags, sunglasses, jewellery) when they improve the look. "
     "Consider the occasion, temperature, weather, the user's learned preferences and which items flatter them. "
+    "Help them wear MORE of what they already own: rotate the wardrobe, favour suitable pieces they rarely wear, "
+    "and avoid rebuilding a look they have just worn. Versatile staples may repeat when styled differently. "
     "Return STRICT JSON with keys: "
     "items (array of objects with keys slot, item_id, reason — reason explains WHY it works, like a stylist), "
     "confidence_score (integer 0-100 rating the outfit on colour harmony, style cohesion, occasion + weather "
@@ -1681,7 +1791,7 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "stylist")
-    all_items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    all_items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(all_items)
     wardrobe = summarize_items_for_ai(items) if items else "No items yet."
     weather_line = ""
@@ -1718,7 +1828,7 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
 async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
                         weather: Optional[str], notes: Optional[str],
                         avoid_item_ids: Optional[List[str]] = None):
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 2:
         raise HTTPException(status_code=400, detail="Not enough ready-to-wear items. Add more, or mark laundry as clean.")
@@ -1746,10 +1856,15 @@ async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
         f"Occasion: {occasion}\n{weather_line}\n"
         f"Extra notes: {notes or 'none'}\n"
         f"{variety_line}"
+        f"{underused_line(items)}"
+        f"{await recent_looks_line(user['user_id'])}"
         f"{profile_context(user)}\n"
         f"Learned preferences: {prefs}\n\n"
-        f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
-        "Build one cohesive, weather- and occasion-appropriate outfit. Return JSON only."
+        f"WARDROBE (use only these ids; 'worn' shows how often each piece has been worn):\n{wardrobe}\n\n"
+        "Build one cohesive, weather- and occasion-appropriate outfit. Work the WIDER wardrobe: "
+        "where a forgotten or rarely-worn piece genuinely suits this occasion and weather, choose it "
+        "over an obvious favourite and say so in its reason. Never force an unsuitable item just "
+        "because it is underused — relevance always wins. Return JSON only."
     )
     chat = await ai_chat(f"stylist-{user['user_id']}-{uuid.uuid4().hex[:6]}", STYLIST_SYSTEM)
     try:
@@ -1827,7 +1942,7 @@ async def virtual_tryon(payload: TryOnRequest, user: dict = Depends(get_scope)):
     if not item_ids:
         raise HTTPException(status_code=400, detail="Pick at least one item to try on.")
     items = await db.items.find(
-        {"id": {"$in": item_ids}, "user_id": user["user_id"]}, {"_id": 0}
+        {**items_scope(user), "id": {"$in": item_ids}}, {"_id": 0}
     ).to_list(20)
     garments = [it for it in items if it.get("photo")][:5]
     if not garments:
@@ -1982,19 +2097,32 @@ async def calendar_status(account: dict = Depends(get_current_user)):
     return {"connected": bool(doc), "configured": bool(GCAL_CLIENT_ID)}
 
 
+def _gcal_redirect_uri(request: Request) -> str:
+    """The OAuth redirect must exactly match the host the user is on, otherwise
+    Google returns redirect_uri_mismatch. Derived from the incoming request
+    (works for preview AND production); the env var is only a fallback."""
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").split(",")[0].strip()
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+    if host:
+        return f"{proto}://{host}/api/calendar/callback"
+    return GCAL_REDIRECT_URI
+
+
 @api_router.get("/calendar/authorize")
-async def calendar_authorize(account: dict = Depends(get_current_user)):
+async def calendar_authorize(request: Request, account: dict = Depends(get_current_user)):
     if not GCAL_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Calendar is not configured.")
+    redirect_uri = _gcal_redirect_uri(request)
     state = uuid.uuid4().hex
     await db.calendar_oauth_states.update_one(
         {"state": state},
-        {"$set": {"state": state, "account_id": account["user_id"], "created_at": now_utc().isoformat()}},
+        {"$set": {"state": state, "account_id": account["user_id"],
+                  "redirect_uri": redirect_uri, "created_at": now_utc().isoformat()}},
         upsert=True,
     )
     params = {
         "client_id": GCAL_CLIENT_ID,
-        "redirect_uri": GCAL_REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": GCAL_SCOPE,
         "access_type": "offline",
@@ -2003,11 +2131,13 @@ async def calendar_authorize(account: dict = Depends(get_current_user)):
         "state": state,
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + _urlparse.urlencode(params)
+    logger.info("gcal authorize: redirect_uri=%s", redirect_uri)
     return {"url": url}
 
 
 @app.get("/api/calendar/callback")
-async def calendar_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+async def calendar_callback(request: Request, code: Optional[str] = None,
+                            state: Optional[str] = None, error: Optional[str] = None):
     def _page(msg: str) -> HTMLResponse:
         return HTMLResponse(
             f"<html><body style='font-family:-apple-system,sans-serif;background:#232323;color:#FAF9F6;"
@@ -2022,12 +2152,13 @@ async def calendar_callback(code: Optional[str] = None, state: Optional[str] = N
     if not st:
         return _page("Link expired — please try again")
     account_id = st["account_id"]
+    redirect_uri = st.get("redirect_uri") or _gcal_redirect_uri(request)
     async with httpx.AsyncClient(timeout=20) as client:
         r = await client.post("https://oauth2.googleapis.com/token", data={
             "code": code,
             "client_id": GCAL_CLIENT_ID,
             "client_secret": GCAL_CLIENT_SECRET,
-            "redirect_uri": GCAL_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
         })
     await db.calendar_oauth_states.delete_one({"state": state})
@@ -2072,11 +2203,11 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "compatibility")
-    focus = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
+    focus = await db.items.find_one({**items_scope(user), "id": item_id}, {"_id": 0})
     if not focus:
         raise HTTPException(status_code=404, detail="Item not found")
     others = await db.items.find(
-        {"user_id": user["user_id"], "id": {"$ne": item_id}}, {"_id": 0}
+        {**items_scope(user), "id": {"$ne": item_id}}, {"_id": 0}
     ).to_list(1000)
     others = available_items(others)
     if len(others) < 1:
@@ -2133,7 +2264,7 @@ async def shop_check(payload: AnalyzeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "shop")
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     wardrobe = summarize_items_for_ai(items) if items else "The wardrobe is currently empty."
     chat = await ai_chat(f"shop-{user['user_id']}-{uuid.uuid4().hex[:6]}", SHOP_SYSTEM)
     msg = UserMessage(
@@ -2169,7 +2300,7 @@ async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_scope)):
 @api_router.get("/outfits")
 async def list_outfits(user: dict = Depends(get_scope)):
     outfits = await db.outfits.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for o in outfits:
         o["items"] = [by_id[i] for i in o.get("item_ids", []) if i in by_id]
     return outfits
@@ -2205,7 +2336,7 @@ async def _resolve_collection(coll: dict, user: dict, with_outfits: bool = False
     ).to_list(500)
     order = {oid: i for i, oid in enumerate(outfit_ids)}
     outfits.sort(key=lambda o: order.get(o["id"], 999))
-    items_by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    items_by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     cover: List[dict] = []
     for o in outfits:
         for iid in o.get("item_ids", []):
@@ -2314,7 +2445,7 @@ async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = N
         if to_date:
             query["date"]["$lte"] = to_date
     plans = await db.plans.find(query, {"_id": 0}).sort("date", 1).to_list(500)
-    by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for p in plans:
         p["items"] = [by_id[i] for i in p.get("item_ids", []) if i in by_id]
     return plans
@@ -2349,7 +2480,7 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_scope)):
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    by_id = {it["id"]: it async for it in db.items.find({"user_id": user["user_id"]}, {"_id": 0})}
+    by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for lg in logs:
         lg["items"] = [by_id[i] for i in lg.get("item_ids", []) if i in by_id]
     return logs
@@ -2358,7 +2489,7 @@ async def list_wear(user: dict = Depends(get_scope)):
 # ----------------------------- Insights -----------------------------
 @api_router.get("/insights")
 async def insights(user: dict = Depends(get_scope)):
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(2000)
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     total_items = len(items)
     total_wears = sum(it.get("wear_count", 0) for it in items)
@@ -2418,7 +2549,7 @@ async def missing_piece(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "missing")
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(2000)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Add a few more pieces to analyze your wardrobe gaps")
     wardrobe = summarize_items_for_ai(items)
@@ -2472,7 +2603,7 @@ async def shopping_intelligence(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "shop")
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(2000)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Add a few more pieces so Aureve can find your real wardrobe gaps")
     wardrobe = summarize_items_for_ai(items)
@@ -2577,7 +2708,7 @@ async def packing_plan(payload: PackingRequest, user: dict = Depends(get_scope))
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "packing")
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Need at least 3 ready-to-wear items to build a capsule")
@@ -2648,7 +2779,7 @@ async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_scope)
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "capsule")
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(1000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Need at least 3 ready-to-wear items to build a capsule")
@@ -2684,13 +2815,16 @@ async def capsule_build(payload: CapsuleRequest, user: dict = Depends(get_scope)
 # ----------------------------- AI: Wardrobe Health Report -----------------------------
 HEALTH_SYSTEM = (
     "You are Aureve's wardrobe health analyst. You are given wardrobe stats and the raw numbers. Write an honest, "
-    "encouraging monthly report. Return STRICT JSON with keys: "
+    "encouraging monthly report. Be candid and useful but NEVER judgemental — talk about underused pieces, low-wear "
+    "items, wardrobe opportunities and pieces worth revisiting, never about wasted or squandered money. "
+    "Return STRICT JSON with keys: "
     "headline (one punchy sentence summarising the month), "
-    "wasted_summary (2-3 sentences about money tied up in unworn/rarely-worn items, using the numbers given), "
+    "underused_summary (2-3 sentences about the pieces getting little wear and the opportunity there, using the "
+    "numbers given), "
     "lesson (one actionable sentence about what to wear more or rotate), "
     "missing_piece (object: recommendation, reason, unlock_note), "
     "wins (array of 1-3 short positive observations), "
-    "nudges (array of 1-3 short gentle action nudges e.g. 'Wear or donate the 3 untouched dresses'). "
+    "nudges (array of 1-3 short gentle action nudges e.g. 'Style the 3 untouched dresses this month'). "
     "Return ONLY JSON."
 )
 
@@ -2700,7 +2834,7 @@ async def health_report(user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "health")
-    items = await db.items.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
+    items = await db.items.find(items_scope(user), {"_id": 0}).to_list(2000)
     if len(items) < 3:
         raise HTTPException(status_code=400, detail="Add a few more pieces to generate your report")
 
@@ -2724,11 +2858,12 @@ async def health_report(user: dict = Depends(get_scope)):
 
     prompt = (
         f"Total pieces: {len(items)}. Total wardrobe value: ${total_value}.\n"
-        f"Unworn pieces: {len(unworn)} worth ${unworn_value}.\n"
+        f"Pieces not yet worn: {len(unworn)} worth ${unworn_value}.\n"
         f"Highest cost-per-wear items: {high_cpw_desc}.\n"
         f"Category breakdown: {breakdown}.\n\n"
-        "Write the monthly wardrobe health report. Be honest about wasted money and name the single "
-        "purchase that would unlock the most outfits. Return JSON only."
+        "Write the monthly wardrobe health report. Frame the numbers as underused pieces and "
+        "opportunities to wear more, never as wasted money, and name the single purchase that "
+        "would unlock the most outfits. Return JSON only."
     )
     chat = await ai_chat(f"health-{user['user_id']}-{uuid.uuid4().hex[:6]}", HEALTH_SYSTEM)
     try:
@@ -2876,7 +3011,7 @@ async def seed_reviewer_account():
     feature — including Premium-only ones — is reachable during Apple review.
     Credentials can be overridden via env; sensible defaults are baked in so the
     account is guaranteed present in production after a redeploy."""
-    email = _norm_email(os.environ.get("REVIEWER_EMAIL", "review@aureve.app"))
+    email = _norm_email(REVIEWER_EMAIL)
     password = os.environ.get("REVIEWER_PASSWORD", "AureveTest2026")
     premium_until = "2099-01-01T00:00:00+00:00"
     try:

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, useWindowDimensions } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, useWindowDimensions, Modal } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -31,6 +31,10 @@ export default function Wardrobe() {
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
   const [laundryMode, setLaundryMode] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,15 +57,51 @@ export default function Wardrobe() {
   const base = laundryMode ? notReady : items;
   const filtered = filter === "All" ? base : base.filter((i) => i.category === filter);
 
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelected([]);
+  };
+
+  const toggle = (id: string) =>
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const allShownSelected = filtered.length > 0 && filtered.every((i) => selected.includes(i.id));
+
+  const toggleSelectAll = () =>
+    setSelected(allShownSelected ? [] : filtered.map((i) => i.id));
+
+  const deleteSelected = async () => {
+    setDeleting(true);
+    try {
+      await api("/items/bulk-delete", { method: "POST", body: { item_ids: selected } });
+      setConfirmDelete(false);
+      exitSelect();
+      await load();
+    } catch {}
+    setDeleting(false);
+  };
+
   const renderItem = ({ item, index }: { item: any; index: number }) => {
     const status = item.availability || "Ready";
+    const isSel = selected.includes(item.id);
     return (
     <Pressable
       testID={`wardrobe-item-${item.id}`}
       style={[styles.card, { width: COL_W, marginRight: index % 2 === 0 ? GUTTER : 0 }]}
-      onPress={() => router.push(`/item/${item.id}`)}
+      onPress={() => (selectMode ? toggle(item.id) : router.push(`/item/${item.id}`))}
+      onLongPress={() => {
+        if (!selectMode) {
+          setSelectMode(true);
+          setSelected([item.id]);
+        }
+      }}
     >
-      <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }]} iconSize={28} testID={`wardrobe-img-${item.id}`} />
+      <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }, selectMode && isSel && styles.cardImgSelected]} iconSize={28} testID={`wardrobe-img-${item.id}`} />
+      {selectMode && (
+        <View style={[styles.selectDot, isSel && styles.selectDotOn]} testID={`select-dot-${item.id}`}>
+          {isSel ? <Feather name="check" size={13} color={colors.onBrandPrimary} /> : null}
+        </View>
+      )}
       {status !== "Ready" && (
         <View style={styles.laundryBadge}>
           <Feather name="droplet" size={11} color={colors.onSurfaceInverse} />
@@ -89,10 +129,35 @@ export default function Wardrobe() {
         <BrandMark style={{ alignSelf: "center", marginBottom: spacing.sm }} />
         <View style={styles.headerRow}>
           <View>
-            <Txt style={styles.kicker}>{items.length} PIECES</Txt>
+            <Txt style={styles.kicker}>{selectMode ? `${selected.length} SELECTED` : `${items.length} PIECES`}</Txt>
             <Display weight="semibold" style={styles.title}>Wardrobe</Display>
           </View>
+          {selectMode ? (
+            <View style={styles.headerActions}>
+              <Pressable style={styles.textBtn} testID="select-all" onPress={toggleSelectAll}>
+                <Txt style={styles.textBtnTxt}>{allShownSelected ? "Clear" : "Select all"}</Txt>
+              </Pressable>
+              <Pressable
+                style={[styles.addBtn, selected.length === 0 && styles.btnDisabled]}
+                testID="delete-selected"
+                disabled={selected.length === 0}
+                onPress={() => setConfirmDelete(true)}
+              >
+                <Feather name="trash-2" size={18} color={colors.onBrandPrimary} />
+              </Pressable>
+              <Pressable style={styles.textBtn} testID="cancel-select" onPress={exitSelect}>
+                <Txt style={styles.textBtnTxt}>Cancel</Txt>
+              </Pressable>
+            </View>
+          ) : (
           <View style={styles.headerActions}>
+            <Pressable
+              style={styles.laundryIconBtn}
+              testID="wardrobe-select-button"
+              onPress={() => setSelectMode(true)}
+            >
+              <Feather name="check-square" size={19} color={colors.onSurface} />
+            </Pressable>
             <Pressable
               style={[styles.laundryIconBtn, laundryMode && styles.laundryIconBtnActive]}
               testID="wardrobe-laundry-button"
@@ -109,6 +174,7 @@ export default function Wardrobe() {
               <Feather name="plus" size={20} color={colors.onBrandPrimary} />
             </Pressable>
           </View>
+          )}
         </View>
         <ScrollView
           horizontal
@@ -146,7 +212,7 @@ export default function Wardrobe() {
         </Pressable>
       )}
 
-      {!laundryMode && (
+      {!laundryMode && !selectMode && (
         <Pressable
           style={styles.shopIqBanner}
           testID="shopping-intelligence-entry"
@@ -202,6 +268,29 @@ export default function Wardrobe() {
           columnWrapperStyle={{ justifyContent: "flex-start" }}
         />
       )}
+
+      <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setConfirmDelete(false)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <Display weight="semibold" style={styles.sheetTitle}>
+              Remove {selected.length} {selected.length === 1 ? "piece" : "pieces"}?
+            </Display>
+            <Txt style={styles.sheetSub}>
+              They will be removed from your wardrobe and from any saved looks. This can&apos;t be undone.
+            </Txt>
+            <Pressable style={styles.deleteBtn} testID="confirm-bulk-delete" onPress={deleteSelected} disabled={deleting}>
+              {deleting ? (
+                <ActivityIndicator color={colors.onError} />
+              ) : (
+                <Txt style={styles.deleteTxt}>Delete</Txt>
+              )}
+            </Pressable>
+            <Pressable style={styles.keepBtn} testID="cancel-bulk-delete" onPress={() => setConfirmDelete(false)}>
+              <Txt style={styles.keepTxt}>Keep them</Txt>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -268,6 +357,30 @@ const styles = StyleSheet.create({
   grid: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   card: { marginBottom: spacing.xl },
   cardImg: { borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
+  cardImgSelected: { opacity: 0.55, borderWidth: 2, borderColor: colors.brandPrimary },
+  selectDot: {
+    position: "absolute", top: spacing.sm, right: spacing.sm,
+    width: 24, height: 24, borderRadius: 12,
+    borderWidth: 1.5, borderColor: colors.onSurfaceInverse,
+    backgroundColor: "rgba(26,26,26,0.35)",
+    alignItems: "center", justifyContent: "center",
+  },
+  selectDotOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  textBtn: { height: 44, paddingHorizontal: spacing.sm, justifyContent: "center" },
+  textBtnTxt: { fontSize: 14, color: colors.onSurfaceSecondary },
+  btnDisabled: { opacity: 0.4 },
+  backdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
+    padding: spacing.xl, paddingBottom: spacing["2xl"],
+  },
+  sheetTitle: { fontSize: 22, marginBottom: spacing.sm },
+  sheetSub: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: spacing.xl, lineHeight: 20 },
+  deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  deleteTxt: { color: colors.onError, fontSize: 15 },
+  keepBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
+  keepTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
   placeholder: { alignItems: "center", justifyContent: "center" },
   laundryBadge: {
     position: "absolute",

@@ -8,6 +8,8 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { pickMultipleFromLibrary, openSettings } from "@/src/utils/image";
+import PhotoTips from "@/src/components/PhotoTips";
+import { diag } from "@/src/utils/diag";
 
 type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; dupe?: boolean };
 
@@ -44,11 +46,17 @@ export default function BulkAdd() {
     for (let i = 0; i < imgs.length; i++) {
       const base64 = imgs[i];
       try {
-        const res = await api<any>("/capture", { method: "POST", body: { image: base64, clean: true } });
+        diag("bulk.analyze.start", { index: i + 1, of: imgs.length });
+        const res = await api<any>("/capture", {
+          method: "POST",
+          body: { image: base64, clean: false },
+          timeoutMs: 60000,
+        });
         const a = res.analysis || {};
-        const photo = res.clean_image || base64;
+        const photo = base64;
         const name = a.name || "New piece";
         const category = a.category || "Tops";
+        diag("bulk.analyze.done", { index: i + 1, name: a.name, category: a.category, confidence: a.confidence });
         const dupe = Array.isArray(res.duplicates) && res.duplicates.length > 0;
         await api("/items", {
           method: "POST",
@@ -69,7 +77,8 @@ export default function BulkAdd() {
           },
         });
         setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe }]);
-      } catch {
+      } catch (e: any) {
+        diag("bulk.analyze.failed", { index: i + 1, status: e?.status, timeout: !!e?.timeout, error: String(e?.message || e) });
         setRows((r) => [...r, { thumb: base64, name: "Couldn't add", category: "", status: "failed" }]);
       }
       setProgress(i + 1);
@@ -112,6 +121,8 @@ export default function BulkAdd() {
         ) : (
           <Display weight="medium" style={styles.title}>Choose photos…</Display>
         )}
+
+        <PhotoTips />
 
         {error ? (
           <View style={styles.errBox}>

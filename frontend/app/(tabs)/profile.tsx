@@ -218,12 +218,12 @@ export default function Profile() {
             </View>
             <View style={{ flex: 1 }}>
               <Txt style={styles.reportTitle}>Monthly wardrobe health report</Txt>
-              <Txt style={styles.reportSub}>Wasted money + your #1 unlocking buy</Txt>
+              <Txt style={styles.reportSub}>Underused pieces + your smartest next buy</Txt>
             </View>
             {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
-          {/* Shopping Intelligence — Missing Pieces lives inside as gap analysis */}
+          {/* Shopping Intelligence — wardrobe gap analysis lives inside */}
           <Pressable
             style={styles.missingCard}
             testID="shopping-intelligence-profile"
@@ -231,10 +231,10 @@ export default function Profile() {
           >
             <Txt style={styles.missingKicker}>SHOPPING INTELLIGENCE</Txt>
             <Display weight="medium" style={styles.missingTitle}>
-              Find the missing pieces worth buying
+              Buy smarter, not more
             </Display>
             <Txt style={styles.missingReason}>
-              Aureve reads what you already own and surfaces the gaps that would add the most outfits — never duplicates.
+              Check something before you buy it, or let Aureve read your wardrobe and suggest what would actually add the most outfits.
             </Txt>
             <View style={styles.missingRedo}>
               <Txt style={styles.missingRedoTxt}>{premium ? "Open Shopping Intelligence" : "Unlock with Premium"}</Txt>

@@ -67,7 +67,7 @@ export default function HealthReport() {
             <View style={styles.tiles}>
               <View style={styles.tile}>
                 <Display weight="medium" style={styles.tileNum}>${report.stats?.unworn_value ?? 0}</Display>
-                <Txt style={styles.tileLabel}>tied up in {report.stats?.unworn_count ?? 0} unworn pieces</Txt>
+                <Txt style={styles.tileLabel}>in {report.stats?.unworn_count ?? 0} pieces you haven&apos;t worn yet</Txt>
               </View>
               <View style={styles.tile}>
                 <Display weight="medium" style={styles.tileNum}>${report.stats?.total_value ?? 0}</Display>
@@ -75,15 +75,15 @@ export default function HealthReport() {
               </View>
             </View>
 
-            {report.wasted_summary ? (
-              <Block title="Where your money's sitting" text={report.wasted_summary} />
+            {report.underused_summary || report.wasted_summary ? (
+              <Block title="Pieces worth revisiting" text={report.underused_summary || report.wasted_summary} />
             ) : null}
             {report.lesson ? <Block title="This month's lesson" text={report.lesson} /> : null}
 
             {/* Missing piece — the hook */}
             {report.missing_piece ? (
               <View style={styles.missingCard}>
-                <Txt style={styles.missingKicker}>THE ONE PURCHASE THAT PAYS OFF</Txt>
+                <Txt style={styles.missingKicker}>YOUR SMARTEST NEXT BUY</Txt>
                 <Display weight="medium" style={styles.missingRec}>{report.missing_piece.recommendation}</Display>
                 {report.missing_piece.reason ? <Txt style={styles.missingReason}>{report.missing_piece.reason}</Txt> : null}
                 {report.missing_piece.unlock_note ? (
