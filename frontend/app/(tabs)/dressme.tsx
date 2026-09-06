@@ -47,15 +47,36 @@ export default function DressMe() {
   const generate = useCallback(async () => {
     setLoading(true);
     setError("");
-    setResult(null);
     setSaved(false);
     try {
-      const body: any = {};
+      const weatherBody: any = {};
       if (weather && status === "done") {
-        body.temperature = weather.temperature;
-        body.weather = weather.description;
+        weatherBody.temperature = weather.temperature;
+        weatherBody.weather = weather.description;
       }
-      const r = await api<any>("/dressme", { method: "POST", body });
+
+      let r: any;
+      const currentItems = result?.resolved_items || [];
+
+      if (currentItems.length > 0) {
+        // "Create Another Look" must actually change the core look, not merely
+        // swap a bag or belt. Re-use the previous inferred occasion, but tell
+        // the stylist to avoid every piece from the look currently on screen.
+        r = await api<any>("/stylist/suggest", {
+          method: "POST",
+          body: {
+            occasion: result?.occasion_used || "today — versatile, put-together and easy to wear",
+            temperature: weatherBody.temperature,
+            weather: weatherBody.weather,
+            notes: "Create a genuinely different outfit from the current look. Change the core silhouette and hero pieces, not just accessories.",
+            avoid_item_ids: currentItems.map((x: any) => x.item?.id).filter(Boolean),
+          },
+        });
+        r = { ...r, occasion_used: result?.occasion_used || "today" };
+      } else {
+        r = await api<any>("/dressme", { method: "POST", body: weatherBody });
+      }
+
       setResult(r);
       haptics.success();
     } catch (e: any) {
@@ -63,7 +84,7 @@ export default function DressMe() {
       else setError(e.message || "Couldn't put a look together.");
     }
     setLoading(false);
-  }, [weather, status, router]);
+  }, [weather, status, router, result]);
 
   useEffect(() => {
     if (!started.current && status !== "idle" && status !== "loading") {
@@ -208,7 +229,6 @@ export default function DressMe() {
         ) : null}
       </ScrollView>
 
-      {/* Swap picker */}
       <Modal visible={swapIndex != null} animationType="slide" transparent onRequestClose={() => setSwapIndex(null)}>
         <View style={styles.sheetBackdrop}>
           <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
