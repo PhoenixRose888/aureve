@@ -11,7 +11,9 @@ import { pickMultipleFromLibrary, openSettings } from "@/src/utils/image";
 import PhotoTips from "@/src/components/PhotoTips";
 import { diag } from "@/src/utils/diag";
 
-type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; dupe?: boolean };
+type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; dupe?: boolean; reason?: string };
+
+const MIN_CONFIDENCE = 60;
 
 export default function BulkAdd() {
   const insets = useSafeAreaInsets();
@@ -48,12 +50,14 @@ export default function BulkAdd() {
       }
       return;
     }
+
     const imgs = picked.images;
     diag("bulk.picker.picked", { count: imgs.length });
     setTotal(imgs.length);
     setProgress(0);
     setRows([]);
     setPhase("processing");
+
     for (let i = 0; i < imgs.length; i++) {
       const base64 = imgs[i];
       try {
@@ -63,12 +67,55 @@ export default function BulkAdd() {
           body: { image: base64, clean: false },
           timeoutMs: 60000,
         });
+
         const a = res.analysis || {};
-        const photo = base64;
-        const name = a.name || "New piece";
-        const category = a.category || "Tops";
-        diag("bulk.analyze.done", { index: i + 1, name: a.name, category: a.category, confidence: a.confidence });
+        const confidence = Number(a.confidence || 0);
+        const recognised = Boolean(a.name && a.category && confidence >= MIN_CONFIDENCE);
+
+        diag("bulk.analyze.done", {
+          index: i + 1,
+          name: a.name,
+          category: a.category,
+          confidence,
+          recognised,
+        });
+
+        if (!recognised) {
+          setRows((r) => [
+            ...r,
+            {
+              thumb: base64,
+              name: "Item not recognised",
+              category: "",
+              status: "failed",
+              reason: "Try a clearer photo or add this piece individually.",
+            },
+          ]);
+          setProgress(i + 1);
+          continue;
+        }
+
+        let photo = base64;
+        try {
+          diag("bulk.clean.start", { index: i + 1 });
+          const cleaned = await api<any>("/clean-photo", {
+            method: "POST",
+            body: { image: base64 },
+            timeoutMs: 60000,
+          });
+          if (cleaned?.clean_image) photo = cleaned.clean_image;
+          diag("bulk.clean.done", { index: i + 1, cleaned: Boolean(cleaned?.clean_image) });
+        } catch (cleanErr: any) {
+          diag("bulk.clean.failed", {
+            index: i + 1,
+            error: String(cleanErr?.message || cleanErr),
+          });
+        }
+
+        const name = a.name;
+        const category = a.category;
         const dupe = Array.isArray(res.duplicates) && res.duplicates.length > 0;
+
         await api("/items", {
           method: "POST",
           body: {
@@ -86,18 +133,35 @@ export default function BulkAdd() {
             tone: a.tone || "",
           },
         });
+
         setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe }]);
       } catch (e: any) {
-        diag("bulk.analyze.failed", { index: i + 1, status: e?.status, timeout: !!e?.timeout, error: String(e?.message || e) });
-        setRows((r) => [...r, { thumb: base64, name: "Couldn't add", category: "", status: "failed" }]);
+        diag("bulk.analyze.failed", {
+          index: i + 1,
+          status: e?.status,
+          timeout: !!e?.timeout,
+          error: String(e?.message || e),
+        });
+        setRows((r) => [
+          ...r,
+          {
+            thumb: base64,
+            name: "Couldn't add",
+            category: "",
+            status: "failed",
+            reason: "Try again or add this piece individually.",
+          },
+        ]);
       }
       setProgress(i + 1);
     }
+
     setPhase("done");
     busy.current = false;
   }, []);
 
   const added = rows.filter((r) => r.status === "done").length;
+  const failed = rows.filter((r) => r.status === "failed").length;
   const dupes = rows.filter((r) => r.status === "done" && r.dupe).length;
 
   return (
@@ -113,12 +177,12 @@ export default function BulkAdd() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {phase === "processing" ? (
           <>
-            <Display weight="medium" style={styles.title}>Cataloguing your pieces…</Display>
+            <Display weight="medium" style={styles.title}>Preparing and cleaning your wardrobe photos…</Display>
             <Txt style={styles.sub}>
-              Uploading and analysing {progress + 1 > total ? total : progress + 1} of {total} — {progress} done.
+              Processing {progress + 1 > total ? total : progress + 1} of {total} — {progress} done.
             </Txt>
             <Txt style={styles.note}>
-              Please stay on this screen. Larger batches can take up to a minute depending on your connection.
+              Please stay on this screen. Aureve will keep the original if photo cleanup cannot be completed.
             </Txt>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${total ? (progress / total) * 100 : 0}%` }]} />
@@ -128,13 +192,19 @@ export default function BulkAdd() {
         ) : phase === "done" ? (
           <>
             <Display weight="medium" style={styles.title}>{added} {added === 1 ? "piece" : "pieces"} added</Display>
-            <Txt style={styles.sub}>{dupes > 0 ? `All set — ${dupes} may be a duplicate of something you own (flagged below). Review and delete any you don't need.` : "All set — they're in your wardrobe now."}</Txt>
+            <Txt style={styles.sub}>
+              {failed > 0
+                ? `${failed} ${failed === 1 ? "photo wasn't" : "photos weren't"} clear enough to catalogue confidently.`
+                : dupes > 0
+                  ? `All set — ${dupes} may be similar to something you own and are flagged below.`
+                  : "All set — they're in your wardrobe now."}
+            </Txt>
           </>
         ) : (
           <>
             <Display weight="medium" style={styles.title}>Add several pieces at once</Display>
             <Txt style={styles.sub}>
-              Pick up to 15 photos of your pieces and Aureve will name, categorise and catalogue each one for you.
+              Pick up to 15 photos. Aureve will identify each piece, clean the catalogue photo, and only save items it can recognise confidently.
             </Txt>
             <Pressable style={styles.chooseBtn} testID="bulk-choose-photos" onPress={run} disabled={opening}>
               {opening ? (
@@ -171,7 +241,10 @@ export default function BulkAdd() {
               ) : (
                 <View style={styles.cross}><Feather name="x" size={11} color={colors.onSurfaceInverse} /></View>
               )}
-              <Txt style={[styles.cellName, r.dupe && styles.cellNameDupe]} numberOfLines={1}>{r.dupe ? `⚠ ${r.name}` : r.name}</Txt>
+              <Txt style={[styles.cellName, r.dupe && styles.cellNameDupe, r.status === "failed" && styles.cellNameFailed]} numberOfLines={2}>
+                {r.dupe ? `⚠ ${r.name}` : r.name}
+              </Txt>
+              {r.reason ? <Txt style={styles.cellReason} numberOfLines={2}>{r.reason}</Txt> : null}
             </View>
           ))}
         </View>
@@ -213,12 +286,14 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, marginTop: spacing.xl },
   cell: { width: "30%" },
   cellImg: { width: "100%", aspectRatio: 0.8, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
-  cellFailed: { opacity: 0.4 },
+  cellFailed: { opacity: 0.45 },
   tick: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
   dupeBadge: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.warning, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   cellName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
   cellNameDupe: { color: colors.warning },
+  cellNameFailed: { color: colors.error },
+  cellReason: { fontSize: 10, color: colors.onSurfaceTertiary, marginTop: 2, lineHeight: 13 },
   footer: { flexDirection: "row", gap: spacing.md, padding: spacing.xl, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border },
   secondaryBtn: { flex: 1, height: 52, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
   secondaryTxt: { fontSize: 15, color: colors.onSurface },
