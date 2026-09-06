@@ -11,7 +11,7 @@ import { pickMultipleFromLibrary, openSettings } from "@/src/utils/image";
 import PhotoTips from "@/src/components/PhotoTips";
 import { diag } from "@/src/utils/diag";
 
-type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; dupe?: boolean; reason?: string };
+type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; reason?: string };
 
 const MIN_CONFIDENCE = 60;
 
@@ -114,7 +114,6 @@ export default function BulkAdd() {
 
         const name = a.name;
         const category = a.category;
-        const dupe = Array.isArray(res.duplicates) && res.duplicates.length > 0;
 
         await api("/items", {
           method: "POST",
@@ -134,7 +133,9 @@ export default function BulkAdd() {
           },
         });
 
-        setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe }]);
+        // Duplicate detection remains available server-side for later tuning, but
+        // the current signal is intentionally not shown to users at launch.
+        setRows((r) => [...r, { thumb: photo, name, category, status: "done" }]);
       } catch (e: any) {
         diag("bulk.analyze.failed", {
           index: i + 1,
@@ -162,7 +163,6 @@ export default function BulkAdd() {
 
   const added = rows.filter((r) => r.status === "done").length;
   const failed = rows.filter((r) => r.status === "failed").length;
-  const dupes = rows.filter((r) => r.status === "done" && r.dupe).length;
 
   return (
     <View style={styles.container}>
@@ -195,9 +195,7 @@ export default function BulkAdd() {
             <Txt style={styles.sub}>
               {failed > 0
                 ? `${failed} ${failed === 1 ? "photo wasn't" : "photos weren't"} clear enough to catalogue confidently.`
-                : dupes > 0
-                  ? `All set — ${dupes} may be similar to something you own and are flagged below.`
-                  : "All set — they're in your wardrobe now."}
+                : "All set — they're in your wardrobe now."}
             </Txt>
           </>
         ) : (
@@ -233,16 +231,12 @@ export default function BulkAdd() {
             <View key={i} style={styles.cell}>
               <Image source={{ uri: `data:image/jpeg;base64,${r.thumb}` }} style={[styles.cellImg, r.status === "failed" && styles.cellFailed]} contentFit="cover" />
               {r.status === "done" ? (
-                r.dupe ? (
-                  <View style={styles.dupeBadge}><Feather name="copy" size={10} color={colors.onSurface} /></View>
-                ) : (
-                  <View style={styles.tick}><Feather name="check" size={11} color={colors.onBrandPrimary} /></View>
-                )
+                <View style={styles.tick}><Feather name="check" size={11} color={colors.onBrandPrimary} /></View>
               ) : (
                 <View style={styles.cross}><Feather name="x" size={11} color={colors.onSurfaceInverse} /></View>
               )}
-              <Txt style={[styles.cellName, r.dupe && styles.cellNameDupe, r.status === "failed" && styles.cellNameFailed]} numberOfLines={2}>
-                {r.dupe ? `⚠ ${r.name}` : r.name}
+              <Txt style={[styles.cellName, r.status === "failed" && styles.cellNameFailed]} numberOfLines={2}>
+                {r.name}
               </Txt>
               {r.reason ? <Txt style={styles.cellReason} numberOfLines={2}>{r.reason}</Txt> : null}
             </View>
@@ -288,10 +282,8 @@ const styles = StyleSheet.create({
   cellImg: { width: "100%", aspectRatio: 0.8, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
   cellFailed: { opacity: 0.45 },
   tick: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
-  dupeBadge: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.warning, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   cellName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
-  cellNameDupe: { color: colors.warning },
   cellNameFailed: { color: colors.error },
   cellReason: { fontSize: 10, color: colors.onSurfaceTertiary, marginTop: 2, lineHeight: 13 },
   footer: { flexDirection: "row", gap: spacing.md, padding: spacing.xl, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border },
