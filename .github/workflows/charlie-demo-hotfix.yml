@@ -20,8 +20,8 @@ jobs:
           fetch-depth: 0
 
       - name: Patch reviewer/demo isolation
-        shell: python
         run: |
+          python <<'PY'
           from pathlib import Path
 
           path = Path("backend/server.py")
@@ -113,6 +113,7 @@ jobs:
           text = text.replace(old_seed, new_seed, 1)
 
           path.write_text(text)
+          PY
 
       - name: Sanity check
         run: python -m py_compile backend/server.py
