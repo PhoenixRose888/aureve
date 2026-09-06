@@ -45,11 +45,20 @@ export default function Planner() {
         api<any[]>("/outfits"),
       ]);
       const map: Record<string, any> = {};
-      pl.forEach((p) => {
-        if (!map[p.date]) map[p.date] = p;
-      });
+      (Array.isArray(pl) ? pl : [])
+        .filter((p: any) => !p?.demo)
+        .forEach((p: any) => {
+          const cleanPlan = {
+            ...p,
+            items: Array.isArray(p.items) ? p.items.filter((it: any) => !it?.demo) : [],
+          };
+          if (!map[p.date]) map[p.date] = cleanPlan;
+        });
+      const cleanOutfits = (Array.isArray(o) ? o : [])
+        .filter((x: any) => !x?.demo)
+        .map((x: any) => ({ ...x, items: Array.isArray(x.items) ? x.items.filter((it: any) => !it?.demo) : [] }));
       setPlans(map);
-      setOutfits(o);
+      setOutfits(cleanOutfits);
     } catch {}
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,8 +90,6 @@ export default function Planner() {
     if (!activeDate) return;
     setStyling(true);
     try {
-      // Collect pieces already planned on OTHER days this week so the stylist
-      // can intentionally vary the look instead of repeating hero items.
       const outfitById: Record<string, any> = {};
       outfits.forEach((o) => { outfitById[o.id] = o; });
       const avoid = new Set<string>();
@@ -93,9 +100,15 @@ export default function Planner() {
       });
       const r = await api<any>("/stylist/suggest", {
         method: "POST",
-        body: { occasion: occasion || "everyday", avoid_item_ids: Array.from(avoid) },
+        body: {
+          occasion: occasion || "everyday",
+          avoid_item_ids: Array.from(avoid),
+          notes: "Style specifically for this occasion and choose a different core silhouette from the other looks already planned this week.",
+        },
       });
-      const ids = (r.resolved_items || []).map((x: any) => x.item.id);
+      const ids = (r.resolved_items || [])
+        .filter((x: any) => !x?.item?.demo)
+        .map((x: any) => x.item.id);
       if (ids.length) {
         await api("/plans", {
           method: "POST",
@@ -169,7 +182,6 @@ export default function Planner() {
         </ScrollView>
       )}
 
-      {/* Plan a day modal */}
       <Modal visible={!!activeDate} transparent animationType="slide" onRequestClose={() => setActiveDate(null)}>
         <Pressable style={styles.backdrop} onPress={() => setActiveDate(null)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
@@ -242,7 +254,6 @@ const styles = StyleSheet.create({
   planOcc: { fontSize: 12, color: colors.onSurfaceTertiary, marginTop: 1 },
   thumbs: { flexDirection: "row", gap: spacing.sm },
   thumb: { width: 42, height: 52, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary },
-  ph: { alignItems: "center", justifyContent: "center" },
   planEmpty: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 0.5, borderStyle: "dashed", borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg },
   planEmptyTxt: { fontSize: 13, color: colors.onSurfaceTertiary },
   backdrop: { flex: 1, backgroundColor: "rgba(26,26,26,0.45)", justifyContent: "flex-end" },
