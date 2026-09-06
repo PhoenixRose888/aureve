@@ -38,7 +38,7 @@ export default function Wardrobe() {
     setLoading(true);
     try {
       const data = await api<any[]>("/items");
-      setItems(data);
+      setItems(Array.isArray(data) ? data.filter((i: any) => !i?.demo) : []);
     } catch {}
     setLoading(false);
   }, []);
