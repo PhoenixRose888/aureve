@@ -1,0 +1,126 @@
+name: Charlie demo-data hotfix
+
+on:
+  push:
+    branches:
+      - charlie-launch-fixes-2026-09-07
+    paths:
+      - .github/workflows/charlie-demo-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-demo-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: charlie-launch-fixes-2026-09-07
+          fetch-depth: 0
+
+      - name: Patch reviewer/demo isolation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("backend/server.py")
+          text = path.read_text()
+
+          old_scope = '''    account_premium = is_premium(account)
+    return {
+        "user_id": prof["id"],       # data scope = profile id
+        "account_id": account_id,
+        "profile_id": prof["id"],
+        "profile_name": prof.get("name"),
+        "profile": prof.get("profile") or {},
+        "is_primary": is_primary,
+        "account_premium": account_premium,
+        "premium": account_premium and is_primary,
+        # Sample/practice pieces belong to Guest mode and the Apple review
+        # account only — never to a real signed-in wardrobe.
+        "show_demo": bool(account.get("is_guest")) or _norm_email(account.get("email") or "") == REVIEWER_EMAIL,
+    }
+'''
+
+          new_scope = '''    account_premium = is_premium(account)
+
+    # Demo pieces are always visible in Guest mode. The dedicated App Store
+    # reviewer may use the seeded demo wardrobe only while that wardrobe has no
+    # real uploads. As soon as the reviewer adds real pieces, demo content is
+    # excluded from EVERY downstream query (items, insights, stylist, shopping,
+    # health, pairings, etc.) so sample data can never contaminate real results.
+    is_guest = bool(account.get("is_guest"))
+    is_reviewer = _norm_email(account.get("email") or "") == REVIEWER_EMAIL
+    show_demo = is_guest
+    if is_reviewer and not is_guest:
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        show_demo = real_item_count == 0
+
+    return {
+        "user_id": prof["id"],       # data scope = profile id
+        "account_id": account_id,
+        "profile_id": prof["id"],
+        "profile_name": prof.get("name"),
+        "profile": prof.get("profile") or {},
+        "is_primary": is_primary,
+        "account_premium": account_premium,
+        "premium": account_premium and is_primary,
+        "show_demo": show_demo,
+    }
+'''
+
+          if old_scope not in text:
+              raise SystemExit("Expected get_scope block not found; refusing unsafe patch")
+          text = text.replace(old_scope, new_scope, 1)
+
+          old_seed = '''        # Ensure representative content: a default profile with a clean demo
+        # wardrobe, reconciled deterministically (see below) so repeated
+        # startups/redeploys can never create duplicates.
+        prof = await ensure_default_profile(user_id, "Reviewer")
+        await reconcile_reviewer_wardrobe(prof["id"])
+        logger.info(f"Reviewer account ready: {email}")
+'''
+
+          new_seed = '''        # Keep seeded demo content only for a genuinely empty reviewer wardrobe.
+        # Once real uploads exist, remove demo rows instead of re-seeding them on
+        # every deploy. This preserves the App Store review experience for a fresh
+        # account without ever mixing sample pieces into a real QA wardrobe.
+        prof = await ensure_default_profile(user_id, "Reviewer")
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        if real_item_count == 0:
+            await reconcile_reviewer_wardrobe(prof["id"])
+        else:
+            removed = await db.items.delete_many({"user_id": prof["id"], "demo": True})
+            await db.outfits.delete_many({"user_id": prof["id"], "demo": True})
+            await db.wear_logs.delete_many({"user_id": prof["id"], "demo": True})
+            logger.info(
+                "Reviewer has %s real pieces; removed %s seeded demo pieces",
+                real_item_count,
+                removed.deleted_count,
+            )
+        logger.info(f"Reviewer account ready: {email}")
+'''
+
+          if old_seed not in text:
+              raise SystemExit("Expected reviewer seed block not found; refusing unsafe patch")
+          text = text.replace(old_seed, new_seed, 1)
+
+          path.write_text(text)
+
+      - name: Sanity check
+        run: python -m py_compile backend/server.py
+
+      - name: Commit patched backend
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/server.py
+          git commit -m "fix: isolate reviewer demo data from real wardrobes"
+          git push origin HEAD:charlie-launch-fixes-2026-09-07
