@@ -63,15 +63,14 @@ export default function HealthReport() {
           <View testID="health-report">
             <Display weight="medium" style={styles.headline}>{report.headline}</Display>
 
-            {/* Stat tiles */}
             <View style={styles.tiles}>
               <View style={styles.tile}>
-                <Display weight="medium" style={styles.tileNum}>${report.stats?.unworn_value ?? 0}</Display>
-                <Txt style={styles.tileLabel}>in {report.stats?.unworn_count ?? 0} pieces you haven&apos;t worn yet</Txt>
+                <Display weight="medium" style={styles.tileNum}>{report.stats?.unworn_count ?? 0}</Display>
+                <Txt style={styles.tileLabel}>pieces you haven&apos;t worn yet</Txt>
               </View>
               <View style={styles.tile}>
-                <Display weight="medium" style={styles.tileNum}>${report.stats?.total_value ?? 0}</Display>
-                <Txt style={styles.tileLabel}>total wardrobe value</Txt>
+                <Display weight="medium" style={styles.tileNum}>{report.stats?.total_items ?? 0}</Display>
+                <Txt style={styles.tileLabel}>pieces in your wardrobe</Txt>
               </View>
             </View>
 
@@ -80,7 +79,6 @@ export default function HealthReport() {
             ) : null}
             {report.lesson ? <Block title="This month's lesson" text={report.lesson} /> : null}
 
-            {/* Missing piece — the hook */}
             {report.missing_piece ? (
               <View style={styles.missingCard}>
                 <Txt style={styles.missingKicker}>YOUR SMARTEST NEXT BUY</Txt>
