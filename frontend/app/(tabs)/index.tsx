@@ -77,7 +77,10 @@ export default function Home() {
     try {
       const [o, items] = await Promise.all([api<any[]>("/outfits"), api<any[]>("/items")]);
       const realItems = Array.isArray(items) ? items.filter((i: any) => !i?.demo) : [];
-      setOutfits(Array.isArray(o) ? o.slice(0, 8) : []);
+      const realOutfits = (Array.isArray(o) ? o : [])
+        .filter((x: any) => !x?.demo)
+        .map((x: any) => ({ ...x, items: Array.isArray(x.items) ? x.items.filter((it: any) => !it?.demo) : [] }));
+      setOutfits(realOutfits.slice(0, 8));
       setItemCount(realItems.length);
     } catch {}
   }, []);
