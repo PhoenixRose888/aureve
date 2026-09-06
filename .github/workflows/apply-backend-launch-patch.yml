@@ -32,3 +32,5 @@ jobs:
           git rm backend/charlie_launch_patch.py .github/workflows/apply-backend-launch-patch.yml
           git commit -m "fix: isolate demo data and correct backend wardrobe intelligence"
           git push origin HEAD:charlie-launch-fixes-2026-09-07
+
+# rerun after patch-script correction
