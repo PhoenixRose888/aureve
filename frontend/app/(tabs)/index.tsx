@@ -76,8 +76,9 @@ export default function Home() {
   const load = useCallback(async () => {
     try {
       const [o, items] = await Promise.all([api<any[]>("/outfits"), api<any[]>("/items")]);
+      const realItems = Array.isArray(items) ? items.filter((i: any) => !i?.demo) : [];
       setOutfits(Array.isArray(o) ? o.slice(0, 8) : []);
-      setItemCount(Array.isArray(items) ? items.length : 0);
+      setItemCount(realItems.length);
     } catch {}
   }, []);
 
