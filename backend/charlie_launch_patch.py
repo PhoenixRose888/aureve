@@ -7,7 +7,7 @@ text = path.read_text(encoding="utf-8")
 
 def sub_once(pattern: str, replacement: str, label: str, flags: int = 0) -> None:
     global text
-    text, n = re.subn(pattern, replacement, text, count=1, flags=flags)
+    text, n = re.subn(pattern, lambda _m: replacement, text, count=1, flags=flags)
     if n != 1:
         raise SystemExit(f"{label}: expected exactly 1 match, found {n}; refusing unsafe patch")
     print(f"patched: {label}")
@@ -22,11 +22,10 @@ def replace_once(old: str, new: str, label: str) -> None:
     print(f"patched: {label}")
 
 
-# Reviewer/demo isolation: Guest keeps samples. Reviewer gets samples only while
-# their wardrobe has no real uploads.
+# 1) Reviewer/demo isolation.
 sub_once(
-    r'''    account_premium = is_premium\(account\)\n    return \{\n(.*?)        # Sample/practice pieces belong to Guest mode and the Apple review\n        # account only — never to a real signed-in wardrobe\.\n        "show_demo": bool\(account\.get\("is_guest"\)\) or _norm_email\(account\.get\("email"\) or ""\) == REVIEWER_EMAIL,\n    \}\n''',
-    r'''    account_premium = is_premium(account)
+    r'''    account_premium = is_premium\(account\)\n    return \{\n        "user_id": prof\["id"\],       # data scope = profile id\n        "account_id": account_id,\n        "profile_id": prof\["id"\],\n        "profile_name": prof\.get\("name"\),\n        "profile": prof\.get\("profile"\) or \{\},\n        "is_primary": is_primary,\n        "account_premium": account_premium,\n        "premium": account_premium and is_primary,\n        # Sample/practice pieces belong to Guest mode and the Apple review\n        # account only — never to a real signed-in wardrobe\.\n        "show_demo": bool\(account\.get\("is_guest"\)\) or _norm_email\(account\.get\("email"\) or ""\) == REVIEWER_EMAIL,\n    \}\n''',
+    '''    account_premium = is_premium(account)
 
     is_guest = bool(account.get("is_guest"))
     is_reviewer = _norm_email(account.get("email") or "") == REVIEWER_EMAIL
@@ -39,11 +38,18 @@ sub_once(
         show_demo = real_item_count == 0
 
     return {
-\1        "show_demo": show_demo,
+        "user_id": prof["id"],       # data scope = profile id
+        "account_id": account_id,
+        "profile_id": prof["id"],
+        "profile_name": prof.get("name"),
+        "profile": prof.get("profile") or {},
+        "is_primary": is_primary,
+        "account_premium": account_premium,
+        "premium": account_premium and is_primary,
+        "show_demo": show_demo,
     }
 ''',
     "dynamic reviewer demo visibility",
-    re.DOTALL,
 )
 
 replace_once(
@@ -78,7 +84,7 @@ replace_once(
     "stop reviewer demo reseeding after real uploads",
 )
 
-# Demo outfit rows must not leak into a signed-in real wardrobe.
+# 2) Demo outfit rows must not leak into a signed-in real wardrobe.
 replace_once(
     '''@api_router.get("/outfits")
 async def list_outfits(user: dict = Depends(get_scope)):
@@ -96,8 +102,7 @@ async def list_outfits(user: dict = Depends(get_scope)):
     "exclude demo outfit rows",
 )
 
-# Recognition should admit uncertainty instead of turning reflections and cushions
-# into highly confident wardrobe items.
+# 3) Recognition may admit uncertainty.
 replace_once(
     '''    "angled or folded items, items being worn, shadows and reflections. Identify the single main "
     "fashion item a human would obviously recognise and catalogue it anyway; do not refuse or "
@@ -117,19 +122,15 @@ replace_once(
     "remove AI estimated monetary value",
 )
 
-# Replace the duplicate scorer wholesale. Precision beats recall for launch.
 sub_once(
     r'''def find_similar_items\(analysis: dict, items: List\[dict\], limit: int = 3\) -> List\[dict\]:\n.*?\n\n\n@api_router\.post\("/capture"\)''',
-    r'''def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> List[dict]:
-    """Return only high-confidence near-duplicates. False positives are worse
-    than missing a weak match, so category + exact style + two descriptors are
-    required and low-confidence recognition never raises a duplicate warning."""
+    '''def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> List[dict]:
+    """Return only high-confidence near-duplicates. Precision matters more than recall."""
     cat = _norm(analysis.get("category"))
     style = _norm(analysis.get("style"))
     confidence = int(analysis.get("confidence") or 0)
     if not cat or not style or confidence < 70:
         return []
-
     colour = _norm(analysis.get("colour"))
     fabric = _norm(analysis.get("fabric"))
     pattern = _norm(analysis.get("pattern"))
@@ -144,7 +145,6 @@ sub_once(
         ])
         if matches >= 2:
             scored.append((matches, it))
-
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [
         {
@@ -163,7 +163,7 @@ sub_once(
     re.DOTALL,
 )
 
-# General insights: remove price/value/cost-per-wear calculations and response.
+# 4) General insights: no money/cost-per-wear.
 sub_once(
     r'''    total_items = len\(items\)\n    total_wears = sum\(it\.get\("wear_count", 0\) for it in items\)\n.*?\n    most_worn =''',
     '''    total_items = len(items)
@@ -187,8 +187,7 @@ replace_once(
     "remove insight money response fields",
 )
 
-# Replace Wardrobe Health endpoint wholesale so it is wear-history based and
-# cannot accidentally reintroduce value/cost-per-wear through a leftover field.
+# 5) Wardrobe Health uses wear history/category balance only.
 sub_once(
     r'''@api_router\.post\("/insights/health-report"\)\nasync def health_report\(user: dict = Depends\(get_scope\)\):\n.*?\n    return result\n''',
     r'''@api_router.post("/insights/health-report")
@@ -209,7 +208,6 @@ async def health_report(user: dict = Depends(get_scope)):
         f"{it.get('name')} ({it.get('category')}, worn {it.get('wear_count', 0) or 0}x)"
         for it in low_wear
     ) or "none yet"
-
     counts: dict = {}
     for it in items:
         counts[it.get("category", "Other")] = counts.get(it.get("category", "Other"), 0) + 1
