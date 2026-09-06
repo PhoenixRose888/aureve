@@ -42,7 +42,11 @@ export default function DressMe() {
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 
-  useEffect(() => { api<any[]>("/items").then(setWardrobe).catch(() => {}); }, []);
+  useEffect(() => {
+    api<any[]>("/items")
+      .then((data) => setWardrobe(Array.isArray(data) ? data.filter((it: any) => !it?.demo) : []))
+      .catch(() => {});
+  }, []);
 
   const generate = useCallback(async () => {
     setLoading(true);
@@ -59,9 +63,6 @@ export default function DressMe() {
       const currentItems = result?.resolved_items || [];
 
       if (currentItems.length > 0) {
-        // "Create Another Look" must actually change the core look, not merely
-        // swap a bag or belt. Re-use the previous inferred occasion, but tell
-        // the stylist to avoid every piece from the look currently on screen.
         r = await api<any>("/stylist/suggest", {
           method: "POST",
           body: {
