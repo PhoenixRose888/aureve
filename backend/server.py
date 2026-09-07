@@ -1581,7 +1581,10 @@ def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> Lis
     """Return only high-confidence near-duplicates. Precision matters more than recall."""
     cat = _norm(analysis.get("category"))
     style = _norm(analysis.get("style"))
-    confidence = int(analysis.get("confidence") or 0)
+    try:
+        confidence = int(float(analysis.get("confidence") or 0))
+    except (TypeError, ValueError):
+        confidence = 0
     if not cat or not style or confidence < 70:
         return []
     colour = _norm(analysis.get("colour"))
@@ -1923,6 +1926,7 @@ class DressMeRequest(BaseModel):
     temperature: Optional[float] = None
     weather: Optional[str] = None
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
+    avoid_item_ids: List[str] = []  # current look when user asks for another
 
 
 @api_router.post("/dressme")
@@ -1947,7 +1951,14 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     notes = "Dress me for today — one confident, ready-to-wear look."
     if cal_line:
         notes += f" My schedule today: {cal_line}. Pick something that works across these."
-    result = await _build_outfit(user, occasion, payload.temperature, payload.weather, notes)
+    result = await _build_outfit(
+        user,
+        occasion,
+        payload.temperature,
+        payload.weather,
+        notes,
+        payload.avoid_item_ids,
+    )
     result["occasion_used"] = occasion
     result["from_plan"] = plan_title
     result["calendar_events"] = cal_events
@@ -2666,6 +2677,8 @@ async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = N
             query["date"]["$gte"] = from_date
         if to_date:
             query["date"]["$lte"] = to_date
+    if not user.get("show_demo"):
+        query["demo"] = {"$ne": True}
     plans = await db.plans.find(query, {"_id": 0}).sort("date", 1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for p in plans:
@@ -2701,7 +2714,10 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
 
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_scope)):
-    logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    wear_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        wear_query["demo"] = {"$ne": True}
+    logs = await db.wear_logs.find(wear_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for lg in logs:
         lg["items"] = [by_id[i] for i in lg.get("item_ids", []) if i in by_id]
