@@ -53,31 +53,19 @@ export default function DressMe() {
     setError("");
     setSaved(false);
     try {
-      const weatherBody: any = {};
+      const body: any = {};
       if (weather && status === "done") {
-        weatherBody.temperature = weather.temperature;
-        weatherBody.weather = weather.description;
+        body.temperature = weather.temperature;
+        body.weather = weather.description;
       }
 
-      let r: any;
       const currentItems = result?.resolved_items || [];
-
       if (currentItems.length > 0) {
-        r = await api<any>("/stylist/suggest", {
-          method: "POST",
-          body: {
-            occasion: result?.occasion_used || "today — versatile, put-together and easy to wear",
-            temperature: weatherBody.temperature,
-            weather: weatherBody.weather,
-            notes: "Create a genuinely different outfit from the current look. Change the core silhouette and hero pieces, not just accessories.",
-            avoid_item_ids: currentItems.map((x: any) => x.item?.id).filter(Boolean),
-          },
-        });
-        r = { ...r, occasion_used: result?.occasion_used || "today" };
-      } else {
-        r = await api<any>("/dressme", { method: "POST", body: weatherBody });
+        body.occasion = result?.occasion_used || undefined;
+        body.avoid_item_ids = currentItems.map((x: any) => x.item?.id).filter(Boolean);
       }
 
+      const r = await api<any>("/dressme", { method: "POST", body });
       setResult(r);
       haptics.success();
     } catch (e: any) {
