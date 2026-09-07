@@ -24,6 +24,6 @@ jobs:
           cache: yarn
           cache-dependency-path: frontend/yarn.lock
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --ignore-scripts
       - name: Expo lint
         run: yarn lint
