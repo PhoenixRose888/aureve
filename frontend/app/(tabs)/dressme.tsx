@@ -42,12 +42,15 @@ export default function DressMe() {
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 
-  useEffect(() => { api<any[]>("/items").then(setWardrobe).catch(() => {}); }, []);
+  useEffect(() => {
+    api<any[]>("/items")
+      .then((data) => setWardrobe(Array.isArray(data) ? data.filter((it: any) => !it?.demo) : []))
+      .catch(() => {});
+  }, []);
 
   const generate = useCallback(async () => {
     setLoading(true);
     setError("");
-    setResult(null);
     setSaved(false);
     try {
       const body: any = {};
@@ -55,6 +58,13 @@ export default function DressMe() {
         body.temperature = weather.temperature;
         body.weather = weather.description;
       }
+
+      const currentItems = result?.resolved_items || [];
+      if (currentItems.length > 0) {
+        body.occasion = result?.occasion_used || undefined;
+        body.avoid_item_ids = currentItems.map((x: any) => x.item?.id).filter(Boolean);
+      }
+
       const r = await api<any>("/dressme", { method: "POST", body });
       setResult(r);
       haptics.success();
@@ -63,7 +73,7 @@ export default function DressMe() {
       else setError(e.message || "Couldn't put a look together.");
     }
     setLoading(false);
-  }, [weather, status, router]);
+  }, [weather, status, router, result]);
 
   useEffect(() => {
     if (!started.current && status !== "idle" && status !== "loading") {
@@ -208,7 +218,6 @@ export default function DressMe() {
         ) : null}
       </ScrollView>
 
-      {/* Swap picker */}
       <Modal visible={swapIndex != null} animationType="slide" transparent onRequestClose={() => setSwapIndex(null)}>
         <View style={styles.sheetBackdrop}>
           <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>

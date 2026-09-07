@@ -13,7 +13,6 @@ import PhotoTips from "@/src/components/PhotoTips";
 import { diag } from "@/src/utils/diag";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
-import GarmentImage from "@/src/components/GarmentImage";
 
 type Photos = { photo?: string; worn_photo?: string };
 
@@ -46,7 +45,6 @@ export default function AddItem() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
-  const [duplicates, setDuplicates] = useState<any[]>([]);
 
   const analyzeMsg = useRotatingMessage(analyzing, [
     "Reading the piece…",
@@ -77,7 +75,6 @@ export default function AddItem() {
     })();
   }, [editing, id]);
 
-  /** Background removal: fired AFTER recognition, never blocking the user. */
   const runClean = useCallback(async (base64: string) => {
     setCleaning(true);
     diag("clean.start");
@@ -95,7 +92,6 @@ export default function AddItem() {
         diag("clean.empty");
       }
     } catch (e: any) {
-      // Cosmetic only — the original photo stays.
       diag("clean.failed", { error: String(e?.message || e), status: e?.status });
     }
     setCleaning(false);
@@ -135,8 +131,6 @@ export default function AddItem() {
       }
       if (r.name && !name) setName(r.name);
       if (r.category && CATEGORIES.includes(r.category)) setCategory(r.category);
-      // Real-world photos: if the AI is unsure, keep its best guess but ask the
-      // user to confirm the category rather than silently trusting it.
       setLowConf(typeof r.confidence === "number" && r.confidence < 60);
       if (r.colour) setColour(r.colour);
       if (r.fabric) setFabric(r.fabric);
@@ -144,10 +138,7 @@ export default function AddItem() {
       if (r.season && SEASONS.includes(r.season)) setSeason(r.season);
       if (r.condition) setCondition(r.condition);
       setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
-      setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
       haptics.success();
-      // Tidy the hanging photo in the background once details are filled in.
-      // Worn photos are kept exactly as shot (they show the item on a person).
       if (!worn) runClean(base64);
     },
     [name, runClean]
@@ -157,14 +148,11 @@ export default function AddItem() {
     async (base64: string) => {
       if (pickerTarget === "worn_photo") {
         setPhotos((p) => ({ ...p, worn_photo: base64 }));
-        // A worn photo is a valid source on its own: if there's no hanging photo
-        // yet, read the garment straight off the worn shot.
         if (!photos.photo) runAnalyze(base64, true);
         return;
       }
       setPhotos((p) => ({ ...p, photo: base64 }));
       setOrigPhoto(null);
-      // Aureve reads the photo straight away — no questions asked first.
       runAnalyze(base64);
     },
     [pickerTarget, runAnalyze, photos.photo]
@@ -235,7 +223,6 @@ export default function AddItem() {
         bottomOffset={90}
         showsVerticalScrollIndicator={false}
       >
-        {/* Photos */}
         <View style={styles.photoRow}>
           <Pressable style={styles.photoBox} testID="add-photo-hanging" onPress={() => setPickerTarget("photo")}>
             {photos.photo ? (
@@ -299,27 +286,6 @@ export default function AddItem() {
 
         <PhotoTips />
 
-        {duplicates.length > 0 ? (
-          <View style={styles.dupBanner} testID="add-item-duplicates">
-            <View style={styles.dupHeader}>
-              <Feather name="copy" size={15} color={colors.onSurface} />
-              <Txt style={styles.dupTitle}>You may already own this</Txt>
-              <Pressable onPress={() => setDuplicates([])} testID="dup-dismiss" hitSlop={10}>
-                <Feather name="x" size={16} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            </View>
-            <Txt style={styles.dupSub}>Similar pieces in your wardrobe — add anyway or skip to avoid a duplicate.</Txt>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dupRow}>
-              {duplicates.map((d) => (
-                <Pressable key={d.id} style={styles.dupCard} testID={`dup-${d.id}`} onPress={() => router.push({ pathname: "/item/[id]", params: { id: d.id } })}>
-                  <GarmentImage photo={d.photo} category={d.category} style={styles.dupImg} iconSize={18} />
-                  <Txt style={styles.dupName} numberOfLines={1}>{d.name || d.category}</Txt>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-
         <Field label="Name (optional — AI fills it)" value={name} onChangeText={setName} placeholder="e.g. Cream linen blazer" testID="field-name" />
 
         <Txt style={styles.groupLabel}>CATEGORY</Txt>
@@ -378,13 +344,7 @@ export default function AddItem() {
   );
 }
 
-function Field({
-  label,
-  flex,
-  multiline,
-  testID,
-  ...rest
-}: any) {
+function Field({ label, flex, multiline, testID, ...rest }: any) {
   return (
     <View style={[styles.field, flex && { flex: 1 }]}>
       <Txt style={styles.fieldLabel}>{label}</Txt>
@@ -417,15 +377,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md, height: 32,
   },
   bulkLink: { fontSize: 14, color: colors.brand },
-  dupBanner: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 0.5, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.lg },
-  dupHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  dupTitle: { flex: 1, fontSize: 14, color: colors.onSurface, fontFamily: fonts.displayMedium },
-  dupSub: { fontSize: 12, color: colors.onSurfaceSecondary, marginTop: 4, lineHeight: 17 },
-  dupRow: { gap: spacing.md, paddingTop: spacing.md },
-  dupCard: { width: 72 },
-  dupImg: { width: 72, height: 90, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary },
-  dupImgEmpty: { alignItems: "center", justifyContent: "center" },
-  dupName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
   scroll: { padding: spacing.xl, paddingBottom: spacing["3xl"] },
   photoRow: { flexDirection: "row", gap: spacing.md },
   photoBox: {
@@ -487,20 +438,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   chipTxt: { fontSize: 13, color: colors.onSurfaceSecondary },
   chipTxtActive: { color: colors.onBrandPrimary },
-  flatterRow: { flexDirection: "row", gap: spacing.md },
-  flatterBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    height: 48,
-    borderRadius: radius.sm,
-    borderWidth: 0.5,
-    borderColor: colors.border,
-  },
-  flatterActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  flatterTxt: { fontSize: 14, color: colors.onSurface },
   footer: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,

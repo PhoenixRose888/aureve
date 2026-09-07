@@ -14,9 +14,7 @@ import GarmentImage from "@/src/components/GarmentImage";
 import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
 
 const GUTTER = spacing.md;
-
 const FILTERS = ["All", ...CATEGORIES];
-
 const EMPTY_IMG =
   "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd2FyZHJvYmUlMjBjbG90aGluZyUyMHJhY2t8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
 
@@ -40,17 +38,15 @@ export default function Wardrobe() {
     setLoading(true);
     try {
       const data = await api<any[]>("/items");
-      setItems(data);
+      setItems(Array.isArray(data) ? data.filter((i: any) => !i?.demo) : []);
     } catch {}
     setLoading(false);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      // Wait until the active profile is resolved so /items is always scoped to
-      // the correct profile (never a null-header fallback to the default one).
       if (!profileLoading) load();
-    }, [load, profileLoading, active?.id])
+    }, [load, profileLoading])
   );
 
   const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
@@ -64,9 +60,7 @@ export default function Wardrobe() {
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const allShownSelected = filtered.length > 0 && filtered.every((i) => selected.includes(i.id));
-
-  const toggleSelectAll = () =>
-    setSelected(allShownSelected ? [] : filtered.map((i) => i.id));
+  const toggleSelectAll = () => setSelected(allShownSelected ? [] : filtered.map((i) => i.id));
 
   const deleteSelected = async () => {
     setDeleting(true);
@@ -82,39 +76,40 @@ export default function Wardrobe() {
   const renderItem = ({ item, index }: { item: any; index: number }) => {
     const isSel = selected.includes(item.id);
     return (
-    <Pressable
-      testID={`wardrobe-item-${item.id}`}
-      style={[styles.card, { width: COL_W, marginRight: index % 2 === 0 ? GUTTER : 0 }]}
-      onPress={() => (selectMode ? toggle(item.id) : router.push(`/item/${item.id}`))}
-      onLongPress={() => {
-        if (!selectMode) {
-          setSelectMode(true);
-          setSelected([item.id]);
-        }
-      }}
-    >
-      <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }, selectMode && isSel && styles.cardImgSelected]} iconSize={28} testID={`wardrobe-img-${item.id}`} />
-      {selectMode && (
-        <View style={[styles.selectDot, isSel && styles.selectDotOn]} testID={`select-dot-${item.id}`}>
-          {isSel ? <Feather name="check" size={13} color={colors.onBrandPrimary} /> : null}
-        </View>
-      )}
-      {(item.pairs_count || 0) > 0 && (
-        <View style={styles.pairsBadge}>
-          <Txt style={styles.pairsBadgeTxt}>Pairs with {item.pairs_count}</Txt>
-        </View>
-      )}
-      <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
-      <Txt style={styles.cardMeta} numberOfLines={1}>
-        {item.brand ? `${item.brand} · ` : ""}{item.category}
-      </Txt>
-    </Pressable>
+      <Pressable
+        testID={`wardrobe-item-${item.id}`}
+        style={[styles.card, { width: COL_W, marginRight: index % 2 === 0 ? GUTTER : 0 }]}
+        onPress={() => (selectMode ? toggle(item.id) : router.push(`/item/${item.id}`))}
+        onLongPress={() => {
+          if (!selectMode) {
+            setSelectMode(true);
+            setSelected([item.id]);
+          }
+        }}
+      >
+        <GarmentImage
+          photo={item.photo}
+          fallbackPhoto={item.worn_photo}
+          category={item.category}
+          style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }, selectMode && isSel && styles.cardImgSelected]}
+          iconSize={28}
+          testID={`wardrobe-img-${item.id}`}
+        />
+        {selectMode && (
+          <View style={[styles.selectDot, isSel && styles.selectDotOn]} testID={`select-dot-${item.id}`}>
+            {isSel ? <Feather name="check" size={13} color={colors.onBrandPrimary} /> : null}
+          </View>
+        )}
+        <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
+        <Txt style={styles.cardMeta} numberOfLines={1}>
+          {item.brand ? `${item.brand} · ` : ""}{item.category}
+        </Txt>
+      </Pressable>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* Sticky header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <BrandMark style={{ alignSelf: "center", marginBottom: spacing.sm }} />
         <View style={styles.headerRow}>
@@ -148,36 +143,27 @@ export default function Wardrobe() {
               </Pressable>
             </View>
           ) : (
-          <View style={styles.headerActions}>
-            <Pressable
-              style={styles.iconBtn}
-              testID="wardrobe-select-button"
-              onPress={() => setSelectMode(true)}
-            >
-              <Feather name="check-square" size={19} color={colors.onSurface} />
-            </Pressable>
-            <Pressable style={styles.addBtn} testID="wardrobe-add-button" onPress={() => router.push("/add-item")}>
-              <Feather name="plus" size={20} color={colors.onBrandPrimary} />
-            </Pressable>
-          </View>
+            <View style={styles.headerActions}>
+              <Pressable style={styles.iconBtn} testID="wardrobe-select-button" onPress={() => setSelectMode(true)}>
+                <Feather name="check-square" size={19} color={colors.onSurface} />
+              </Pressable>
+              <Pressable style={styles.addBtn} testID="wardrobe-add-button" onPress={() => router.push("/add-item")}>
+                <Feather name="plus" size={20} color={colors.onBrandPrimary} />
+              </Pressable>
+            </View>
           )}
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipRow}
-          contentContainerStyle={styles.chipContent}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chipContent}>
           {FILTERS.map((f) => {
-            const active = f === filter;
+            const activeFilter = f === filter;
             return (
               <Pressable
                 key={f}
                 testID={`filter-chip-${f}`}
-                style={[styles.chip, active && styles.chipActive]}
+                style={[styles.chip, activeFilter && styles.chipActive]}
                 onPress={() => setFilter(f)}
               >
-                <Txt style={[styles.chipTxt, active && styles.chipTxtActive]}>{f}</Txt>
+                <Txt style={[styles.chipTxt, activeFilter && styles.chipTxtActive]}>{f}</Txt>
               </Pressable>
             );
           })}
@@ -238,11 +224,7 @@ export default function Wardrobe() {
               They will be removed from your wardrobe and from any saved looks. This can&apos;t be undone.
             </Txt>
             <Pressable style={styles.deleteBtn} testID="confirm-bulk-delete" onPress={deleteSelected} disabled={deleting}>
-              {deleting ? (
-                <ActivityIndicator color={colors.onError} />
-              ) : (
-                <Txt style={styles.deleteTxt}>Delete</Txt>
-              )}
+              {deleting ? <ActivityIndicator color={colors.onSurfaceInverse} /> : <Txt style={styles.deleteTxt}>Delete</Txt>}
             </Pressable>
             <Pressable style={styles.keepBtn} testID="cancel-bulk-delete" onPress={() => setConfirmDelete(false)}>
               <Txt style={styles.keepTxt}>Keep them</Txt>
@@ -329,23 +311,9 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 22, marginBottom: spacing.sm },
   sheetSub: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: spacing.xl, lineHeight: 20 },
   deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  deleteTxt: { color: colors.onError, fontSize: 15 },
+  deleteTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
   keepBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   keepTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
-  placeholder: { alignItems: "center", justifyContent: "center" },
-  pairsBadge: {
-    position: "absolute",
-    bottom: 44,
-    left: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(26,26,26,0.6)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-  },
-  pairsBadgeTxt: { color: colors.onSurfaceInverse, fontSize: 10, fontWeight: "600" },
   shopIqBanner: {
     flexDirection: "row",
     alignItems: "center",

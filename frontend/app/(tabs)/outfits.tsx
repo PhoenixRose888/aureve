@@ -38,7 +38,12 @@ export default function OutfitsHub() {
   const load = useCallback(async () => {
     try {
       const data = await api<any[]>("/outfits");
-      setOutfits(Array.isArray(data) ? data : []);
+      const clean = Array.isArray(data)
+        ? data
+            .filter((o: any) => !o?.demo)
+            .map((o: any) => ({ ...o, items: Array.isArray(o.items) ? o.items.filter((it: any) => !it?.demo) : [] }))
+        : [];
+      setOutfits(clean);
     } catch {
       setOutfits([]);
     } finally {

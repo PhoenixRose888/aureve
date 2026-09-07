@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { useWeather } from "@/src/hooks/useWeather";
+import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import GarmentImage from "@/src/components/GarmentImage";
 import * as haptics from "@/src/utils/haptics";
@@ -29,8 +30,10 @@ function greeting() {
   return "Good evening";
 }
 
-// Concise AI styling recommendation — advice only, no weather data repeated
-// (temperature/condition/city already live in the top-left weather cluster).
+function firstName(name?: string | null) {
+  return (name || "").trim().split(/\s+/)[0] || "";
+}
+
 function stylingRecommendation(w: any): string {
   const t = Math.round(w.temperature);
   const c = w.code ?? 3;
@@ -60,17 +63,25 @@ function timeAgo(iso?: string) {
 export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user, isGuest } = useAuth();
   const { weather, status, reload } = useWeather();
   const [outfits, setOutfits] = useState<any[]>([]);
   const [itemCount, setItemCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [growDismissed, setGrowDismissed] = useState(false);
 
+  const displayName = isGuest ? "" : firstName(user?.name);
+  const greetingLine = `${greeting()}${displayName ? `, ${displayName}` : ""}`;
+
   const load = useCallback(async () => {
     try {
       const [o, items] = await Promise.all([api<any[]>("/outfits"), api<any[]>("/items")]);
-      setOutfits(Array.isArray(o) ? o.slice(0, 8) : []);
-      setItemCount(Array.isArray(items) ? items.length : 0);
+      const realItems = Array.isArray(items) ? items.filter((i: any) => !i?.demo) : [];
+      const realOutfits = (Array.isArray(o) ? o : [])
+        .filter((x: any) => !x?.demo)
+        .map((x: any) => ({ ...x, items: Array.isArray(x.items) ? x.items.filter((it: any) => !it?.demo) : [] }));
+      setOutfits(realOutfits.slice(0, 8));
+      setItemCount(realItems.length);
     } catch {}
   }, []);
 
@@ -103,13 +114,12 @@ export default function Home() {
         contentContainerStyle={{ paddingTop: insets.top + spacing.sm, paddingBottom: spacing["3xl"] + 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.onSurface} />}
       >
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.weatherCluster}>
             <Feather name={weatherIcon(weather?.code) as any} size={26} color={colors.onSurfaceSecondary} />
             <View style={{ marginLeft: spacing.sm }}>
               <Txt style={styles.temp}>
-                {status === "done" && weather ? `${Math.round(weather.temperature)}°C` : status === "loading" ? "—" : "—"}
+                {status === "done" && weather ? `${Math.round(weather.temperature)}°C` : "—"}
               </Txt>
               <Txt style={styles.weatherDesc}>{weather?.description || "Weather"}</Txt>
             </View>
@@ -121,7 +131,7 @@ export default function Home() {
         </View>
 
         <View style={styles.greetBlock}>
-          <Display weight="semibold" style={styles.greeting}>{greeting()}</Display>
+          <Display weight="semibold" style={styles.greeting}>{greetingLine}</Display>
           {status === "done" && weather ? (
             <Txt style={styles.suggestion} testID="home-weather-suggestion">{stylingRecommendation(weather)}</Txt>
           ) : status === "loading" ? (
@@ -131,7 +141,6 @@ export default function Home() {
           )}
         </View>
 
-        {/* Wardrobe growing banner */}
         {showGrowing && (
           <View style={styles.growBanner} testID="home-growing-banner">
             <Feather name="star" size={18} color={colors.onBrandTertiary} />
@@ -145,7 +154,6 @@ export default function Home() {
           </View>
         )}
 
-        {/* Hero: Dress Me */}
         <Pressable style={styles.dressBtn} testID="home-dress-me-button" onPress={openDressMe}>
           <Display weight="bold" style={styles.dressTxt}>Dress Me</Display>
           <View style={styles.dressArrow}>
@@ -153,7 +161,6 @@ export default function Home() {
           </View>
         </Pressable>
 
-        {/* Recent Outfits */}
         <View style={styles.sectionHead}>
           <Txt style={styles.sectionTitle}>Recent Outfits</Txt>
           {outfits.length > 0 && (
@@ -198,7 +205,6 @@ export default function Home() {
           </ScrollView>
         )}
 
-        {/* Quick Actions */}
         <Txt style={[styles.sectionTitle, { paddingHorizontal: spacing.lg, marginTop: spacing["2xl"], marginBottom: spacing.md }]}>Quick Actions</Txt>
         <View style={styles.quickGrid}>
           {quickActions.map((qa) => (

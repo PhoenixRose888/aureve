@@ -184,6 +184,17 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
     ).sort("created_at", 1).to_list(1)
     is_primary = bool(primary) and primary[0]["id"] == prof["id"]
     account_premium = is_premium(account)
+
+    is_guest = bool(account.get("is_guest"))
+    is_reviewer = _norm_email(account.get("email") or "") == REVIEWER_EMAIL
+    show_demo = is_guest
+    if is_reviewer and not is_guest:
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        show_demo = real_item_count == 0
+
     return {
         "user_id": prof["id"],       # data scope = profile id
         "account_id": account_id,
@@ -193,9 +204,7 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
         "is_primary": is_primary,
         "account_premium": account_premium,
         "premium": account_premium and is_primary,
-        # Sample/practice pieces belong to Guest mode and the Apple review
-        # account only — never to a real signed-in wardrobe.
-        "show_demo": bool(account.get("is_guest")) or _norm_email(account.get("email") or "") == REVIEWER_EMAIL,
+        "show_demo": show_demo,
     }
 
 
@@ -1476,8 +1485,10 @@ ANALYZE_SYSTEM = (
     "You are a fashion cataloguing assistant. These are REAL customer phone photos, "
     "NOT studio product shots — expect imperfect lighting, household or cluttered backgrounds, "
     "angled or folded items, items being worn, shadows and reflections. Identify the single main "
-    "fashion item a human would obviously recognise and catalogue it anyway; do not refuse or "
-    "default to a generic guess just because the background is messy. "
+    "fashion item only when one is genuinely visible. A messy background is not a reason to fail, "
+    "but random light, reflections, furniture, cushions or unidentifiable fabric are NOT clothing. "
+    "If there is no clear fashion item, return name 'Item not recognised', choose the closest category "
+    "only as a placeholder, and set confidence to 30 or lower so the app can ask for a retake. "
     "Return a strict JSON object. Keys: name (short descriptive name, e.g. 'Purple oversized sunglasses'), "
     "category (ALWAYS your best guess from exactly: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery — "
     "sunglasses/hats/belts/scarves = Accessories; rings/necklaces/earrings/watches = Jewellery; never leave blank), "
@@ -1491,7 +1502,6 @@ ANALYZE_SYSTEM = (
     "season (one of: All, Spring, Summer, Autumn, Winter), "
     "condition (one of: New, Excellent, Good, Worn), "
     "needs_care (short string, e.g. 'needs steaming' or 'none'), "
-    "estimated_value (integer estimate of resale/retail value in USD), "
     "description (one short sentence). Return ONLY the JSON object, no prose."
 )
 
@@ -1568,30 +1578,30 @@ def _norm(v) -> str:
 
 
 def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> List[dict]:
-    """Flag pieces in the wardrobe that look like the one just captured, so users
-    don't unknowingly re-add something they already own. Category must match; colour,
-    style, fabric and pattern add to a confidence score."""
+    """Return only high-confidence near-duplicates. Precision matters more than recall."""
     cat = _norm(analysis.get("category"))
-    if not cat:
+    style = _norm(analysis.get("style"))
+    try:
+        confidence = int(float(analysis.get("confidence") or 0))
+    except (TypeError, ValueError):
+        confidence = 0
+    if not cat or not style or confidence < 70:
         return []
-    colour, style = _norm(analysis.get("colour")), _norm(analysis.get("style"))
-    fabric, pattern = _norm(analysis.get("fabric")), _norm(analysis.get("pattern"))
+    colour = _norm(analysis.get("colour"))
+    fabric = _norm(analysis.get("fabric"))
+    pattern = _norm(analysis.get("pattern"))
     scored = []
     for it in items:
-        if _norm(it.get("category")) != cat:
+        if _norm(it.get("category")) != cat or _norm(it.get("style")) != style:
             continue
-        score = 0
-        if colour and _norm(it.get("colour")) == colour:
-            score += 2
-        if style and _norm(it.get("style")) == style:
-            score += 2
-        if fabric and _norm(it.get("fabric")) == fabric:
-            score += 1
-        if pattern and _norm(it.get("pattern")) == pattern:
-            score += 1
-        if score >= 3:
-            scored.append((score, it))
-    scored.sort(key=lambda s: s[0], reverse=True)
+        matches = sum([
+            bool(colour and _norm(it.get("colour")) == colour),
+            bool(fabric and _norm(it.get("fabric")) == fabric),
+            bool(pattern and _norm(it.get("pattern")) == pattern),
+        ])
+        if matches >= 2:
+            scored.append((matches, it))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
     return [
         {
             "id": it["id"],
@@ -1916,6 +1926,7 @@ class DressMeRequest(BaseModel):
     temperature: Optional[float] = None
     weather: Optional[str] = None
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
+    avoid_item_ids: List[str] = []  # current look when user asks for another
 
 
 @api_router.post("/dressme")
@@ -1940,7 +1951,14 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     notes = "Dress me for today — one confident, ready-to-wear look."
     if cal_line:
         notes += f" My schedule today: {cal_line}. Pick something that works across these."
-    result = await _build_outfit(user, occasion, payload.temperature, payload.weather, notes)
+    result = await _build_outfit(
+        user,
+        occasion,
+        payload.temperature,
+        payload.weather,
+        notes,
+        payload.avoid_item_ids,
+    )
     result["occasion_used"] = occasion
     result["from_plan"] = plan_title
     result["calendar_events"] = cal_events
@@ -2511,7 +2529,10 @@ async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_scope)):
 
 @api_router.get("/outfits")
 async def list_outfits(user: dict = Depends(get_scope)):
-    outfits = await db.outfits.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    outfit_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        outfit_query["demo"] = {"$ne": True}
+    outfits = await db.outfits.find(outfit_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for o in outfits:
         o["items"] = [by_id[i] for i in o.get("item_ids", []) if i in by_id]
@@ -2656,6 +2677,8 @@ async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = N
             query["date"]["$gte"] = from_date
         if to_date:
             query["date"]["$lte"] = to_date
+    if not user.get("show_demo"):
+        query["demo"] = {"$ne": True}
     plans = await db.plans.find(query, {"_id": 0}).sort("date", 1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for p in plans:
@@ -2691,7 +2714,10 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
 
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_scope)):
-    logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    wear_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        wear_query["demo"] = {"$ne": True}
+    logs = await db.wear_logs.find(wear_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for lg in logs:
         lg["items"] = [by_id[i] for i in lg.get("item_ids", []) if i in by_id]
@@ -2705,15 +2731,6 @@ async def insights(user: dict = Depends(get_scope)):
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     total_items = len(items)
     total_wears = sum(it.get("wear_count", 0) for it in items)
-    priced = [it for it in items if it.get("price")]
-    total_value = sum(it.get("price", 0) for it in priced)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0)
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    avg_cpw_vals = [cpw(it) for it in items if cpw(it) is not None]
-    avg_cpw = round(sum(avg_cpw_vals) / len(avg_cpw_vals), 2) if avg_cpw_vals else None
 
     most_worn = sorted(items, key=lambda x: x.get("wear_count", 0), reverse=True)[:5]
     least_worn = sorted(items, key=lambda x: x.get("wear_count", 0))[:5]
@@ -2731,8 +2748,6 @@ async def insights(user: dict = Depends(get_scope)):
     return {
         "total_items": total_items,
         "total_wears": total_wears,
-        "total_value": round(total_value, 2),
-        "avg_cost_per_wear": avg_cpw,
         "outfits_logged": len(logs),
         "avg_flattering": avg("flattering"),
         "avg_comfort": avg("comfort"),
@@ -3051,31 +3066,28 @@ async def health_report(user: dict = Depends(get_scope)):
         raise HTTPException(status_code=400, detail="Add a few more pieces to generate your report")
 
     unworn = [it for it in items if (it.get("wear_count", 0) or 0) == 0]
-    unworn_value = round(sum(it.get("price", 0) or 0 for it in unworn), 2)
-    total_value = round(sum(it.get("price", 0) or 0 for it in items), 2)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0) or 0
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    high_cpw = sorted(
-        [it for it in items if cpw(it) is not None],
-        key=lambda x: cpw(x), reverse=True,
-    )[:3]
-    high_cpw_desc = "; ".join(f"{it['name']} (${cpw(it):.2f}/wear)" for it in high_cpw) or "none yet"
+    low_wear = sorted(
+        items,
+        key=lambda it: ((it.get("wear_count", 0) or 0), it.get("last_worn") or ""),
+    )[:8]
+    low_wear_desc = "; ".join(
+        f"{it.get('name')} ({it.get('category')}, worn {it.get('wear_count', 0) or 0}x)"
+        for it in low_wear
+    ) or "none yet"
     counts: dict = {}
     for it in items:
         counts[it.get("category", "Other")] = counts.get(it.get("category", "Other"), 0) + 1
     breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items())
 
     prompt = (
-        f"Total pieces: {len(items)}. Total wardrobe value: ${total_value}.\n"
-        f"Pieces not yet worn: {len(unworn)} worth ${unworn_value}.\n"
-        f"Highest cost-per-wear items: {high_cpw_desc}.\n"
+        f"Total pieces: {len(items)}.\n"
+        f"Pieces not yet worn: {len(unworn)}.\n"
+        f"Lowest-wear pieces: {low_wear_desc}.\n"
         f"Category breakdown: {breakdown}.\n\n"
-        "Write the monthly wardrobe health report. Frame the numbers as underused pieces and "
-        "opportunities to wear more, never as wasted money, and name the single purchase that "
-        "would unlock the most outfits. Return JSON only."
+        "Write the monthly wardrobe health report using wear history and category balance only. "
+        "Focus on underused pieces and practical rotation opportunities. Do not mention purchase "
+        "price, wardrobe value, money or cost-per-wear. Name the single purchase that would unlock "
+        "the most outfits. Return JSON only."
     )
     chat = await ai_chat(f"health-{user['user_id']}-{uuid.uuid4().hex[:6]}", HEALTH_SYSTEM)
     try:
@@ -3088,9 +3100,7 @@ async def health_report(user: dict = Depends(get_scope)):
         raise HTTPException(status_code=502, detail="Could not generate your report")
     result["stats"] = {
         "total_items": len(items),
-        "total_value": total_value,
         "unworn_count": len(unworn),
-        "unworn_value": unworn_value,
     }
     return result
 
@@ -3249,11 +3259,25 @@ async def seed_reviewer_account():
                 "premium_source": "reviewer",
                 "created_at": now_utc().isoformat(),
             })
-        # Ensure representative content: a default profile with a clean demo
-        # wardrobe, reconciled deterministically (see below) so repeated
-        # startups/redeploys can never create duplicates.
+        # Seed samples only while the reviewer wardrobe is genuinely empty.
+        # Once real uploads exist, remove old demo rows instead of resurrecting
+        # them on every restart/deploy.
         prof = await ensure_default_profile(user_id, "Reviewer")
-        await reconcile_reviewer_wardrobe(prof["id"])
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        if real_item_count == 0:
+            await reconcile_reviewer_wardrobe(prof["id"])
+        else:
+            removed = await db.items.delete_many({"user_id": prof["id"], "demo": True})
+            await db.outfits.delete_many({"user_id": prof["id"], "demo": True})
+            await db.wear_logs.delete_many({"user_id": prof["id"], "demo": True})
+            logger.info(
+                "Reviewer has %s real pieces; removed %s seeded demo pieces",
+                real_item_count,
+                removed.deleted_count,
+            )
         logger.info(f"Reviewer account ready: {email}")
     except Exception as e:
         logger.warning(f"Reviewer account seeding skipped: {e}")
