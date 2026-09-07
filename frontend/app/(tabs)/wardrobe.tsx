@@ -46,7 +46,7 @@ export default function Wardrobe() {
   useFocusEffect(
     useCallback(() => {
       if (!profileLoading) load();
-    }, [load, profileLoading, active?.id])
+    }, [load, profileLoading])
   );
 
   const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
@@ -224,7 +224,7 @@ export default function Wardrobe() {
               They will be removed from your wardrobe and from any saved looks. This can&apos;t be undone.
             </Txt>
             <Pressable style={styles.deleteBtn} testID="confirm-bulk-delete" onPress={deleteSelected} disabled={deleting}>
-              {deleting ? <ActivityIndicator color={colors.onError} /> : <Txt style={styles.deleteTxt}>Delete</Txt>}
+              {deleting ? <ActivityIndicator color={colors.onSurfaceInverse} /> : <Txt style={styles.deleteTxt}>Delete</Txt>}
             </Pressable>
             <Pressable style={styles.keepBtn} testID="cancel-bulk-delete" onPress={() => setConfirmDelete(false)}>
               <Txt style={styles.keepTxt}>Keep them</Txt>
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 22, marginBottom: spacing.sm },
   sheetSub: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: spacing.xl, lineHeight: 20 },
   deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  deleteTxt: { color: colors.onError, fontSize: 15 },
+  deleteTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
   keepBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   keepTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
   shopIqBanner: {
