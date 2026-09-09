@@ -107,4 +107,6 @@ Examples:
 7. Real-device acceptance tests are mandatory before merging any restored styling logic.
 
 ## Recovery audit status
-Documentation recovery is now materially complete from the evidence currently available in Gmail, GitHub, the recovered ChatGPT export and current QA screenshots. Further code-level reconciliation is blocked only by the absence of the exact current Emergent source snapshot in GitHub.
+Documentation recovery is materially complete from the evidence currently available in Gmail, GitHub, the recovered ChatGPT export and current QA screenshots.
+
+The next code-level step requires the exact current Emergent source snapshot. GitHub currently contains no newer branch representing the app build under test, so further source reconciliation would otherwise be guesswork. Do not alter production code until that snapshot is available.
