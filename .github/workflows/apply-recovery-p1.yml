@@ -31,5 +31,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/server.py
           git rm backend/recovery_p1_patch.py .github/workflows/apply-recovery-p1.yml
-          git commit -m "fix: restore demo isolation and remove value stats"
+          git commit -m "fix: restore reviewer demo isolation"
           git push origin HEAD:recovery-implementation-2026-09-10
+
+# retry 2: narrowed to demo isolation only
