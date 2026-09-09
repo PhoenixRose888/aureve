@@ -44,14 +44,31 @@ The Sep 7 Charlie branch still contains this Week Ahead logic.
 
 Current QA shows the same core outfit returning again on separate days in Dress Me. This proves the remaining P0 is broader than Week Ahead. Dress Me needs persistent rolling-history awareness across days, not only current-screen avoidance and not only planner-week avoidance.
 
+## Critical recovered fact 4 — Dress Me history only knows what was actually worn
+The Sep 7 backend already contains `recent_looks_line()` and `underused_line()`.
+
+However, `recent_looks_line()` reads only from `db.wear_logs` and returns `RECENTLY WORN combinations`. It does **not** record or retrieve outfits that Aureve merely suggested in Dress Me but the user did not log as worn.
+
+That creates a concrete cross-day failure mode:
+- Aureve suggests outfit A on Monday.
+- The user does not mark outfit A as worn.
+- Tuesday's Dress Me history contains no record that outfit A was suggested.
+- The model is therefore free to select the same high-ranked outfit A again.
+
+This explains why even the recovered Sep 7 branch could still repeat a Dress Me outfit across different days despite already using wear counts, last-worn data, underused pieces and recent wear logs in the prompt.
+
+A proper fix needs a separate persisted **suggestion history**, not just wear history. Suggested looks should be recorded independently from `wear_logs`, with enough data to penalise recent full combinations and recently over-suggested hero items without falsely incrementing `wear_count`.
+
 ## P0 launch blocker — styling repetition
 Aureve's core value proposition is intelligent outfit styling from a user's existing wardrobe. The currently tested build repeatedly selects the same core outfit despite a large wardrobe.
 
 Required recovery target:
 - current-screen exclusions must actually be enforced
+- add persistent Dress Me / stylist suggestion-history records separate from wear logs
 - recently suggested full outfits must be strongly excluded across a rolling history window
 - recently suggested hero items must be strongly deprioritised across days
 - wear count, last worn, underused items, occasion, weather and user preferences should all participate in ranking
+- suggestion history must not increment wear counts unless the user actually logs the outfit as worn
 - repeats should occur only for a clear contextual reason or explicit user request
 - diagnostics should record candidate selection, recent-history penalties and final item choice
 
