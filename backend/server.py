@@ -184,6 +184,17 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
     ).sort("created_at", 1).to_list(1)
     is_primary = bool(primary) and primary[0]["id"] == prof["id"]
     account_premium = is_premium(account)
+
+    is_guest = bool(account.get("is_guest"))
+    is_reviewer = _norm_email(account.get("email") or "") == REVIEWER_EMAIL
+    show_demo = is_guest
+    if is_reviewer and not is_guest:
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        show_demo = real_item_count == 0
+
     return {
         "user_id": prof["id"],       # data scope = profile id
         "account_id": account_id,
@@ -193,9 +204,7 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
         "is_primary": is_primary,
         "account_premium": account_premium,
         "premium": account_premium and is_primary,
-        # Sample/practice pieces belong to Guest mode and the Apple review
-        # account only — never to a real signed-in wardrobe.
-        "show_demo": bool(account.get("is_guest")) or _norm_email(account.get("email") or "") == REVIEWER_EMAIL,
+        "show_demo": show_demo,
     }
 
 
@@ -2570,7 +2579,10 @@ async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_scope)):
 
 @api_router.get("/outfits")
 async def list_outfits(user: dict = Depends(get_scope)):
-    outfits = await db.outfits.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    outfit_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        outfit_query["demo"] = {"$ne": True}
+    outfits = await db.outfits.find(outfit_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for o in outfits:
         o["items"] = [by_id[i] for i in o.get("item_ids", []) if i in by_id]
@@ -2715,6 +2727,8 @@ async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = N
             query["date"]["$gte"] = from_date
         if to_date:
             query["date"]["$lte"] = to_date
+    if not user.get("show_demo"):
+        query["demo"] = {"$ne": True}
     plans = await db.plans.find(query, {"_id": 0}).sort("date", 1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for p in plans:
@@ -2750,7 +2764,10 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
 
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_scope)):
-    logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    wear_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        wear_query["demo"] = {"$ne": True}
+    logs = await db.wear_logs.find(wear_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for lg in logs:
         lg["items"] = [by_id[i] for i in lg.get("item_ids", []) if i in by_id]
@@ -3308,11 +3325,22 @@ async def seed_reviewer_account():
                 "premium_source": "reviewer",
                 "created_at": now_utc().isoformat(),
             })
-        # Ensure representative content: a default profile with a clean demo
-        # wardrobe, reconciled deterministically (see below) so repeated
-        # startups/redeploys can never create duplicates.
+        # Keep seeded samples only while the reviewer wardrobe is genuinely empty.
+        # Once real uploads exist, remove old demo rows instead of resurrecting them
+        # on every restart/deploy.
         prof = await ensure_default_profile(user_id, "Reviewer")
-        await reconcile_reviewer_wardrobe(prof["id"])
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        if real_item_count == 0:
+            await reconcile_reviewer_wardrobe(prof["id"])
+        else:
+            removed = await db.items.delete_many({"user_id": prof["id"], "demo": True})
+            await db.outfits.delete_many({"user_id": prof["id"], "demo": True})
+            await db.wear_logs.delete_many({"user_id": prof["id"], "demo": True})
+            await db.plans.delete_many({"user_id": prof["id"], "demo": True})
+            logger.info("Reviewer has %s real pieces; removed %s seeded demo pieces", real_item_count, removed.deleted_count)
         logger.info(f"Reviewer account ready: {email}")
     except Exception as e:
         logger.warning(f"Reviewer account seeding skipped: {e}")
