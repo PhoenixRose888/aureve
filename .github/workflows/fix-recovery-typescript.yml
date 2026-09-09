@@ -1,0 +1,74 @@
+name: Fix recovery TypeScript errors
+
+on:
+  push:
+    branches:
+      - recovery-implementation-2026-09-10
+    paths:
+      - .github/workflows/fix-recovery-typescript.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery-implementation-2026-09-10
+          fetch-depth: 0
+
+      - name: Restore verified Sep 7 TypeScript colour fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          files = [
+              Path('frontend/app/(tabs)/wardrobe.tsx'),
+              Path('frontend/app/item/[id].tsx'),
+              Path('frontend/app/looks.tsx'),
+          ]
+          total = 0
+          for p in files:
+              text = p.read_text(encoding='utf-8')
+              n = text.count('colors.onError')
+              if n:
+                  text = text.replace('colors.onError', 'colors.onSurfaceInverse')
+                  p.write_text(text, encoding='utf-8')
+                  total += n
+          if total != 4:
+              raise SystemExit(f'Expected 4 invalid color-token references, fixed {total}')
+
+          p = Path('frontend/app/(tabs)/wardrobe.tsx')
+          text = p.read_text(encoding='utf-8')
+          old = '[load, profileLoading, active?.id]'
+          if old in text:
+              text = text.replace(old, '[load, profileLoading]', 1)
+              p.write_text(text, encoding='utf-8')
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Yarn
+        run: corepack enable
+
+      - name: Install frontend dependencies for verification
+        run: yarn --cwd frontend install --ignore-scripts
+
+      - name: TypeScript check
+        run: yarn --cwd frontend tsc --noEmit
+
+      - name: Expo lint
+        run: yarn --cwd frontend lint
+
+      - name: Commit verified fixes and remove temporary QA workflows
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-recovery-typescript.yml
+          if [ -f .github/workflows/recovery-static-qa.yml ]; then git rm .github/workflows/recovery-static-qa.yml; fi
+          git add frontend/app/'(tabs)'/wardrobe.tsx frontend/app/item/'[id]'.tsx frontend/app/looks.tsx
+          git commit -m "fix: restore verified frontend TypeScript cleanup"
+          git push origin HEAD:recovery-implementation-2026-09-10
