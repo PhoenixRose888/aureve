@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   confirmTitle: { fontSize: 24, marginBottom: spacing.sm },
   confirmSub: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: spacing.xl },
   deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  deleteTxt: { color: colors.onError, fontSize: 15 },
+  deleteTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
   cancelBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   cancelTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
 });

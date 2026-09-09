@@ -50,7 +50,7 @@ export default function Wardrobe() {
       // Wait until the active profile is resolved so /items is always scoped to
       // the correct profile (never a null-header fallback to the default one).
       if (!profileLoading) load();
-    }, [load, profileLoading, active?.id])
+    }, [load, profileLoading])
   );
 
   const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
@@ -239,7 +239,7 @@ export default function Wardrobe() {
             </Txt>
             <Pressable style={styles.deleteBtn} testID="confirm-bulk-delete" onPress={deleteSelected} disabled={deleting}>
               {deleting ? (
-                <ActivityIndicator color={colors.onError} />
+                <ActivityIndicator color={colors.onSurfaceInverse} />
               ) : (
                 <Txt style={styles.deleteTxt}>Delete</Txt>
               )}
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 22, marginBottom: spacing.sm },
   sheetSub: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: spacing.xl, lineHeight: 20 },
   deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  deleteTxt: { color: colors.onError, fontSize: 15 },
+  deleteTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
   keepBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   keepTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
   placeholder: { alignItems: "center", justifyContent: "center" },
