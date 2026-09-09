@@ -2781,15 +2781,6 @@ async def insights(user: dict = Depends(get_scope)):
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     total_items = len(items)
     total_wears = sum(it.get("wear_count", 0) for it in items)
-    priced = [it for it in items if it.get("price")]
-    total_value = sum(it.get("price", 0) for it in priced)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0)
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    avg_cpw_vals = [cpw(it) for it in items if cpw(it) is not None]
-    avg_cpw = round(sum(avg_cpw_vals) / len(avg_cpw_vals), 2) if avg_cpw_vals else None
 
     most_worn = sorted(items, key=lambda x: x.get("wear_count", 0), reverse=True)[:5]
     least_worn = sorted(items, key=lambda x: x.get("wear_count", 0))[:5]
@@ -2807,8 +2798,6 @@ async def insights(user: dict = Depends(get_scope)):
     return {
         "total_items": total_items,
         "total_wears": total_wears,
-        "total_value": round(total_value, 2),
-        "avg_cost_per_wear": avg_cpw,
         "outfits_logged": len(logs),
         "avg_flattering": avg("flattering"),
         "avg_comfort": avg("comfort"),
@@ -3127,31 +3116,28 @@ async def health_report(user: dict = Depends(get_scope)):
         raise HTTPException(status_code=400, detail="Add a few more pieces to generate your report")
 
     unworn = [it for it in items if (it.get("wear_count", 0) or 0) == 0]
-    unworn_value = round(sum(it.get("price", 0) or 0 for it in unworn), 2)
-    total_value = round(sum(it.get("price", 0) or 0 for it in items), 2)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0) or 0
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    high_cpw = sorted(
-        [it for it in items if cpw(it) is not None],
-        key=lambda x: cpw(x), reverse=True,
-    )[:3]
-    high_cpw_desc = "; ".join(f"{it['name']} (${cpw(it):.2f}/wear)" for it in high_cpw) or "none yet"
+    low_wear = sorted(
+        items,
+        key=lambda it: ((it.get("wear_count", 0) or 0), it.get("last_worn") or ""),
+    )[:8]
+    low_wear_desc = "; ".join(
+        f"{it.get('name')} ({it.get('category')}, worn {it.get('wear_count', 0) or 0}x)"
+        for it in low_wear
+    ) or "none yet"
     counts: dict = {}
     for it in items:
         counts[it.get("category", "Other")] = counts.get(it.get("category", "Other"), 0) + 1
     breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items())
 
     prompt = (
-        f"Total pieces: {len(items)}. Total wardrobe value: ${total_value}.\n"
-        f"Pieces not yet worn: {len(unworn)} worth ${unworn_value}.\n"
-        f"Highest cost-per-wear items: {high_cpw_desc}.\n"
+        f"Total pieces: {len(items)}.\n"
+        f"Pieces not yet worn: {len(unworn)}.\n"
+        f"Lowest-wear pieces: {low_wear_desc}.\n"
         f"Category breakdown: {breakdown}.\n\n"
-        "Write the monthly wardrobe health report. Frame the numbers as underused pieces and "
-        "opportunities to wear more, never as wasted money, and name the single purchase that "
-        "would unlock the most outfits. Return JSON only."
+        "Write the monthly wardrobe health report using wear history and category balance only. "
+        "Focus on underused pieces and practical rotation opportunities. Do not mention purchase "
+        "price, wardrobe value, money or cost-per-wear. Name the single purchase that would unlock "
+        "the most outfits. Return JSON only."
     )
     chat = await ai_chat(f"health-{user['user_id']}-{uuid.uuid4().hex[:6]}", HEALTH_SYSTEM)
     try:
@@ -3164,9 +3150,7 @@ async def health_report(user: dict = Depends(get_scope)):
         raise HTTPException(status_code=502, detail="Could not generate your report")
     result["stats"] = {
         "total_items": len(items),
-        "total_value": total_value,
         "unworn_count": len(unworn),
-        "unworn_value": unworn_value,
     }
     return result
 
