@@ -59,6 +59,11 @@ This explains why even the recovered Sep 7 branch could still repeat a Dress Me 
 
 A proper fix needs a separate persisted **suggestion history**, not just wear history. Suggested looks should be recorded independently from `wear_logs`, with enough data to penalise recent full combinations and recently over-suggested hero items without falsely incrementing `wear_count`.
 
+## Critical recovered fact 5 — vague AI Stylist context handling also appears to have regressed
+Sep 7 commit `7e7874d3cdd0953385a52e61ce447d4748bfb0cd` added frontend handling for vague requests such as `What should I wear tonight?`. If there was no specific occasion/context, Aureve was supposed to ask what the user was doing before generating an outfit.
+
+Current QA screenshots show the exact vague request `What should I wear tonight?` receiving an immediate outfit recommendation instead of the intended context question. That is another concrete behaviour mismatch between the preserved Sep 7 branch and the tested app.
+
 ## P0 launch blocker — styling repetition
 Aureve's core value proposition is intelligent outfit styling from a user's existing wardrobe. The currently tested build repeatedly selects the same core outfit despite a large wardrobe.
 
