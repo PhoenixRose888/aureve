@@ -1207,7 +1207,7 @@ async def delete_profile(profile_id: str, account: dict = Depends(get_current_us
     if count <= 1:
         raise HTTPException(status_code=400, detail="You need at least one profile")
     # Remove the profile and its wardrobe data
-    for coll in (db.items, db.outfits, db.wear_logs, db.plans):
+    for coll in (db.items, db.outfits, db.wear_logs, db.plans, db.style_suggestions):
         await coll.delete_many({"user_id": profile_id})
     await db.body_photos.delete_one({"profile_id": profile_id})
     await db.profiles.delete_one({"id": profile_id, "user_id": account["user_id"]})
@@ -1704,12 +1704,56 @@ def underused_line(items: List[dict], limit: int = 10) -> str:
 
 
 async def recent_looks_line(user_id: str, limit: int = 6) -> str:
-    """Summarise the most recent outfits so the stylist doesn't rebuild them."""
+    """Summarise outfits the user actually logged as worn."""
     logs = await db.wear_logs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     combos = [",".join(lg.get("item_ids", [])) for lg in logs if lg.get("item_ids")]
     if not combos:
         return ""
     return "RECENTLY WORN combinations (do not simply rebuild these): " + " | ".join(combos) + "\n"
+
+
+async def recent_suggestions(user_id: str, source: str = "dressme", limit: int = 12) -> List[dict]:
+    """Persisted AI suggestion history. This is deliberately separate from wear_logs:
+    a suggested outfit must influence rotation without pretending it was actually worn."""
+    return await db.style_suggestions.find(
+        {"user_id": user_id, "source": source}, {"_id": 0}
+    ).sort("created_at", -1).to_list(limit)
+
+
+def recent_suggestions_line(history: List[dict]) -> str:
+    combos = [",".join(x.get("item_ids", [])) for x in history if x.get("item_ids")]
+    if not combos:
+        return ""
+    counts = {}
+    for row in history:
+        for iid in row.get("item_ids", []):
+            counts[iid] = counts.get(iid, 0) + 1
+    repeated = [iid for iid, n in sorted(counts.items(), key=lambda kv: kv[1], reverse=True) if n >= 2][:12]
+    extra = f" Frequently suggested item ids to strongly deprioritise: {','.join(repeated)}." if repeated else ""
+    return (
+        "RECENTLY SUGGESTED combinations (do not repeat these, even if they were never logged as worn): "
+        + " | ".join(combos) + extra + "\n"
+    )
+
+
+async def record_style_suggestion(user_id: str, source: str, occasion: str, item_ids: List[str]):
+    ids = [i for i in item_ids if i]
+    if not ids:
+        return
+    await db.style_suggestions.insert_one({
+        "id": new_id("sugg"),
+        "user_id": user_id,
+        "source": source,
+        "occasion": occasion or "",
+        "item_ids": ids,
+        "created_at": now_utc().isoformat(),
+    })
+    # Bound storage per wardrobe/source. Keep the newest 60 only.
+    stale = await db.style_suggestions.find(
+        {"user_id": user_id, "source": source}, {"_id": 0, "id": 1}
+    ).sort("created_at", -1).skip(60).to_list(500)
+    if stale:
+        await db.style_suggestions.delete_many({"id": {"$in": [x["id"] for x in stale]}})
 
 
 def available_items(items: List[dict]) -> List[dict]:
@@ -1854,35 +1898,40 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
 
 async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
                         weather: Optional[str], notes: Optional[str],
-                        avoid_item_ids: Optional[List[str]] = None):
+                        avoid_item_ids: Optional[List[str]] = None,
+                        source: str = "stylist"):
     items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 2:
         raise HTTPException(status_code=400, detail="Not enough ready-to-wear items. Add more, or mark laundry as clean.")
+
+    explicit_avoid = {i for i in (avoid_item_ids or []) if i}
+    # Create Another Look is a hard instruction, not a polite hint. When the
+    # wardrobe has enough alternatives, remove the current look from the candidate
+    # pool entirely so the model cannot simply return it again.
+    if explicit_avoid:
+        alternatives = [it for it in items if it.get("id") not in explicit_avoid]
+        if len(alternatives) >= 2:
+            items = alternatives
+
+    suggestion_history = await recent_suggestions(user["user_id"], source=source) if source == "dressme" else []
     prefs = await learned_prefs(user["user_id"])
     wardrobe = summarize_items_for_ai(items)
     weather_line = ""
     if temperature is not None:
         weather_line = f"Temperature: {temperature}°C. Conditions: {weather or 'n/a'}."
-    # Cross-day variety: name the pieces already worn elsewhere this week so the
-    # stylist intentionally varies looks instead of repeating the same hero items.
     variety_line = ""
-    if avoid_item_ids:
-        avoid = set(avoid_item_ids)
-        used = [it for it in items if it.get("id") in avoid]
-        if used:
-            names = ", ".join(f"{it.get('name')} ({it.get('category')})" for it in used)
-            variety_line = (
-                f"ALREADY WORN elsewhere this week: {names}.\n"
-                "Deliberately create a DIFFERENT look: vary the silhouette, colour palette, footwear and "
-                "accessories, and avoid reusing the same hero pieces (tops, bottoms, dresses, outerwear, shoes, bags) "
-                "unless there is a clear styling reason. Versatile basics may be reused only if styled noticeably "
-                "differently. Make genuine use of the wider wardrobe.\n"
-            )
+    if explicit_avoid:
+        variety_line = (
+            "EXPLICIT EXCLUSION: the previous/current look must not be repeated. "
+            f"Excluded item ids: {','.join(sorted(explicit_avoid))}. "
+            "Build a materially different silhouette and hero-piece combination.\n"
+        )
     prompt = (
         f"Occasion: {occasion}\n{weather_line}\n"
         f"Extra notes: {notes or 'none'}\n"
         f"{variety_line}"
+        f"{recent_suggestions_line(suggestion_history)}"
         f"{underused_line(items)}"
         f"{await recent_looks_line(user['user_id'])}"
         f"{profile_context(user)}\n"
@@ -1909,6 +1958,12 @@ async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
         if it:
             enriched.append({"slot": slot.get("slot", it.get("category")), "reason": slot.get("reason", ""), "item": it})
     result["resolved_items"] = enriched
+    selected_ids = [x["item"]["id"] for x in enriched if x.get("item")]
+    if explicit_avoid and any(i in explicit_avoid for i in selected_ids):
+        logger.warning("STYLE_ROTATION source=%s exclusion_violation avoid=%s selected=%s", source, sorted(explicit_avoid), selected_ids)
+    else:
+        logger.info("STYLE_ROTATION source=%s avoid=%s recent=%s selected=%s", source, sorted(explicit_avoid), len(suggestion_history), selected_ids)
+    await record_style_suggestion(user["user_id"], source, occasion, selected_ids)
     return result
 
 
@@ -1916,6 +1971,7 @@ class DressMeRequest(BaseModel):
     temperature: Optional[float] = None
     weather: Optional[str] = None
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
+    avoid_item_ids: List[str] = []  # current on-screen look when asking for another
 
 
 @api_router.post("/dressme")
@@ -1940,7 +1996,10 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     notes = "Dress me for today — one confident, ready-to-wear look."
     if cal_line:
         notes += f" My schedule today: {cal_line}. Pick something that works across these."
-    result = await _build_outfit(user, occasion, payload.temperature, payload.weather, notes)
+    result = await _build_outfit(
+        user, occasion, payload.temperature, payload.weather, notes,
+        payload.avoid_item_ids, source="dressme"
+    )
     result["occasion_used"] = occasion
     result["from_plan"] = plan_title
     result["calendar_events"] = cal_events

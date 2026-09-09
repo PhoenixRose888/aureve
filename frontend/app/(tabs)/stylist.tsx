@@ -19,6 +19,15 @@ const SUGGESTIONS = [
   { icon: "moon", label: "What should I wear tonight?" },
 ];
 
+function needsOccasionContext(text: string) {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  const asksWhatToWear = /(what should i wear|help me dress|dress me)/.test(t);
+  const vagueTime = /\b(today|tonight|this morning|this afternoon|this evening|tomorrow)\b/.test(t);
+  const specificContext = /\b(work|office|meeting|wedding|funeral|church|date|dinner|lunch|party|club|concert|movie|movies|picnic|bbq|barbecue|school|gym|airport|flight|travel|interview|event|shopping|beach|hike|walk|brunch|birthday|formal|casual)\b/.test(t);
+  return asksWhatToWear && vagueTime && !specificContext;
+}
+
 export default function Stylist() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -44,8 +53,19 @@ export default function Stylist() {
     const history = [...messages, { role: "user" as const, content }];
     setMessages(history);
     setInput("");
-    setSending(true);
     scrollDown();
+
+    if (needsOccasionContext(content)) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "What are you doing? Give me the occasion or plans and I’ll style you for that." },
+      ]);
+      haptics.success();
+      scrollDown();
+      return;
+    }
+
+    setSending(true);
     try {
       const body: any = { messages: history.map((m) => ({ role: m.role, content: m.content })) };
       if (weather && status === "done") { body.temperature = weather.temperature; body.weather = weather.description; }
