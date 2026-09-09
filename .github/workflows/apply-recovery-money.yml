@@ -1,0 +1,35 @@
+name: Apply money-value cleanup
+
+on:
+  push:
+    branches:
+      - recovery-implementation-2026-09-10
+    paths:
+      - .github/workflows/apply-recovery-money.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery-implementation-2026-09-10
+          fetch-depth: 0
+
+      - name: Apply exact money-value cleanup
+        run: python backend/recovery_money_patch.py
+
+      - name: Verify backend syntax
+        run: python -m py_compile backend/server.py
+
+      - name: Commit cleanup and remove temporary patch files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/server.py
+          git rm backend/recovery_money_patch.py .github/workflows/apply-recovery-money.yml
+          git commit -m "fix: remove unreliable wardrobe money metrics"
+          git push origin HEAD:recovery-implementation-2026-09-10
