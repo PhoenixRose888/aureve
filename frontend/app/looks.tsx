@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.xl, paddingBottom: spacing["2xl"] },
   confirmTitle: { fontSize: 22, marginBottom: spacing.lg },
   deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  deleteTxt: { color: colors.onError, fontSize: 15 },
+  deleteTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
   cancelBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   cancelTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
 });

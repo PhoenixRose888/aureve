@@ -47,13 +47,17 @@ export default function DressMe() {
   const generate = useCallback(async () => {
     setLoading(true);
     setError("");
-    setResult(null);
     setSaved(false);
     try {
       const body: any = {};
       if (weather && status === "done") {
         body.temperature = weather.temperature;
         body.weather = weather.description;
+      }
+      const currentItems = result?.resolved_items || [];
+      if (currentItems.length > 0) {
+        body.occasion = result?.occasion_used || undefined;
+        body.avoid_item_ids = currentItems.map((x: any) => x.item?.id).filter(Boolean);
       }
       const r = await api<any>("/dressme", { method: "POST", body });
       setResult(r);
@@ -63,7 +67,7 @@ export default function DressMe() {
       else setError(e.message || "Couldn't put a look together.");
     }
     setLoading(false);
-  }, [weather, status, router]);
+  }, [weather, status, router, result]);
 
   useEffect(() => {
     if (!started.current && status !== "idle" && status !== "loading") {
