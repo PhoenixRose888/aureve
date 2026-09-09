@@ -124,40 +124,4 @@ async def list_wear(user: dict = Depends(get_scope)):
 ''',
 "exclude demo wear logs")
 
-# Remove unreliable money/value outputs from general insights.
-replace_once(
-'''    total_items = len(items)
-    total_wears = sum(it.get("wear_count", 0) for it in items)
-    priced = [it for it in items if it.get("price")]
-    total_value = sum(it.get("price", 0) for it in priced)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0)
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    avg_cpw_vals = [cpw(it) for it in items if cpw(it) is not None]
-    avg_cpw = round(sum(avg_cpw_vals) / len(avg_cpw_vals), 2) if avg_cpw_vals else None
-
-    most_worn =
-''',
-'''    total_items = len(items)
-    total_wears = sum(it.get("wear_count", 0) for it in items)
-
-    most_worn =
-''',
-"remove insight money calculations")
-
-replace_once(
-'''        "total_items": total_items,
-        "total_wears": total_wears,
-        "total_value": round(total_value, 2),
-        "avg_cost_per_wear": avg_cpw,
-        "outfits_logged": len(logs),
-''',
-'''        "total_items": total_items,
-        "total_wears": total_wears,
-        "outfits_logged": len(logs),
-''',
-"remove insight money response fields")
-
-print("P1 recovery patch applied")
+print("P1 demo isolation patch applied")
