@@ -1,106 +1,105 @@
 # Aureve Recovery Audit — 10 Sep 2026
 
 ## Purpose
-This file records the recovered Sep 7 direct GitHub work and the mismatch between that preserved branch and the currently tested app. It is documentation only. Do not treat this branch as the production source or merge the historical Sep 7 work wholesale.
+This file records the recovered Sep 7 direct GitHub work, the exact Sep 10 Emergent export, and the selective recovery work built from that comparison. Historical branches remain preserved. Do not merge the Sep 7 branch wholesale.
 
 ## Canonical references
 - Sep 7 Emergent snapshot: `aureve-current-2026-09-07`
-- Direct-fix branch: `charlie-launch-fixes-2026-09-07`
-- Current Emergent export: `aureve-current-2026-09-10`
-- Historical PR: #1 `Launch-critical Aureve fixes`
+- Sep 7 direct-fix branch: `charlie-launch-fixes-2026-09-07`
+- Sep 10 exact Emergent export: `aureve-current-2026-09-10`
 - Recovery audit branch: `recovery-audit-2026-09-10`
+- Selective implementation branch: `recovery-implementation-2026-09-10`
+- Historical recovery PR: #1 `Launch-critical Aureve fixes`
+- Current selective recovery PR: #3 `P0 Dress Me recovery implementation`
 
-The Charlie branch is 36 commits ahead of the Sep 7 snapshot and 0 behind. The new Sep 10 Emergent export has now been pushed and inspected.
+## Source reconciliation findings
 
-## Confirmed current-source finding 1 — single-item swap is actually present
-The current Sep 10 Emergent source still contains the Dress Me single-item swap UI:
+### Dress Me same-session rotation was genuinely lost
+The Sep 10 export reset the current result before regeneration and sent no `avoid_item_ids` to `/dressme`. Its backend `DressMeRequest` also no longer accepted or forwarded `avoid_item_ids`.
+
+The Sep 7 Charlie branch had both pieces. This is a confirmed regression, not an inference.
+
+### Dress Me single-item swap survived in source
+The Sep 10 export still contains:
 - `Tap any item to change`
-- tapping a rendered item opens the swap modal
-- category-matched wardrobe options
+- a modal swap picker
+- category-matched wardrobe choices
 - search
-- replacement of only the selected item via `swapItem`
+- replacement of only the selected item
 
-So this feature was not lost from source. The earlier QA complaint is now reclassified as a discoverability / device-behaviour check, not a proven code regression. The current branch does not defensively filter demo pieces out of the swap wardrobe, though the historical Charlie branch did.
+Therefore the user's report that item swapping was unavailable is now treated as a discoverability/device-behaviour issue rather than missing source code.
 
-## Confirmed current-source finding 2 — same-session anti-repeat logic WAS lost
-The current Sep 10 frontend `Dress Me` implementation resets the result and calls `/dressme` with weather only. It does not send the current outfit's item IDs back as `avoid_item_ids` when `Create Another Look` is pressed.
+### Week Ahead variety survived
+`planner.tsx` in the Sep 10 export still collects item IDs from other planned days and passes them as `avoid_item_ids` to `/stylist/suggest`.
 
-The current Sep 10 backend `DressMeRequest` also does not define `avoid_item_ids`, and `/dressme` calls `_build_outfit(...)` without any exclusion list.
+### Cross-day Dress Me had a deeper design gap
+The backend's existing `recent_looks_line()` reads only `wear_logs`, meaning it remembers outfits actually logged as worn but not outfits merely suggested by Dress Me.
 
-This is a confirmed regression relative to the Sep 7 Charlie branch, not a theory. It directly explains why repeated requests in the same Dress Me session can return the same core outfit.
+That allows a Monday suggestion to return Tuesday if the user never logged Monday's outfit as worn.
 
-## Confirmed current-source finding 3 — cross-day Week Ahead rotation survived
-The current Sep 10 `planner.tsx` still gathers item IDs from other planned days and passes them to `/stylist/suggest` as `avoid_item_ids`.
+### AI Stylist vague-context guard was lost
+The Sep 7 branch asked for plans/occasion before styling materially vague prompts such as `What should I wear tonight?`. That guard was absent in the Sep 10 export.
 
-So the Week Ahead cross-day mechanism itself survived. The remaining launch blocker is specifically broader Dress Me rotation, not the planner implementation alone.
+### Reviewer/demo hardening was lost
+The Sep 10 backend broadly enabled demo visibility for the reviewer account even after real uploads, and server-side outfit/plan/wear endpoints lacked the stronger demo filters from the Sep 7 branch.
 
-## Confirmed current-source finding 4 — Dress Me history only knows what was actually worn
-The current Sep 10 backend includes `underused_line()` and `recent_looks_line()`.
+## Selective recovery implemented on `recovery-implementation-2026-09-10`
 
-However, `recent_looks_line()` reads only from `db.wear_logs` and returns `RECENTLY WORN combinations`. It does not record or retrieve outfits that Aureve merely suggested in Dress Me but the user did not log as worn.
+### P0 commit `99e6f4e610695025fc80f8d6a4f0096eb9f9886f`
+`fix: restore Dress Me rotation and suggestion history`
 
-Concrete failure mode:
-- Aureve suggests outfit A on Monday.
-- The user does not mark outfit A as worn.
-- Tuesday's Dress Me history contains no record that outfit A was suggested.
-- The model may select outfit A again.
+Implemented:
+- restored frontend `avoid_item_ids` on Create Another Look
+- restored backend `DressMeRequest.avoid_item_ids`
+- `/dressme` now forwards exclusions through `_build_outfit`
+- current on-screen outfit items are removed from the candidate pool when enough alternatives exist, making same-session avoidance a hard constraint rather than only prompt wording
+- introduced `style_suggestions` persistence separate from `wear_logs`
+- Dress Me records AI-suggested item combinations without incrementing wear counts
+- recent suggested combinations and repeatedly suggested item IDs feed back into the styling prompt
+- bounded suggestion-history storage per wardrobe/source
+- added `STYLE_ROTATION` diagnostics containing exclusions, recent-history count and selected IDs
+- restored the AI Stylist vague-occasion context question
+- backend syntax verification passed in GitHub Actions
 
-Therefore a correct P0 fix needs persistent **suggestion history** separate from wear history. Suggested looks should be recorded without incrementing `wear_count` or changing `last_worn`.
+GitHub Actions run: `34408068785` — SUCCESS.
 
-## Confirmed current-source finding 5 — vague AI Stylist context guard WAS lost
-The current Sep 10 `stylist.tsx` immediately sends vague prompts such as `What should I wear tonight?` to `/stylist/chat`.
+### P1 commit `e8b86cc0b760fcd3bde75f7b3f8325e13a780acd`
+`fix: restore reviewer demo isolation`
 
-The Sep 7 Charlie branch had a frontend guard that asked what the user was doing before styling vague time-only requests. Current QA screenshots match the Sep 10 source: the guard is absent.
+Implemented:
+- reviewer demo visibility is now dynamic per active profile
+- seeded demo pieces remain only while the reviewer wardrobe has no real pieces
+- once real reviewer uploads exist, old demo items/outfits/wear logs/plans are removed instead of being reseeded on restart
+- `/outfits`, `/plans`, and `/wear` exclude demo rows server-side whenever demo visibility is off
+- backend syntax verification passed in GitHub Actions
 
-This is another confirmed regression relative to the Charlie branch.
+The first P1 workflow attempt failed safely before commit because a separate monetary-insights replacement did not match the current source exactly. No partial source changes were committed. The patch was narrowed to demo isolation and rerun successfully.
 
-## Confirmed current-source finding 6 — reviewer/demo isolation hardening WAS lost
-The current Sep 10 backend sets `show_demo` true for the reviewer account regardless of whether that reviewer wardrobe contains real uploaded pieces.
+GitHub Actions run: `34408301427` — SUCCESS.
 
-The Sep 7 Charlie branch had stronger logic: once real reviewer uploads existed, seeded demo pieces were no longer shown/reseeded into the real working wardrobe. This hardening is absent from the current source and should be selectively reconsidered because current QA has shown sample/demo language leaking into user-facing intelligence.
+## Still intentionally not merged
+PR #3 remains draft. No recovery code has been merged into the Sep 10 Emergent snapshot or production.
 
-## P0 launch blocker — styling repetition
-Aureve's core value proposition is intelligent outfit styling from a user's existing wardrobe. The current source plus real-device QA now establish two separate rotation defects:
+## Remaining work before merge
+1. Static/frontend QA on the implementation branch.
+2. Reconcile monetary wardrobe-value / cost-per-wear code separately against the exact current source rather than forcing an old patch.
+3. Real-device acceptance test for Dress Me:
+   - generate look A
+   - Create Another Look at least five times
+   - verify meaningful hero-piece/core-look rotation
+   - close/relaunch and regenerate
+   - repeat on a later day without marking prior looks worn
+   - verify suggestion history still influences selection
+   - confirm wear_count/last_worn are unchanged until explicit wear logging
+4. Confirm item swap is visible and functional on-device.
+5. Confirm vague `What should I wear tonight?` asks for context.
+6. Verify reviewer with real uploads no longer mixes seeded demo data into intelligence.
+7. Review `STYLE_ROTATION` diagnostics from device testing.
 
-1. **Same-session regression:** `Create Another Look` no longer passes current-item exclusions.
-2. **Cross-day design gap:** Dress Me has no persisted suggestion history, only wear history.
+## Recovery conclusion
+The missing continuity has now been reconstructed into three separate facts:
+- some Sep 7 fixes survived into Sep 10,
+- some were overwritten/lost,
+- and at least one core issue, cross-day Dress Me repetition, required a new design fix beyond the old Sep 7 work.
 
-Required recovery target:
-- restore current-screen `avoid_item_ids` support through frontend + `/dressme` backend
-- persist Dress Me / stylist suggestion-history records separate from wear logs
-- strongly exclude recent full combinations across a rolling history window
-- strongly deprioritise recently over-suggested hero pieces across days
-- retain wear count, last worn, underused items, occasion, weather and user preferences as inputs
-- do not increment wear counts unless the user explicitly logs a wear
-- add diagnostics for recent-history penalties and final item choice
-
-## Minimum P0 acceptance test
-Do not call styling fixed until all pass on a populated real wardrobe:
-1. Generate Dress Me look A.
-2. Press `Create Another Look` at least five times. No subsequent look may reuse the same core combination; hero overlap must materially reduce unless constraints require reuse.
-3. Close/relaunch and generate again. Recent suggestions must still influence selection.
-4. Repeat on a later calendar day without marking earlier looks worn. Suggestion history must still influence selection.
-5. Verify suggestion history does not alter `wear_count` or `last_worn`.
-6. Verify Week Ahead still produces occasion-appropriate looks with meaningful cross-day variety.
-7. Verify tapping one Dress Me item replaces only that item on-device.
-8. Verify vague `What should I wear tonight?` asks for context unless occasion is already known.
-9. Capture diagnostics proving exclusions/penalties were applied.
-
-## Important superseded Sep 7 decisions
-Do not restore all historical changes blindly.
-
-Examples:
-- Sep 7 removed the wardrobe-grid `Pairs with X` badge; later product review approved the clearer `Pairs with 80 / 82` treatment.
-- Sep 7 hid Calendar for launch; later OAuth work continued, so current launch strategy must decide whether Calendar stays hidden or is fixed.
-- Reviewer/demo handling evolved later. Preserve intentional reviewer samples while preventing real-user leakage.
-
-## Safe reconciliation workflow
-1. Preserve `charlie-launch-fixes-2026-09-07` unchanged as evidence.
-2. Preserve `aureve-current-2026-09-10` unchanged as the current Emergent snapshot.
-3. Use a new implementation branch for selective recovery.
-4. Restore only still-valid fixes, starting with P0 Dress Me rotation.
-5. Keep PR #1 draft and never merge it wholesale.
-6. Real-device acceptance tests are mandatory before merging restored styling logic.
-
-## Recovery audit status
-Source reconciliation is now materially complete enough to begin selective implementation. The most important regression is no longer speculative: same-session Dress Me exclusion support is absent from the Sep 10 source, while the single-item swap and Week Ahead cross-day logic are still present.
+The project now has a preserved history branch, an exact current snapshot, an audit branch, and a selective implementation branch. No historical evidence has been overwritten.
