@@ -1,0 +1,35 @@
+name: Apply P0 recovery patch
+
+on:
+  push:
+    branches:
+      - recovery-implementation-2026-09-10
+    paths:
+      - .github/workflows/apply-recovery-p0.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery-implementation-2026-09-10
+          fetch-depth: 0
+
+      - name: Apply exact recovery patch
+        run: python backend/recovery_p0_patch.py
+
+      - name: Verify backend syntax
+        run: python -m py_compile backend/server.py
+
+      - name: Commit patched source and remove temporary patch files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/server.py frontend/app/'(tabs)'/dressme.tsx frontend/app/'(tabs)'/stylist.tsx
+          git rm backend/recovery_p0_patch.py .github/workflows/apply-recovery-p0.yml
+          git commit -m "fix: restore Dress Me rotation and suggestion history"
+          git push origin HEAD:recovery-implementation-2026-09-10
