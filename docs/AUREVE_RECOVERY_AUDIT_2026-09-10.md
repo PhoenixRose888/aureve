@@ -77,6 +77,18 @@ Required recovery target:
 - repeats should occur only for a clear contextual reason or explicit user request
 - diagnostics should record candidate selection, recent-history penalties and final item choice
 
+## Minimum P0 acceptance test
+Do not call the styling issue fixed until all of the following pass on a real populated wardrobe:
+1. Generate Dress Me look A.
+2. Tap `Create Another Look` at least five times. No subsequent look may reuse the same core combination; hero-piece overlap must be materially reduced unless constraints genuinely require reuse.
+3. Close/relaunch the app and generate again. The app must still remember recent suggestions.
+4. Repeat on a later calendar day without marking the earlier look as worn. Recent suggestion history must still influence selection.
+5. Verify that suggestion history does not alter `wear_count` or `last_worn` until the user explicitly logs a wear.
+6. Verify Week Ahead produces occasion-appropriate looks with meaningful cross-day variety.
+7. Verify tapping one item in Dress Me allows replacing that single item while leaving the rest of the outfit intact.
+8. Verify a vague prompt such as `What should I wear tonight?` asks for context before styling unless an occasion is already known.
+9. Capture diagnostics proving the final candidate had recent-history exclusions/penalties applied.
+
 ## Important superseded Sep 7 decisions
 Do not restore all historical changes blindly.
 
