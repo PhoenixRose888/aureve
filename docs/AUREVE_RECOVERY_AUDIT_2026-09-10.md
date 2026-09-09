@@ -105,3 +105,6 @@ Examples:
 5. Use a fresh implementation branch for recovery work.
 6. Keep PR #1 draft and never merge it wholesale.
 7. Real-device acceptance tests are mandatory before merging any restored styling logic.
+
+## Recovery audit status
+Documentation recovery is now materially complete from the evidence currently available in Gmail, GitHub, the recovered ChatGPT export and current QA screenshots. Further code-level reconciliation is blocked only by the absence of the exact current Emergent source snapshot in GitHub.
