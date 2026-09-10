@@ -38,7 +38,10 @@ export default function DressMe() {
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const started = React.useRef(false);
+  const [askActivity, setAskActivity] = useState(false);
+  const [activity, setActivity] = useState("");
 
+  const generateRef = React.useRef<null | (() => void)>(null);
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 
@@ -54,6 +57,7 @@ export default function DressMe() {
         body.temperature = weather.temperature;
         body.weather = weather.description;
       }
+      if (activity) body.occasion = activity;
       const currentItems = result?.resolved_items || [];
       if (currentItems.length > 0) {
         body.occasion = result?.occasion_used || undefined;
@@ -67,16 +71,29 @@ export default function DressMe() {
       else setError(e.message || "Couldn't put a look together.");
     }
     setLoading(false);
-  }, [weather, status, router, result]);
+  }, [weather, status, router, result, activity]);
+
+  useEffect(() => { generateRef.current = generate; }, [generate]);
 
   useEffect(() => {
-    if (!started.current && status !== "idle" && status !== "loading") {
-      started.current = true;
-      generate();
-    }
+    if (started.current || status === "idle" || status === "loading") return;
+    started.current = true;
+    // Only style straight away when today already has real context (a planned
+    // look or calendar events). Otherwise ask what they're actually doing.
+    api<any>("/dressme/context")
+      .then((c) => (c?.has_context ? generate() : setAskActivity(true)))
+      .catch(() => generate());
   }, [status, generate]);
 
   const items = result?.resolved_items || [];
+
+  const chooseActivity = (label: string) => {
+    haptics.tap();
+    setActivity(label);
+    setAskActivity(false);
+    setResult(null);
+    setTimeout(() => generateRef.current?.(), 0);
+  };
 
   const saveLook = async () => {
     if (!items.length || saved) return;
@@ -147,6 +164,20 @@ export default function DressMe() {
               : "One considered outfit \u2014 styled from what you already own, tuned to today\u2019s weather."}
           </Txt>
         </View>
+        {askActivity && !loading ? (
+          <View style={styles.activityWrap} testID="dressme-activity">
+            <Txt style={styles.activityTitle}>What are you doing today?</Txt>
+            <Txt style={styles.activitySub}>Nothing in your plans or calendar for today — tell me and I&apos;ll style for it.</Txt>
+            <View style={styles.activityChips}>
+              {["Work", "Day off", "Shopping / errands", "Lunch / casual outing", "Evening / dinner", "Date", "Event", "Staying home", "Other"].map((a) => (
+                <Pressable key={a} testID={`dressme-activity-${a}`} style={styles.activityChip} onPress={() => chooseActivity(a === "Other" ? "something out of the ordinary" : a)}>
+                  <Txt style={styles.activityChipTxt}>{a}</Txt>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {loading && (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={colors.sage} />
@@ -260,6 +291,15 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 30, letterSpacing: -0.5 },
   pageSub: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: spacing.xs, paddingRight: spacing.xl },
   scroll: { paddingBottom: spacing["3xl"] },
+  activityWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
+  activityTitle: { fontSize: 18, color: colors.onSurface, fontFamily: fonts.displayMedium },
+  activitySub: { fontSize: 13, color: colors.onSurfaceTertiary, lineHeight: 19, marginBottom: spacing.sm },
+  activityChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  activityChip: {
+    minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.border,
+  },
+  activityChipTxt: { fontSize: 14, color: colors.onSurface },
   loadingWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 2, gap: spacing.xl },
   loadingTxt: { color: colors.onSurfaceSecondary, fontSize: 15, fontStyle: "italic", textAlign: "center" },
   errorWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 1.5, paddingHorizontal: spacing.xl, gap: spacing.lg },

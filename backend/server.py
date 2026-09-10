@@ -1491,6 +1491,11 @@ ANALYZE_SYSTEM = (
     "Return a strict JSON object. Keys: name (short descriptive name, e.g. 'Purple oversized sunglasses'), "
     "category (ALWAYS your best guess from exactly: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery — "
     "sunglasses/hats/belts/scarves = Accessories; rings/necklaces/earrings/watches = Jewellery; never leave blank), "
+    "photo_quality (\"good\" or \"poor\" — say \"poor\" ONLY when glare, harsh shadow, blown "
+    "highlights, washed-out colour or a very dark garment blending into the background genuinely "
+    "obscures the item's real colour or detail), "
+    "photo_quality_note (empty string when good, otherwise ONE short plain sentence naming what is "
+    "affecting the photo), "
     "confidence (integer 0-100 = how sure you are of the item identity AND category; be honest — "
     "use a low number when the photo is ambiguous or the object is partly hidden), "
     "colour (primary colour word), fabric (best guess, e.g. cotton/denim/wool/linen/leather/silk/metal/plastic), "
@@ -1578,40 +1583,53 @@ def _norm(v) -> str:
 
 
 def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> List[dict]:
-    """Flag pieces in the wardrobe that look like the one just captured, so users
-    don't unknowingly re-add something they already own. Category must match; colour,
-    style, fabric and pattern add to a confidence score."""
+    """Flag only pieces that look like the SAME garment being added twice (or a
+    near-identical second photo of it). Deliberately strict: a shared colour or
+    garment type is NOT a duplicate, because loose matching pollutes both the
+    Bulk Add warnings and Shopping Intelligence."""
     cat = _norm(analysis.get("category"))
-    if not cat:
+    colour = _norm(analysis.get("colour"))
+    if not cat or not colour:
         return []
-    colour, style = _norm(analysis.get("colour")), _norm(analysis.get("style"))
-    fabric, pattern = _norm(analysis.get("fabric")), _norm(analysis.get("pattern"))
-    scored = []
+    style, fabric = _norm(analysis.get("style")), _norm(analysis.get("fabric"))
+    pattern = _norm(analysis.get("pattern"))
+    stop = {"a", "an", "the", "new", "with", "and", "in", "of", "top", "piece"}
+    words = {w for w in re.split(r"[^a-z0-9]+", _norm(analysis.get("name"))) if len(w) > 2 and w not in stop}
+    out = []
+    def same_colour(other: str) -> bool:
+        o = _norm(other)
+        if not o:
+            return False
+        # "Rust" vs "Rust orange" is the same garment described twice.
+        return o == colour or o in colour or colour in o or o.split()[0] == colour.split()[0]
+
     for it in items:
-        if _norm(it.get("category")) != cat:
+        if _norm(it.get("category")) != cat or not same_colour(it.get("colour")):
             continue
-        score = 0
-        if colour and _norm(it.get("colour")) == colour:
-            score += 2
-        if style and _norm(it.get("style")) == style:
-            score += 2
-        if fabric and _norm(it.get("fabric")) == fabric:
-            score += 1
-        if pattern and _norm(it.get("pattern")) == pattern:
-            score += 1
-        if score >= 3:
-            scored.append((score, it))
-    scored.sort(key=lambda s: s[0], reverse=True)
-    return [
-        {
+        detail_matches = sum(
+            1 for a, b in ((style, it.get("style")), (fabric, it.get("fabric")), (pattern, it.get("pattern")))
+            if a and _norm(b) == a
+        )
+        other_words = {w for w in re.split(r"[^a-z0-9]+", _norm(it.get("name"))) if len(w) > 2 and w not in stop}
+        shared = words & other_words
+        # Same category + same colour + at least two matching descriptors +
+        # a genuinely overlapping name. Anything looser is just "similar".
+        if detail_matches < 2 or len(shared) < 2:
+            continue
+        out.append({
             "id": it["id"],
             "name": it.get("name", ""),
             "category": it.get("category", ""),
             "colour": it.get("colour", ""),
             "photo": it.get("photo"),
-        }
-        for _, it in scored[:limit]
-    ]
+            "reason": (
+                f"Same category and colour as your {it.get('name') or 'existing piece'}"
+                + (f", also {', '.join(sorted(shared))}" if shared else "")
+            ),
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 @api_router.post("/capture")
@@ -2056,6 +2074,22 @@ class DressMeRequest(BaseModel):
     weather: Optional[str] = None
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
     avoid_item_ids: List[str] = []  # current on-screen look when asking for another
+
+
+@api_router.get("/dressme/context")
+async def dressme_context(user: dict = Depends(get_scope)):
+    """Does today already have useful context (a planned look or calendar
+    events)? If not, the app asks the user what they're doing before styling."""
+    today = now_utc().strftime("%Y-%m-%d")
+    plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
+    plan_occasion = ((plan or {}).get("occasion") or (plan or {}).get("title") or "").strip()
+    events = await _gcal_events(user["account_id"], today)
+    label = plan_occasion or (_fmt_events_for_ai(events) if events else "")
+    return {
+        "has_context": bool(plan_occasion or events),
+        "source": "plan" if plan_occasion else ("calendar" if events else None),
+        "label": label,
+    }
 
 
 @api_router.post("/dressme")
@@ -2567,6 +2601,14 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     others = available_items(others)
     if len(others) < 1:
         raise HTTPException(status_code=400, detail="Add more items to see what pairs together")
+    # Big wardrobes: score locally first and only ask the AI to rate the
+    # strongest shortlist, so the request stays fast and never times out.
+    total_compatible = sum(1 for it in others if _items_pair(focus, it))
+    if len(others) > 14:
+        pairable = [it for it in others if _items_pair(focus, it)]
+        pool = pairable or others
+        pool = sorted(pool, key=lambda it: ((it.get("wear_count", 0) or 0), it.get("name") or ""))
+        others = pool[:12]
     focus_desc = (
         f"id:{focus['id']} | {focus.get('category','')} | {focus.get('name','')} | "
         f"colour:{focus.get('colour','')} | tone:{focus.get('tone','')} | "
@@ -2594,7 +2636,78 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
             resolved.append({"item": it, "stars": m.get("stars", 3), "reason": m.get("reason", "")})
     result["resolved_matches"] = resolved
     result["match_count"] = len([m for m in resolved if m["stars"] >= 3])
+    result["total_compatible"] = total_compatible
+    result["shortlisted"] = len(others)
     result["focus"] = focus
+    return result
+
+
+OUTFIT_FEEDBACK_SYSTEM = (
+    "You are Aureve, a warm, expert personal stylist. The user has put together their OWN outfit and "
+    "wants your honest feedback on it. Be constructive, specific and encouraging — never mock or "
+    "criticise the user, their body or their taste. Comment on what genuinely works (proportion, "
+    "colour, texture, formality) and, only if it would clearly improve the look, suggest ONE optional "
+    "swap using an item id from the REST OF WARDROBE list. Never suggest replacing more than one piece "
+    "and never invent items. "
+    "Return STRICT JSON with keys: verdict (a short encouraging headline), feedback (2-3 sentences on "
+    "what works and why), swap (either null or an object: out_id, in_id, why — one short line), "
+    "tip (optional one short line). Return ONLY JSON."
+)
+
+
+class OutfitFeedbackRequest(BaseModel):
+    item_ids: List[str]
+    temperature: Optional[float] = None
+    weather: Optional[str] = ""
+    occasion: Optional[str] = ""
+
+
+@api_router.post("/outfit/feedback")
+async def outfit_feedback(payload: OutfitFeedbackRequest, user: dict = Depends(get_scope)):
+    """Feedback on the outfit the user chose themselves. Never returns a whole
+    new look — at most one optional swap, in the context of their full outfit."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    ids = [i for i in (payload.item_ids or []) if i]
+    if len(ids) < 2:
+        raise HTTPException(status_code=400, detail="Pick at least two pieces first.")
+    await enforce_limit(user, "stylist")
+    all_items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
+    by_id = {it["id"]: it for it in all_items}
+    chosen = [by_id[i] for i in ids if i in by_id]
+    if len(chosen) < 2:
+        raise HTTPException(status_code=404, detail="Those pieces are no longer in your wardrobe.")
+    rest = available_items([it for it in all_items if it["id"] not in set(ids)])[:60]
+    weather_line = (f"Weather: {payload.temperature}°C, {payload.weather}.\n"
+                    if payload.temperature is not None else "")
+    prompt = (
+        f"{profile_context(user)}\n{weather_line}"
+        f"Occasion: {payload.occasion or 'not specified'}\n\n"
+        f"THE USER'S OUTFIT:\n{summarize_items_for_ai(chosen)}\n\n"
+        f"REST OF WARDROBE (only source for an optional swap):\n{summarize_items_for_ai(rest)}\n\n"
+        "Give feedback on THIS outfit. Return JSON only."
+    )
+    chat = await ai_chat(f"outfitfb-{user['user_id']}-{uuid.uuid4().hex[:6]}", OUTFIT_FEEDBACK_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("outfit feedback failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp) or {}
+    if not result.get("feedback"):
+        raise HTTPException(status_code=502, detail="Could not review this outfit")
+    swap = result.get("swap") if isinstance(result.get("swap"), dict) else None
+    if swap:
+        out_it, in_it = by_id.get(swap.get("out_id")), by_id.get(swap.get("in_id"))
+        if out_it and in_it and out_it["id"] in set(ids):
+            result["swap"] = {
+                "out_id": out_it["id"], "in_id": in_it["id"], "why": swap.get("why", ""),
+                "out_item": out_it, "in_item": in_it,
+            }
+        else:
+            result["swap"] = None
+    else:
+        result["swap"] = None
     return result
 
 
@@ -2837,6 +2950,82 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
     return log
 
 
+class WearConfirmRequest(BaseModel):
+    date: str                 # the user's LOCAL calendar date (YYYY-MM-DD)
+    item_ids: List[str] = []
+    wore: bool = False
+
+
+@api_router.get("/wear/pending")
+async def pending_wear_check(date: str, user: dict = Depends(get_scope)):
+    """The look suggested for the user's LOCAL yesterday, if we haven't already
+    asked about it. Being suggested never counts as worn — only a Yes here does.
+    `date` is supplied by the app so this follows the user's local day, not UTC."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    asked = await db.wear_prompts.find_one({"user_id": user["user_id"], "date": date})
+    if asked:
+        return {"pending": False}
+    # Already logged a wear for that day? Nothing to ask.
+    logged = await db.wear_logs.find_one({
+        "user_id": user["user_id"], "created_at": {"$regex": f"^{date}"},
+    })
+    if logged:
+        return {"pending": False}
+    sugg = await db.style_suggestions.find(
+        {"user_id": user["user_id"], "created_at": {"$regex": f"^{date}"}}, {"_id": 0},
+    ).sort("created_at", -1).to_list(1)
+    if not sugg:
+        plan = await db.plans.find_one({"user_id": user["user_id"], "date": date}, {"_id": 0})
+        ids = (plan or {}).get("item_ids") or []
+        occasion = (plan or {}).get("occasion") or (plan or {}).get("title") or ""
+    else:
+        ids, occasion = sugg[0].get("item_ids") or [], sugg[0].get("occasion") or ""
+    ids = [i for i in ids if i]
+    if not ids:
+        return {"pending": False}
+    items = await db.items.find({**items_scope(user), "id": {"$in": ids}}, {"_id": 0}).to_list(20)
+    if not items:
+        return {"pending": False}
+    return {
+        "pending": True,
+        "date": date,
+        "occasion": occasion,
+        "item_ids": [it["id"] for it in items],
+        "items": [{"id": it["id"], "name": it.get("name"), "category": it.get("category"),
+                   "photo": it.get("photo")} for it in items],
+    }
+
+
+@api_router.post("/wear/confirm")
+async def confirm_wear(payload: WearConfirmRequest, user: dict = Depends(get_scope)):
+    """Yes updates wear_count/last_worn for that local date; No leaves wear
+    history completely untouched. Either way we never ask about that day again."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload.date or ""):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    await db.wear_prompts.update_one(
+        {"user_id": user["user_id"], "date": payload.date},
+        {"$set": {"user_id": user["user_id"], "date": payload.date, "wore": bool(payload.wore),
+                  "answered_at": now_utc().isoformat()}},
+        upsert=True,
+    )
+    if not payload.wore:
+        return {"ok": True, "recorded": False}
+    ids = [i for i in (payload.item_ids or []) if i]
+    if ids:
+        await db.wear_logs.insert_one({
+            "id": new_id("wear"), "user_id": user["user_id"], "item_ids": ids,
+            "occasion": "", "flattering": 3, "comfort": 3, "confidence": 3,
+            "created_at": f"{payload.date}T12:00:00+00:00",
+        })
+        for iid in ids:
+            await db.items.update_one(
+                {"id": iid, "user_id": user["user_id"]},
+                {"$inc": {"wear_count": 1}, "$set": {"last_worn": f"{payload.date}T12:00:00+00:00"}},
+            )
+    return {"ok": True, "recorded": True, "items": len(ids)}
+
+
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_scope)):
     wear_query = {"user_id": user["user_id"]}
@@ -2880,6 +3069,7 @@ async def insights(user: dict = Depends(get_scope)):
         "categories": cats,
         "most_worn": most_worn,
         "least_worn": least_worn,
+        "unworn_count": sum(1 for it in items if not (it.get("wear_count", 0) or 0)),
     }
 
 
@@ -3212,7 +3402,9 @@ async def health_report(user: dict = Depends(get_scope)):
         "Write the monthly wardrobe health report using wear history and category balance only. "
         "Focus on underused pieces and practical rotation opportunities. Do not mention purchase "
         "price, wardrobe value, money or cost-per-wear. Name the single purchase that would unlock "
-        "the most outfits. Return JSON only."
+        "the most outfits. Phrase nudges as gentle invitations (\"Try bringing 4-6 dresses into "
+        "rotation this month\"), never as orders. Use ONLY the numbers given above and never invent "
+        "figures. Return JSON only."
     )
     chat = await ai_chat(f"health-{user['user_id']}-{uuid.uuid4().hex[:6]}", HEALTH_SYSTEM)
     try:
@@ -3226,6 +3418,8 @@ async def health_report(user: dict = Depends(get_scope)):
     result["stats"] = {
         "total_items": len(items),
         "unworn_count": len(unworn),
+        "worn_count": len(items) - len(unworn),
+        "categories": counts,
     }
     return result
 

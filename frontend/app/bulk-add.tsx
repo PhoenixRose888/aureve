@@ -11,7 +11,10 @@ import { pickMultipleFromLibrary, openSettings } from "@/src/utils/image";
 import PhotoTips from "@/src/components/PhotoTips";
 import { diag } from "@/src/utils/diag";
 
-type Row = { thumb: string; name: string; category: string; status: "done" | "failed"; dupe?: boolean };
+type Row = {
+  thumb: string; name: string; category: string; status: "done" | "failed";
+  dupe?: boolean; dupeReason?: string; photoNote?: string;
+};
 
 export default function BulkAdd() {
   const insets = useSafeAreaInsets();
@@ -69,7 +72,15 @@ export default function BulkAdd() {
         const name = a.name || "New piece";
         const category = a.category || "Tops";
         diag("bulk.analyze.done", { index: i + 1, name: a.name, category: a.category, confidence: a.confidence });
-        const dupe = Array.isArray(res.duplicates) && res.duplicates.length > 0;
+        const dupeList = Array.isArray(res.duplicates) ? res.duplicates : [];
+        const dupe = dupeList.length > 0;
+        const dupeReason = dupe
+          ? dupeList[0].reason || `Looks like the ${dupeList[0].name} already in your wardrobe`
+          : "";
+        const poorPhoto = String(a.photo_quality || "").toLowerCase() === "poor";
+        const photoNote = poorPhoto
+          ? a.photo_quality_note || "Lighting or shadows may be affecting the colour or detail."
+          : "";
         const created = await api<any>("/items", {
           method: "POST",
           body: {
@@ -88,7 +99,7 @@ export default function BulkAdd() {
           },
         });
         if (created?.id) createdIds.push(created.id);
-        setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe }]);
+        setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe, dupeReason, photoNote }]);
       } catch (e: any) {
         diag("bulk.analyze.failed", { index: i + 1, status: e?.status, timeout: !!e?.timeout, error: String(e?.message || e) });
         setRows((r) => [...r, { thumb: base64, name: "Couldn't add", category: "", status: "failed" }]);
@@ -140,8 +151,8 @@ export default function BulkAdd() {
               Tidying photo {progress + 1 > total ? total : progress + 1} of {total} — {progress} done.
             </Txt>
             <Txt style={styles.note}>
-              Please stay on this screen. This step can take up to a minute for larger batches; if a photo
-              can&apos;t be cleaned we simply keep your original.
+              Your photos are still being cleaned. You can leave this screen and it&apos;ll continue in the
+              background; if a photo can&apos;t be cleaned we simply keep your original.
             </Txt>
             <View style={styles.barTrack}>
               <View style={[styles.barFill, { width: `${total ? (progress / total) * 100 : 0}%` }]} />
@@ -154,7 +165,8 @@ export default function BulkAdd() {
               Uploading and analysing {progress + 1 > total ? total : progress + 1} of {total} — {progress} done.
             </Txt>
             <Txt style={styles.note}>
-              Please stay on this screen. Larger batches can take up to a minute depending on your connection.
+              Your pieces are still processing. You can leave this screen and they&apos;ll keep going in
+              the background — larger batches take a little longer on a slow connection.
             </Txt>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${total ? (progress / total) * 100 : 0}%` }]} />
@@ -164,7 +176,7 @@ export default function BulkAdd() {
         ) : phase === "done" ? (
           <>
             <Display weight="medium" style={styles.title}>{added} {added === 1 ? "piece" : "pieces"} added</Display>
-            <Txt style={styles.sub}>{dupes > 0 ? `All set — ${dupes} may be a duplicate of something you own (flagged below). Review and delete any you don't need.` : "All set — they're in your wardrobe now."}</Txt>
+            <Txt style={styles.sub}>{dupes > 0 ? `All set — ${dupes} look like a piece you already own. The reason is shown under each one, so you can open it and delete either copy.` : "All set — they're in your wardrobe now."}</Txt>
           </>
         ) : (
           <>
@@ -207,7 +219,9 @@ export default function BulkAdd() {
               ) : (
                 <View style={styles.cross}><Feather name="x" size={11} color={colors.onSurfaceInverse} /></View>
               )}
-              <Txt style={[styles.cellName, r.dupe && styles.cellNameDupe]} numberOfLines={1}>{r.dupe ? `⚠ ${r.name}` : r.name}</Txt>
+              <Txt style={[styles.cellName, r.dupe && styles.cellNameDupe]} numberOfLines={1}>{r.name}</Txt>
+              {r.dupeReason ? <Txt style={styles.cellFlag} numberOfLines={3}>Possible duplicate — {r.dupeReason}</Txt> : null}
+              {r.photoNote ? <Txt style={styles.cellFlag} numberOfLines={3}>Photo may not show it accurately — {r.photoNote}</Txt> : null}
             </View>
           ))}
         </View>
@@ -254,6 +268,7 @@ const styles = StyleSheet.create({
   dupeBadge: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.warning, alignItems: "center", justifyContent: "center" },
   cross: { position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
   cellName: { fontSize: 11, color: colors.onSurfaceSecondary, marginTop: 4 },
+  cellFlag: { fontSize: 10, color: colors.onSurfaceTertiary, lineHeight: 14, marginTop: 2 },
   cellNameDupe: { color: colors.warning },
   footer: { flexDirection: "row", gap: spacing.md, padding: spacing.xl, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border },
   secondaryBtn: { flex: 1, height: 52, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },

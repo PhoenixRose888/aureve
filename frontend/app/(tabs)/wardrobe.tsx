@@ -17,6 +17,39 @@ const GUTTER = spacing.md;
 
 const FILTERS = ["All", ...CATEGORIES];
 
+// Lightweight subfilters within the existing categories — derived from the
+// item's own name/style metadata, so nothing new has to be captured.
+const SUBFILTERS: Record<string, { label: string; match: RegExp }[]> = {
+  Tops: [
+    { label: "T-shirts", match: /(t-?shirt|tee\b)/i },
+    { label: "Blouses / Shirts", match: /(blouse|shirt|oxford)/i },
+    { label: "Singlets / Camis", match: /(singlet|cami|tank|vest top)/i },
+    { label: "Bodysuits", match: /(bodysuit|bustier|corset)/i },
+    { label: "Knit tops", match: /(knit|jumper|sweater|ribbed)/i },
+  ],
+  Outerwear: [
+    { label: "Jackets", match: /jacket/i },
+    { label: "Blazers", match: /blazer/i },
+    { label: "Cardigans / Jumpers", match: /(cardigan|jumper|sweater|knit)/i },
+    { label: "Coats", match: /(coat|trench|parka)/i },
+  ],
+  Bottoms: [
+    { label: "Pants", match: /(pant|trouser|legging|culotte)/i },
+    { label: "Jeans", match: /(jean|denim)/i },
+    { label: "Skirts", match: /skirt/i },
+    { label: "Shorts", match: /short/i },
+  ],
+};
+
+const subMatches = (item: any, rule: { match: RegExp }) =>
+  rule.match.test(`${item.name || ""} ${item.style || ""} ${item.fabric || ""}`);
+
+// Remembered between visits so opening a piece and coming back lands you where
+// you left off rather than at the top of the catalogue.
+let lastFilter = "All";
+let lastSub: string | null = null;
+let lastOffset = 0;
+
 const EMPTY_IMG =
   "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd2FyZHJvYmUlMjBjbG90aGluZyUyMHJhY2t8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
 
@@ -28,7 +61,10 @@ export default function Wardrobe() {
   const { width } = useWindowDimensions();
   const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
   const [items, setItems] = useState<any[]>([]);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState(lastFilter);
+  const [sub, setSub] = useState<string | null>(lastSub);
+  const listRef = React.useRef<FlatList<any>>(null);
+  const restored = React.useRef(false);
   const [loading, setLoading] = useState(true);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -53,7 +89,28 @@ export default function Wardrobe() {
     }, [load, profileLoading])
   );
 
-  const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
+  const byCategory = filter === "All" ? items : items.filter((i) => i.category === filter);
+  const subOptions = SUBFILTERS[filter] || [];
+  const activeSub = sub ? subOptions.find((o) => o.label === sub) : undefined;
+  const filtered = activeSub ? byCategory.filter((i) => subMatches(i, activeSub)) : byCategory;
+
+  const chooseFilter = (f: string) => {
+    setFilter(f);
+    setSub(null);
+    lastFilter = f;
+    lastSub = null;
+    lastOffset = 0;
+    restored.current = true;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
+  const chooseSub = (label: string) => {
+    const next = sub === label ? null : label;
+    setSub(next);
+    lastSub = next;
+    lastOffset = 0;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
 
   const exitSelect = () => {
     setSelectMode(false);
@@ -101,7 +158,9 @@ export default function Wardrobe() {
       )}
       {(item.pairs_count || 0) > 0 && (
         <View style={styles.pairsBadge}>
-          <Txt style={styles.pairsBadgeTxt}>Pairs with {item.pairs_count}</Txt>
+          <Txt style={styles.pairsBadgeTxt}>
+            Pairs with {item.pairs_count} {item.pairs_count === 1 ? "piece" : "pieces"}
+          </Txt>
         </View>
       )}
       <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
@@ -175,13 +234,35 @@ export default function Wardrobe() {
                 key={f}
                 testID={`filter-chip-${f}`}
                 style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setFilter(f)}
+                onPress={() => chooseFilter(f)}
               >
                 <Txt style={[styles.chipTxt, active && styles.chipTxtActive]}>{f}</Txt>
               </Pressable>
             );
           })}
         </ScrollView>
+
+        {subOptions.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subContent}
+          >
+            {subOptions.map((o) => {
+              const on = sub === o.label;
+              return (
+                <Pressable
+                  key={o.label}
+                  testID={`subfilter-chip-${o.label}`}
+                  style={[styles.subChip, on && styles.subChipActive]}
+                  onPress={() => chooseSub(o.label)}
+                >
+                  <Txt style={[styles.subChipTxt, on && styles.subChipTxtActive]}>{o.label}</Txt>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
       </View>
 
       {!selectMode && (
@@ -216,6 +297,7 @@ export default function Wardrobe() {
         </ScrollView>
       ) : (
         <FlatList
+          ref={listRef}
           data={filtered}
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
@@ -223,6 +305,13 @@ export default function Wardrobe() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={{ justifyContent: "flex-start" }}
+          onScroll={(e) => { lastOffset = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={80}
+          onContentSizeChange={() => {
+            if (restored.current || lastOffset <= 0) return;
+            restored.current = true;
+            listRef.current?.scrollToOffset({ offset: lastOffset, animated: false });
+          }}
         />
       )}
 
@@ -311,6 +400,14 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   selectDotOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  subContent: { gap: spacing.sm, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  subChip: {
+    height: 30, paddingHorizontal: spacing.md, borderRadius: radius.pill,
+    borderWidth: 0.5, borderColor: colors.border, alignItems: "center", justifyContent: "center",
+  },
+  subChipActive: { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderStrong },
+  subChipTxt: { fontSize: 12, color: colors.onSurfaceTertiary },
+  subChipTxtActive: { color: colors.onSurface },
   switcherChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, minHeight: 28 },
   switcherTxt: { fontSize: 12, letterSpacing: 1, color: colors.onSurfaceSecondary, textTransform: "uppercase" },
   switcherCount: {

@@ -56,6 +56,8 @@ export default function Profile() {
   };
 
   const unworn = data ? (data.least_worn || []).filter((i: any) => (i.wear_count || 0) === 0) : [];
+  // least_worn is only a small sample — the true total comes from the backend.
+  const unwornCount = data?.unworn_count ?? unworn.length;
 
   const handleSignOut = async () => {
     await logout();
@@ -286,7 +288,7 @@ export default function Profile() {
               <View style={styles.healthCard}>
                 <Feather name="rotate-ccw" size={18} color={colors.brand} />
                 <Txt style={styles.healthTxt}>
-                  You have not worn {unworn.length} {unworn.length === 1 ? "piece" : "pieces"} yet. Style them, sell, or donate to keep your wardrobe lean.
+                  You have not worn {unwornCount} {unwornCount === 1 ? "piece" : "pieces"} yet. Try bringing a few into rotation this month.
                 </Txt>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.xl, marginTop: spacing.md }}>

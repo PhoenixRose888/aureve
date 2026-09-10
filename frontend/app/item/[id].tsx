@@ -186,8 +186,12 @@ export default function ItemDetail() {
                   <Display weight="medium" style={styles.versNum}>{compat.versatility_score ?? "—"}%</Display>
                 </View>
                 {compat.summary ? <Txt style={styles.versSummary}>{compat.summary}</Txt> : null}
-                <Txt style={styles.pairsLabel}>PAIRS BEST WITH</Txt>
-                {compat.resolved_matches?.slice(0, 8).map((m: any) => (
+                <Txt style={styles.pairsLabel}>
+                  {compat.total_compatible && compat.total_compatible > (compat.resolved_matches?.length || 0)
+                    ? `TOP MATCHES FROM ${compat.total_compatible} COMPATIBLE PIECES`
+                    : "PAIRS BEST WITH"}
+                </Txt>
+                {compat.resolved_matches?.slice(0, 12).map((m: any) => (
                   <Pressable key={m.item.id} style={styles.pairRow} onPress={() => router.push(`/item/${m.item.id}`)}>
                     <GarmentImage photo={m.item.photo} category={m.item.category} style={styles.pairImg} iconSize={16} />
                     <View style={{ flex: 1 }}>

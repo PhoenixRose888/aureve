@@ -43,6 +43,8 @@ export default function AddItem() {
   const [analyzing, setAnalyzing] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [lowConf, setLowConf] = useState(false);
+  const [photoWarn, setPhotoWarn] = useState("");
+  const [showTips, setShowTips] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
@@ -138,6 +140,12 @@ export default function AddItem() {
       // Real-world photos: if the AI is unsure, keep its best guess but ask the
       // user to confirm the category rather than silently trusting it.
       setLowConf(typeof r.confidence === "number" && r.confidence < 60);
+      // Soft, non-blocking: the photo may not represent the garment faithfully.
+      setPhotoWarn(
+        String(r.photo_quality || "").toLowerCase() === "poor"
+          ? r.photo_quality_note || "Lighting or shadows may be affecting the colour or detail."
+          : ""
+      );
       if (r.colour) setColour(r.colour);
       if (r.fabric) setFabric(r.fabric);
       if (r.pattern) setPattern(r.pattern);
@@ -299,6 +307,36 @@ export default function AddItem() {
           </View>
         ) : null}
 
+        {photoWarn ? (
+          <View style={styles.warnCard} testID="photo-quality-warning">
+            <Txt style={styles.warnTitle}>This photo may not show the item accurately</Txt>
+            <Txt style={styles.warnTxt}>
+              I&apos;ve done my best with the image, but {photoWarn.charAt(0).toLowerCase() + photoWarn.slice(1)}
+            </Txt>
+            <View style={styles.warnBtns}>
+              <Pressable
+                style={styles.warnPrimary}
+                testID="photo-warn-retake"
+                onPress={() => { setPhotoWarn(""); setPickerTarget("photo"); }}
+              >
+                <Txt style={styles.warnPrimaryTxt}>Retake photo</Txt>
+              </Pressable>
+              <Pressable style={styles.warnGhost} testID="photo-warn-keep" onPress={() => setPhotoWarn("")}>
+                <Txt style={styles.warnGhostTxt}>Keep this one</Txt>
+              </Pressable>
+            </View>
+            <Pressable testID="photo-warn-tips" onPress={() => setShowTips((t) => !t)} hitSlop={8}>
+              <Txt style={styles.warnLink}>{showTips ? "Hide photo tips" : "Photo tips"}</Txt>
+            </Pressable>
+            {showTips ? (
+              <Txt style={styles.warnTips}>
+                Use even natural light · avoid direct sun and harsh shadows · use a contrasting background ·
+                keep the whole item visible
+              </Txt>
+            ) : null}
+          </View>
+        ) : null}
+
         <PhotoTips />
 
         {duplicates.length > 0 ? (
@@ -448,6 +486,19 @@ const styles = StyleSheet.create({
   revertPill: { position: "absolute", bottom: 6, right: 6, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brandPrimary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill },
   revertTxt: { color: colors.onBrandPrimary, fontSize: 10 },
   error: { color: colors.error, fontSize: 13, flex: 1, lineHeight: 18 },
+  warnCard: {
+    marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.sm, padding: spacing.lg, gap: spacing.sm,
+  },
+  warnTitle: { fontSize: 14, color: colors.onSurface },
+  warnTxt: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  warnBtns: { flexDirection: "row", gap: spacing.sm },
+  warnPrimary: { flex: 1, height: 42, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  warnPrimaryTxt: { color: colors.onBrandPrimary, fontSize: 14 },
+  warnGhost: { flex: 1, height: 42, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  warnGhostTxt: { color: colors.onSurface, fontSize: 14 },
+  warnLink: { fontSize: 13, color: colors.brand },
+  warnTips: { fontSize: 12, color: colors.onSurfaceTertiary, lineHeight: 18 },
   errorRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg },
   retryBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
