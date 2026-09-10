@@ -237,7 +237,7 @@ def is_premium(account: dict) -> bool:
 
 PREMIUM_MESSAGES = {
     "stylist": "You've used your 5 free AI stylist sessions this month. Go Premium for unlimited styling.",
-    "beauty": "Colour analysis is 1/month on Free. Go Premium for unlimited analyses.",
+    "beauty": "Hair styling is 1/month on Free. Go Premium for unlimited hair recommendations.",
     "packing": "The Packing Assistant is a Premium feature.",
     "capsule": "Capsule wardrobes are a Premium feature.",
     "shop": "Shopping Intelligence is a Premium feature.",
@@ -944,7 +944,7 @@ async def terms_page():
 <p>Use Aureve for your personal styling only. Do not upload unlawful content, attempt to disrupt the service, or misuse the AI features.</p>
 
 <h2>Styling &amp; AI suggestions</h2>
-<p>Outfit, hair, makeup and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate &mdash; use your own judgement.</p>
+<p>Outfit, hair and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate &mdash; use your own judgement.</p>
 
 <h2>Subscriptions &amp; payments</h2>
 <p>Some features may require a paid subscription. Billing, renewals and refunds are handled by the store or payment provider you purchase through (Apple, Google, or Stripe), subject to their terms.</p>
@@ -1252,8 +1252,9 @@ class ItemCreate(BaseModel):
     price: Optional[float] = None
     condition: Optional[str] = ""
     availability: Optional[str] = "Ready"  # Ready | Dirty | Washing | Drying
-    photo: Optional[str] = None        # base64 (hanging)
-    worn_photo: Optional[str] = None   # base64 (worn)
+    photo: Optional[str] = None        # base64 (hanging, cleaned when available)
+    orig_photo: Optional[str] = None   # base64 (original upload, kept internally)
+    worn_photo: Optional[str] = None   # base64 (worn — never altered)
     flatters: Optional[bool] = None
 
     @field_validator("price", mode="before")
@@ -1654,6 +1655,34 @@ class CleanPhotoRequest(BaseModel):
     image: str
 
 
+@api_router.post("/items/{item_id}/clean")
+async def clean_item_photo(item_id: str, user: dict = Depends(get_scope)):
+    """Run catalogue-style background cleanup on an item that was saved with its
+    raw photo (the Bulk Add path). The original is preserved in `orig_photo`,
+    worn photos are never touched, and a failure leaves the item untouched so a
+    cleanup problem can never fail an upload."""
+    item = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    source = item.get("orig_photo") or item.get("photo")
+    if not source:
+        return {"cleaned": False, "reason": "no photo"}
+    if not EMERGENT_LLM_KEY:
+        return {"cleaned": False, "reason": "ai key not configured"}
+    try:
+        img = await _clean_photo(source)
+    except Exception as e:
+        logger.warning("item clean failed for %s: %s", item_id, e)
+        return {"cleaned": False, "reason": "clean failed"}
+    if not img:
+        return {"cleaned": False, "reason": "empty result"}
+    await db.items.update_one(
+        {"id": item_id, "user_id": user["user_id"]},
+        {"$set": {"photo": img, "orig_photo": source}},
+    )
+    return {"cleaned": True, "photo": img}
+
+
 @api_router.post("/clean-photo")
 async def clean_photo(payload: CleanPhotoRequest, user: dict = Depends(get_scope)):
     """Background-removed, catalogue-style version of a garment photo. Called
@@ -1827,7 +1856,7 @@ STYLIST_SYSTEM = (
     "confidence_score (integer 0-100 rating the outfit on colour harmony, style cohesion, occasion + weather "
     "suitability, proportion/silhouette and use of existing wardrobe), "
     "score_reasons (array of 3-5 short bullet strings justifying the score), "
-    "styling_notes (string), hair (string), makeup (string), confidence_tip (string), "
+    "styling_notes (string), hair (string), confidence_tip (string), "
     "summary (ONE short editorial styling line, max ~12 words, describing the vibe and how it "
     "suits the occasion/weather — e.g. \"Clean, smart casual and ideal for today's cool drizzle.\" "
     "Do NOT list the garment names in the summary). "
@@ -1860,6 +1889,45 @@ class StylistChatMessage(BaseModel):
     content: str
 
 
+# Words that describe WHEN, not WHAT — they carry no styling context on their own.
+_VAGUE_TIME = re.compile(r"\b(today|tonight|this morning|this afternoon|this evening|tomorrow|later|now|the weekend)\b", re.I)
+_ASKS_WHAT_TO_WEAR = re.compile(
+    r"(what should i wear|what do i wear|what to wear|help me dress|dress me|style me|"
+    r"what should i put on|outfit ideas?|pick (?:me )?an outfit)", re.I)
+_HAS_OCCASION = re.compile(
+    r"\b(work|office|meeting|presentation|conference|interview|wedding|funeral|church|"
+    r"date|dinner|lunch|brunch|drinks|party|birthday|club|nightclub|pub|gig|concert|theatre|"
+    r"movie|movies|cinema|picnic|bbq|barbecue|school|uni|gym|workout|yoga|run|walk|hike|beach|"
+    r"pool|shopping|errands|airport|flight|travel|holiday|vacation|graduation|christening|"
+    r"baby shower|race day|gala|formal|black tie|cocktail|casual|smart casual|home|"
+    r"working from home|festival|funeral|reunion|girls night|night out|weekend away)\b", re.I)
+
+
+def needs_occasion_context(messages: List["StylistChatMessage"]) -> bool:
+    """True when the user has asked what to wear but given nothing to style for.
+    One short follow-up beats a confident guess — and we only ever ask once."""
+    users = [m.content or "" for m in messages if (m.role or "").lower() == "user"]
+    if not users:
+        return False
+    latest = users[-1]
+    if not _ASKS_WHAT_TO_WEAR.search(latest):
+        return False
+    # Never ask twice in the same conversation.
+    for m in messages[:-1]:
+        if (m.role or "").lower() == "assistant" and (m.content or "").rstrip().endswith("?"):
+            return False
+    # Any occasion mentioned anywhere in the conversation is enough to proceed.
+    return not any(_HAS_OCCASION.search(u) for u in users)
+
+
+def occasion_question(text: str) -> str:
+    when = _VAGUE_TIME.search(text or "")
+    when_txt = when.group(0).lower() if when else "it"
+    return (f"Happy to style you — what are you doing {when_txt}? "
+            "Tell me the occasion (work, dinner, date, church, drinks, something casual…) "
+            "and I'll build the right look.")
+
+
 class StylistChatRequest(BaseModel):
     messages: List[StylistChatMessage]
     temperature: Optional[float] = None
@@ -1870,6 +1938,11 @@ class StylistChatRequest(BaseModel):
 async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    # A vague "what should I wear tonight?" gets one short question instead of a
+    # guessed outfit. No AI call, so it costs the user nothing.
+    if needs_occasion_context(payload.messages):
+        latest = next((m.content for m in reversed(payload.messages) if (m.role or "").lower() == "user"), "")
+        return {"reply": occasion_question(latest), "outfit": None, "needs_context": True}
     await enforce_limit(user, "stylist")
     all_items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(all_items)
@@ -1882,7 +1955,9 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
         f"{profile_context(user)}\n{weather_line}"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
         f"Conversation so far:\n{convo}\n\n"
-        "Reply as Aureve to the user's most recent message."
+        "Reply as Aureve to the user's most recent message. If their request is missing the one "
+        "detail you genuinely need (usually the occasion), ask a single short question instead of "
+        "guessing, and do not include an outfit block in that reply."
     )
     chat = await ai_chat(f"stylistchat-{user['user_id']}-{uuid.uuid4().hex[:6]}", STYLIST_CHAT_SYSTEM)
     try:
@@ -3155,62 +3230,64 @@ async def health_report(user: dict = Depends(get_scope)):
     return result
 
 
-# ----------------------------- AI: Hair & Makeup -----------------------------
+# ----------------------------- AI: Hair -----------------------------
 class BeautyRequest(BaseModel):
     occasion: Optional[str] = ""
+    neckline: Optional[str] = ""
+    hair_length: Optional[str] = ""
+    hair_type: Optional[str] = ""
+    temperature: Optional[float] = None
+    weather: Optional[str] = ""
 
 
-BEAUTY_SYSTEM = (
-    "You are Aureve's professional colour analyst and beauty stylist. Using the person's skin tone, undertone and "
-    "any personal notes, recommend hair and makeup that flatter THEM — grounded in colour theory (warm vs cool "
-    "undertones, contrast levels), never generic. Be confident, calm and specific; explain the reasoning briefly, "
-    "like a stylist, and stay inclusive of all genders and presentations. "
+HAIR_SYSTEM = (
+    "You are Aureve's hair stylist. You recommend HAIRSTYLES ONLY — how to wear the hair for a "
+    "specific occasion and outfit. Never mention hair colour, dye, highlights or toning, and never "
+    "mention makeup, skincare or clothing colour palettes. Consider the occasion and its formality, "
+    "the outfit's neckline (an updo or swept style suits high or embellished necklines; softer "
+    "down-styles suit open or strapless necklines), the weather (humidity, rain, wind, heat), and "
+    "the person's hair length and texture when given. Be specific, practical and warm; keep every "
+    "string short. Stay inclusive of all genders and presentations. "
     "Return STRICT JSON with keys: "
-    "summary (one sentence on the person's colouring and the direction), "
-    "palette (array of 5-8 flattering colour names to wear near the face), "
-    "makeup (object: foundation (undertone guidance), blush, lip, eye, tip — each a short string; keep it "
-    "wearable and optional), "
-    "hair (object: colour (flattering hair-colour directions), style (a styling suggestion for the occasion), "
-    "tip (one short string)), "
-    "avoid (array of 2-4 short strings — colours/finishes that fight this colouring), "
+    "summary (one sentence on the direction for this occasion and outfit), "
+    "styles (array of 2-3 objects: name (the hairstyle), why (one short line on why it suits this "
+    "occasion/neckline/weather), how (one or two short practical steps)), "
+    "tip (one short practical string, e.g. holding it through the day or weather-proofing), "
     "occasion_note (one short sentence tailoring the look to the stated occasion). "
     "Return ONLY JSON."
 )
 
 
 @api_router.post("/beauty/suggest")
-async def beauty_suggest(payload: BeautyRequest, user: dict = Depends(get_scope)):
+async def hair_suggest(payload: BeautyRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
-    p = user.get("profile") or {}
-    skin = p.get("skin_tone")
-    undertone = p.get("undertone")
-    notes = p.get("notes")
-    if not skin and not undertone:
-        raise HTTPException(
-            status_code=400,
-            detail="Add your skin tone and undertone in your style profile for personalised beauty advice.",
-        )
     await enforce_limit(user, "beauty")
-    profile_line = "; ".join(
+    p = user.get("profile") or {}
+    context = "; ".join(
         f"{k}: {v}" for k, v in [
-            ("skin tone", skin), ("undertone", undertone), ("notes", notes),
+            ("occasion", payload.occasion or "everyday"),
+            ("outfit neckline", payload.neckline),
+            ("hair length", payload.hair_length),
+            ("hair type/texture", payload.hair_type),
+            ("weather", f"{payload.temperature}°C, {payload.weather}" if payload.temperature is not None else payload.weather),
+            ("personal notes", p.get("notes")),
         ] if v
     )
     prompt = (
-        f"Person's colouring — {profile_line}.\n"
-        f"Occasion: {payload.occasion or 'everyday'}.\n\n"
-        "Recommend flattering hair and makeup for this colouring and occasion. Return JSON only."
+        f"Context — {context}.\n\n"
+        "Recommend hairstyles (no colour advice, no makeup) for this occasion and outfit. "
+        "Return JSON only."
     )
-    chat = await ai_chat(f"beauty-{user['user_id']}-{uuid.uuid4().hex[:6]}", BEAUTY_SYSTEM)
+    chat = await ai_chat(f"hair-{user['user_id']}-{uuid.uuid4().hex[:6]}", HAIR_SYSTEM)
     try:
         resp = await chat.send_message(UserMessage(text=prompt))
     except Exception as e:
-        logger.exception("beauty failed")
+        logger.exception("hair suggest failed")
         raise HTTPException(status_code=502, detail=f"AI error: {e}")
     result = parse_json_block(resp)
     if not result:
-        raise HTTPException(status_code=502, detail="Could not generate beauty recommendations")
+        raise HTTPException(status_code=502, detail="Could not generate hair recommendations")
     return result
 
 

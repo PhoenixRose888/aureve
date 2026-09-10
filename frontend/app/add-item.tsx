@@ -196,6 +196,8 @@ export default function AddItem() {
       condition,
       price: price ? parseFloat(price) : null,
       photo: photos.photo || null,
+      // Keep the untouched upload internally when the photo was cleaned up.
+      orig_photo: origPhoto || null,
       worn_photo: photos.worn_photo || null,
       flatters,
     };

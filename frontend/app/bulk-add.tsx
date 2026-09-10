@@ -16,7 +16,7 @@ type Row = { thumb: string; name: string; category: string; status: "done" | "fa
 export default function BulkAdd() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [phase, setPhase] = useState<"idle" | "processing" | "done">("idle");
+  const [phase, setPhase] = useState<"idle" | "processing" | "cleaning" | "done">("idle");
   const [total, setTotal] = useState(0);
   const [progress, setProgress] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
@@ -54,6 +54,7 @@ export default function BulkAdd() {
     setProgress(0);
     setRows([]);
     setPhase("processing");
+    const createdIds: string[] = [];
     for (let i = 0; i < imgs.length; i++) {
       const base64 = imgs[i];
       try {
@@ -69,7 +70,7 @@ export default function BulkAdd() {
         const category = a.category || "Tops";
         diag("bulk.analyze.done", { index: i + 1, name: a.name, category: a.category, confidence: a.confidence });
         const dupe = Array.isArray(res.duplicates) && res.duplicates.length > 0;
-        await api("/items", {
+        const created = await api<any>("/items", {
           method: "POST",
           body: {
             name,
@@ -86,12 +87,33 @@ export default function BulkAdd() {
             tone: a.tone || "",
           },
         });
+        if (created?.id) createdIds.push(created.id);
         setRows((r) => [...r, { thumb: photo, name, category, status: "done", dupe }]);
       } catch (e: any) {
         diag("bulk.analyze.failed", { index: i + 1, status: e?.status, timeout: !!e?.timeout, error: String(e?.message || e) });
         setRows((r) => [...r, { thumb: base64, name: "Couldn't add", category: "", status: "failed" }]);
       }
       setProgress(i + 1);
+    }
+    // Bulk pieces get the SAME background cleanup as a single Add. It runs after
+    // cataloguing so recognition stays fast, and any failure simply leaves that
+    // piece with its original photo instead of failing the batch.
+    if (createdIds.length) {
+      setPhase("cleaning");
+      setProgress(0);
+      setTotal(createdIds.length);
+      for (let i = 0; i < createdIds.length; i++) {
+        try {
+          const res = await api<any>(`/items/${createdIds[i]}/clean`, { method: "POST", timeoutMs: 90000 });
+          if (res?.photo) {
+            setRows((r) => r.map((row, idx) => (idx === i ? { ...row, thumb: res.photo } : row)));
+          }
+          diag("bulk.clean.done", { index: i + 1, cleaned: !!res?.cleaned });
+        } catch (e: any) {
+          diag("bulk.clean.failed", { index: i + 1, error: String(e?.message || e) });
+        }
+        setProgress(i + 1);
+      }
     }
     setPhase("done");
     busy.current = false;
@@ -111,7 +133,21 @@ export default function BulkAdd() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {phase === "processing" ? (
+        {phase === "cleaning" ? (
+          <>
+            <Display weight="medium" style={styles.title}>Preparing and cleaning your wardrobe photos…</Display>
+            <Txt style={styles.sub}>
+              Tidying photo {progress + 1 > total ? total : progress + 1} of {total} — {progress} done.
+            </Txt>
+            <Txt style={styles.note}>
+              Please stay on this screen. This step can take up to a minute for larger batches; if a photo
+              can&apos;t be cleaned we simply keep your original.
+            </Txt>
+            <View style={styles.barTrack}>
+              <View style={[styles.barFill, { width: `${total ? (progress / total) * 100 : 0}%` }]} />
+            </View>
+          </>
+        ) : phase === "processing" ? (
           <>
             <Display weight="medium" style={styles.title}>Cataloguing your pieces…</Display>
             <Txt style={styles.sub}>

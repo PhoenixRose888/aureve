@@ -163,8 +163,8 @@ export default function Profile() {
               <Txt style={styles.spTitle}>Your style profile</Txt>
               <Txt style={styles.spSub}>
                 {active?.profile && Object.keys(active.profile).length > 0
-                  ? "Measurements, colouring & hair/makeup — tap to edit"
-                  : "Add measurements & colouring for fits + hair & makeup"}
+                  ? "Measurements, colouring & hairstyles — tap to edit"
+                  : "Add measurements & colouring for better fit advice"}
               </Txt>
             </View>
             <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />

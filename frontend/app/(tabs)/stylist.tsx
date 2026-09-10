@@ -19,13 +19,28 @@ const SUGGESTIONS = [
   { icon: "moon", label: "What should I wear tonight?" },
 ];
 
-function needsOccasionContext(text: string) {
+const ASKS_WHAT_TO_WEAR =
+  /(what should i wear|what do i wear|what to wear|help me dress|dress me|style me|what should i put on|outfit ideas?|pick (?:me )?an outfit)/;
+const HAS_OCCASION =
+  /\b(work|office|meeting|presentation|conference|interview|wedding|funeral|church|date|dinner|lunch|brunch|drinks|party|birthday|club|nightclub|pub|gig|concert|theatre|movie|movies|cinema|picnic|bbq|barbecue|school|uni|gym|workout|yoga|run|walk|hike|beach|pool|shopping|errands|airport|flight|travel|holiday|vacation|graduation|christening|baby shower|race day|gala|formal|black tie|cocktail|casual|smart casual|home|festival|reunion|girls night|night out|weekend away)\b/;
+const VAGUE_TIME = /\b(today|tonight|this morning|this afternoon|this evening|tomorrow|later|the weekend)\b/;
+
+/** Ask what they're doing before styling a vague request — but only once. */
+function needsOccasionContext(text: string, history: { role: string; content: string }[]) {
   const t = text.trim().toLowerCase();
-  if (!t) return false;
-  const asksWhatToWear = /(what should i wear|help me dress|dress me)/.test(t);
-  const vagueTime = /\b(today|tonight|this morning|this afternoon|this evening|tomorrow)\b/.test(t);
-  const specificContext = /\b(work|office|meeting|wedding|funeral|church|date|dinner|lunch|party|club|concert|movie|movies|picnic|bbq|barbecue|school|gym|airport|flight|travel|interview|event|shopping|beach|hike|walk|brunch|birthday|formal|casual)\b/.test(t);
-  return asksWhatToWear && vagueTime && !specificContext;
+  if (!t || !ASKS_WHAT_TO_WEAR.test(t)) return false;
+  if (history.some((m) => m.role === "assistant" && m.content.trim().endsWith("?"))) return false;
+  const said = history
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.toLowerCase())
+    .concat(t)
+    .join(" ");
+  return !HAS_OCCASION.test(said);
+}
+
+function occasionQuestion(text: string) {
+  const when = VAGUE_TIME.exec(text.toLowerCase());
+  return `Happy to style you — what are you doing ${when ? when[0] : "today"}? Tell me the occasion (work, dinner, date, church, drinks, something casual…) and I'll build the right look.`;
 }
 
 export default function Stylist() {
@@ -55,10 +70,10 @@ export default function Stylist() {
     setInput("");
     scrollDown();
 
-    if (needsOccasionContext(content)) {
+    if (needsOccasionContext(content, messages)) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "What are you doing? Give me the occasion or plans and I’ll style you for that." },
+        { role: "assistant", content: occasionQuestion(content) },
       ]);
       haptics.success();
       scrollDown();
