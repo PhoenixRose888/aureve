@@ -137,8 +137,12 @@ export default function DressMe() {
   ]);
 
   const swapCat = swapIndex != null ? items[swapIndex]?.item?.category : null;
+  const inLook = new Set(items.map((r: any) => r.item?.id));
   const swapOptions = wardrobe.filter(
-    (w) => w.category === swapCat && (!search || (w.name || "").toLowerCase().includes(search.toLowerCase()))
+    (w) =>
+      w.category === swapCat &&
+      (w.id === items[swapIndex ?? -1]?.item?.id || !inLook.has(w.id)) &&
+      (!search || (w.name || "").toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -211,7 +215,7 @@ export default function DressMe() {
                 </Pressable>
               ))}
             </View>
-            <Txt style={styles.tapHint}>Tap any item to change</Txt>
+            <Txt style={styles.tapHint}>Tap any piece to swap just that one</Txt>
 
             {result.summary ? (
               <View style={styles.explainWrap}>
@@ -257,7 +261,9 @@ export default function DressMe() {
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {swapOptions.length === 0 ? (
-                <Txt style={styles.pickerEmpty}>No other {(swapCat || "").toLowerCase()} in your wardrobe.</Txt>
+                <Txt style={styles.pickerEmpty}>
+                  No other {(swapCat || "").toLowerCase()} in your wardrobe yet — add one and it&apos;ll show up here.
+                </Txt>
               ) : (
                 <View style={styles.pickerGrid}>
                   {swapOptions.map((it) => {

@@ -17,32 +17,56 @@ const GUTTER = spacing.md;
 
 const FILTERS = ["All", ...CATEGORIES];
 
-// Lightweight subfilters within the existing categories — derived from the
-// item's own name/style metadata, so nothing new has to be captured.
-const SUBFILTERS: Record<string, { label: string; match: RegExp }[]> = {
+// Presentation-only classification. Every item keeps its stored category (the
+// All tab always shows everything) — this only decides which chip it appears
+// under, and each item lands in exactly ONE subcategory.
+const T = (i: any) => `${i.name || ""} ${i.style || ""} ${i.fabric || ""}`.toLowerCase();
+
+/** Knitwear/outer layers read as Outerwear even if they were saved as Tops. */
+function displayCategory(item: any): string {
+  const cat = item.category || "";
+  if (cat !== "Tops" && cat !== "Outerwear") return cat;
+  const t = T(item);
+  if (/\b(vest top|tank|singlet|cami)\b/.test(t)) return "Tops";
+  if (/(hoodie|sweatshirt|jumper|sweater|cardigan|coat|trench|parka|puffer|blazer|jacket|waistcoat|gilet|\bvest\b)/.test(t)) {
+    return "Outerwear";
+  }
+  return cat;
+}
+
+const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
   Tops: [
-    { label: "T-shirts", match: /(t-?shirt|tee\b)/i },
-    { label: "Blouses / Shirts", match: /(blouse|shirt|oxford)/i },
-    { label: "Singlets / Camis", match: /(singlet|cami|tank|vest top)/i },
-    { label: "Bodysuits", match: /(bodysuit|bustier|corset)/i },
-    { label: "Knit tops", match: /(knit|jumper|sweater|ribbed)/i },
+    { label: "Bodysuits", match: /(bodysuit|leotard|unitard)/ },
+    { label: "Singlets / Camis", match: /(singlet|cami|tank|vest top|spaghetti)/ },
+    { label: "T-shirts", match: /(t-?shirt|\btee\b|jersey top)/ },
+    { label: "Blouses / Shirts", match: /(blouse|shirt|oxford|button-?up|button-?down)/ },
+    { label: "Knit tops", match: /(knit|rib{1,2}ed|merino|cashmere)/ },
+    { label: "Bustiers / Corsets", match: /(bustier|corset|bralette)/ },
   ],
   Outerwear: [
-    { label: "Jackets", match: /jacket/i },
-    { label: "Blazers", match: /blazer/i },
-    { label: "Cardigans / Jumpers", match: /(cardigan|jumper|sweater|knit)/i },
-    { label: "Coats", match: /(coat|trench|parka)/i },
+    { label: "Blazers", match: /(blazer|suit jacket)/ },
+    { label: "Coats", match: /(coat|trench|parka|puffer|overcoat|mac\b)/ },
+    { label: "Cardigans / Jumpers", match: /(cardigan|jumper|sweater|hoodie|sweatshirt|knit)/ },
+    { label: "Vests", match: /(vest|waistcoat|gilet)/ },
+    { label: "Jackets", match: /(jacket|bomber|biker|windbreaker|anorak)/ },
   ],
   Bottoms: [
-    { label: "Pants", match: /(pant|trouser|legging|culotte)/i },
-    { label: "Jeans", match: /(jean|denim)/i },
-    { label: "Skirts", match: /skirt/i },
-    { label: "Shorts", match: /short/i },
+    { label: "Jeans", match: /(jean|denim)/ },
+    { label: "Skirts", match: /skirt/ },
+    { label: "Shorts", match: /short/ },
+    { label: "Pants", match: /(pant|trouser|legging|culotte|chino|slack)/ },
   ],
 };
 
-const subMatches = (item: any, rule: { match: RegExp }) =>
-  rule.match.test(`${item.name || ""} ${item.style || ""} ${item.fabric || ""}`);
+/** Exactly one subcategory per item — first matching rule wins, and anything
+ *  unmatched falls into "Other" so nothing can vanish from the subfilters. */
+function primarySub(item: any, category: string): string {
+  const rules = SUB_RULES[category];
+  if (!rules) return "";
+  const t = T(item);
+  for (const r of rules) if (r.match.test(t)) return r.label;
+  return "Other";
+}
 
 // Remembered between visits so opening a piece and coming back lands you where
 // you left off rather than at the top of the catalogue.
@@ -89,10 +113,19 @@ export default function Wardrobe() {
     }, [load, profileLoading])
   );
 
-  const byCategory = filter === "All" ? items : items.filter((i) => i.category === filter);
-  const subOptions = SUBFILTERS[filter] || [];
-  const activeSub = sub ? subOptions.find((o) => o.label === sub) : undefined;
-  const filtered = activeSub ? byCategory.filter((i) => subMatches(i, activeSub)) : byCategory;
+  const byCategory = filter === "All" ? items : items.filter((i) => displayCategory(i) === filter);
+  // Only offer chips that actually hold something.
+  const subCounts = new Map<string, number>();
+  if (SUB_RULES[filter]) {
+    for (const i of byCategory) {
+      const label = primarySub(i, filter);
+      subCounts.set(label, (subCounts.get(label) || 0) + 1);
+    }
+  }
+  const subOptions = [...(SUB_RULES[filter] || []).map((r) => r.label), "Other"].filter(
+    (label) => (subCounts.get(label) || 0) > 0
+  );
+  const filtered = sub ? byCategory.filter((i) => primarySub(i, filter) === sub) : byCategory;
 
   const chooseFilter = (f: string) => {
     setFilter(f);
@@ -143,12 +176,6 @@ export default function Wardrobe() {
       testID={`wardrobe-item-${item.id}`}
       style={[styles.card, { width: COL_W, marginRight: index % 2 === 0 ? GUTTER : 0 }]}
       onPress={() => (selectMode ? toggle(item.id) : router.push(`/item/${item.id}`))}
-      onLongPress={() => {
-        if (!selectMode) {
-          setSelectMode(true);
-          setSelected([item.id]);
-        }
-      }}
     >
       <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }, selectMode && isSel && styles.cardImgSelected]} iconSize={28} testID={`wardrobe-img-${item.id}`} />
       {selectMode && (
@@ -248,16 +275,18 @@ export default function Wardrobe() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.subContent}
           >
-            {subOptions.map((o) => {
-              const on = sub === o.label;
+            {subOptions.map((label) => {
+              const on = sub === label;
               return (
                 <Pressable
-                  key={o.label}
-                  testID={`subfilter-chip-${o.label}`}
+                  key={label}
+                  testID={`subfilter-chip-${label}`}
                   style={[styles.subChip, on && styles.subChipActive]}
-                  onPress={() => chooseSub(o.label)}
+                  onPress={() => chooseSub(label)}
                 >
-                  <Txt style={[styles.subChipTxt, on && styles.subChipTxtActive]}>{o.label}</Txt>
+                  <Txt style={[styles.subChipTxt, on && styles.subChipTxtActive]}>
+                    {label} · {subCounts.get(label)}
+                  </Txt>
                 </Pressable>
               );
             })}
