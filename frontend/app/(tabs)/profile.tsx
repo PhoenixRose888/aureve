@@ -12,7 +12,6 @@ import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
 import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
-import GarmentImage from "@/src/components/GarmentImage";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
@@ -27,15 +26,16 @@ export default function Profile() {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-  const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Only the small header counts (pieces / looks) use this — the analytics
+  // dashboard that used to live further down this page is gone.
+  const [data, setData] = useState<any>(null);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [calConnected, setCalConnected] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const d = await api<any>("/insights");
-      setData(d);
+      setData(await api<any>("/insights"));
     } catch {}
     try {
       const s = await api<any>("/calendar/status");
@@ -55,9 +55,6 @@ export default function Profile() {
     setRefreshing(false);
   };
 
-  const unworn = data ? (data.least_worn || []).filter((i: any) => (i.wear_count || 0) === 0) : [];
-  // least_worn is only a small sample — the true total comes from the backend.
-  const unwornCount = data?.unworn_count ?? unworn.length;
 
   const handleSignOut = async () => {
     await logout();
@@ -95,7 +92,7 @@ export default function Profile() {
               <Display weight="semibold" style={styles.pageTitle}>Profile</Display>
               <BrandMark />
             </View>
-            <Txt style={styles.pageSub}>Your wardrobe, insights and preferences — all in one place.</Txt>
+            <Txt style={styles.pageSub}>Your wardrobe, your style profile and your preferences.</Txt>
           </View>
           <View style={styles.accountCard}>
             <View style={styles.avatarLg}>
@@ -226,82 +223,6 @@ export default function Profile() {
             {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
-          {/* Shopping Intelligence — wardrobe gap analysis lives inside */}
-          <Pressable
-            style={styles.missingCard}
-            testID="shopping-intelligence-profile"
-            onPress={() => router.push(premium ? "/shop" : "/premium")}
-          >
-            <Txt style={styles.missingKicker}>SHOPPING INTELLIGENCE</Txt>
-            <Display weight="medium" style={styles.missingTitle}>
-              Buy smarter, not more
-            </Display>
-            <Txt style={styles.missingReason}>
-              Check something before you buy it, or let Aureve read your wardrobe and suggest what would actually add the most outfits.
-            </Txt>
-            <View style={styles.missingRedo}>
-              <Txt style={styles.missingRedoTxt}>{premium ? "Open Shopping Intelligence" : "Unlock with Premium"}</Txt>
-              <Feather name={premium ? "arrow-right" : "lock"} size={14} color={colors.brandTertiary} />
-            </View>
-          </Pressable>
-
-          {/* Confidence scores */}
-          {data?.avg_confidence != null && (
-            <View style={styles.section}>
-              <Txt style={styles.sectionTitle}>HOW YOUR OUTFITS FEEL</Txt>
-              <Bar label="Flattering" value={data.avg_flattering} />
-              <Bar label="Comfort" value={data.avg_comfort} />
-              <Bar label="Confidence" value={data.avg_confidence} />
-            </View>
-          )}
-
-          {/* Category breakdown */}
-          {data?.categories && Object.keys(data.categories).length > 0 && (
-            <View style={styles.section}>
-              <Txt style={styles.sectionTitle}>WHAT YOU OWN</Txt>
-              {Object.entries(data.categories)
-                .sort((a: any, b: any) => b[1] - a[1])
-                .map(([cat, count]: any) => {
-                  const max = Math.max(...Object.values(data.categories).map((v: any) => v));
-                  return (
-                    <View key={cat} style={styles.catRow}>
-                      <Txt style={styles.catName}>{cat}</Txt>
-                      <View style={styles.catBarTrack}>
-                        <View style={[styles.catBarFill, { width: `${(count / max) * 100}%` }]} />
-                      </View>
-                      <Txt style={styles.catCount}>{count}</Txt>
-                    </View>
-                  );
-                })}
-            </View>
-          )}
-
-          {/* Most worn */}
-          {data?.most_worn?.some((i: any) => (i.wear_count || 0) > 0) && (
-            <RankList title="MOST WORN" items={data.most_worn.filter((i: any) => (i.wear_count || 0) > 0)} router={router} />
-          )}
-
-          {/* Wardrobe health — unworn */}
-          {unworn.length > 0 && (
-            <View style={styles.section}>
-              <Txt style={styles.sectionTitle}>WARDROBE HEALTH</Txt>
-              <View style={styles.healthCard}>
-                <Feather name="rotate-ccw" size={18} color={colors.brand} />
-                <Txt style={styles.healthTxt}>
-                  You have not worn {unwornCount} {unwornCount === 1 ? "piece" : "pieces"} yet. Try bringing a few into rotation this month.
-                </Txt>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.xl, marginTop: spacing.md }}>
-                {unworn.map((it: any) => (
-                  <Pressable key={it.id} style={styles.simCard} onPress={() => router.push(`/item/${it.id}`)}>
-                    <GarmentImage photo={it.photo} category={it.category} style={styles.simImg} iconSize={18} />
-                    <Txt style={styles.simName} numberOfLines={1}>{it.name}</Txt>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Account */}
           <View style={styles.section}>
             <Txt style={styles.sectionTitle}>ACCOUNT</Txt>
@@ -363,11 +284,6 @@ export default function Profile() {
             </View>
           </Modal>
 
-          {!data || data.total_items === 0 ? (
-            <View style={styles.empty}>
-              <Txt style={styles.emptyTxt}>Add clothes and log what you wear to unlock insights.</Txt>
-            </View>
-          ) : null}
         </View>
       </ScrollView>
 
@@ -381,37 +297,6 @@ function Metric({ value, label }: { value: any; label: string }) {
     <View style={styles.metric}>
       <Display weight="medium" style={styles.metricValue}>{value}</Display>
       <Txt style={styles.metricLabel}>{label}</Txt>
-    </View>
-  );
-}
-
-function Bar({ label, value }: { label: string; value: number }) {
-  const pct = Math.max(0, Math.min(1, (value || 0) / 5)) * 100;
-  return (
-    <View style={styles.barRow}>
-      <Txt style={styles.barLabel}>{label}</Txt>
-      <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${pct}%` }]} />
-      </View>
-      <Txt style={styles.barVal}>{value?.toFixed(1)}</Txt>
-    </View>
-  );
-}
-
-function RankList({ title, items, router }: { title: string; items: any[]; router: any }) {
-  return (
-    <View style={styles.section}>
-      <Txt style={styles.sectionTitle}>{title}</Txt>
-      {items.map((it, i) => (
-        <Pressable key={it.id} style={styles.rankRow} onPress={() => router.push(`/item/${it.id}`)}>
-          <Txt style={styles.rankNum}>{i + 1}</Txt>
-          <GarmentImage photo={it.photo} category={it.category} style={styles.rankImg} iconSize={16} />
-          <View style={{ flex: 1 }}>
-            <Txt style={styles.rankName} numberOfLines={1}>{it.name}</Txt>
-            <Txt style={styles.rankMeta}>{it.wear_count} wears{it.price ? ` · $${(it.price / it.wear_count).toFixed(2)}/wear` : ""}</Txt>
-          </View>
-        </Pressable>
-      ))}
     </View>
   );
 }
