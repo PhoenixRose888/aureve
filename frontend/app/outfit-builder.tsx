@@ -34,6 +34,7 @@ export default function OutfitBuilder() {
   const [naming, setNaming] = useState(false);
   const [loadingItems, setLoadingItems] = useState(true);
   const [swap, setSwap] = useState<any>(null);
+  const [addition, setAddition] = useState<any>(null);
   const [verdict, setVerdict] = useState("");
 
   const load = useCallback(async () => {
@@ -58,6 +59,7 @@ export default function OutfitBuilder() {
     if (!premium) { router.push("/premium"); return; }
     setAiBusy(true);
     setSwap(null);
+    setAddition(null);
     haptics.tap();
     try {
       const body: any = { item_ids: chosen.map((i) => i.id) };
@@ -68,6 +70,7 @@ export default function OutfitBuilder() {
       setVerdict(r.verdict || "Here's my take on this look");
       setFeedback(r.feedback || "");
       setSwap(r.swap || null);
+      setAddition(r.addition || null);
       haptics.success();
     } catch (e: any) {
       if (e?.status === 402) router.push("/premium");
@@ -77,14 +80,20 @@ export default function OutfitBuilder() {
   };
 
   const applySwap = () => {
-    if (!swap?.in_item) return;
+    const out = swap?.out_item, into = swap?.in_item;
+    // Same-slot only: replace the piece in its own category and leave every
+    // other selection exactly as it is. Never empty a slot.
+    if (!out || !into || out.category !== into.category) {
+      setSwap(null);
+      return;
+    }
     haptics.tap();
     setSelected((sel) => {
       const next = { ...sel };
       for (const k of Object.keys(next)) {
-        if (next[k]?.id === swap.out_id) delete next[k];
+        if (next[k]?.id === out.id) next[k] = into;
       }
-      next[swap.in_item.category] = swap.in_item;
+      next[out.category] = into;
       return next;
     });
     setSwap(null);
@@ -145,6 +154,12 @@ export default function OutfitBuilder() {
               <Txt style={styles.feedbackTitle}>{verdict || "Here's my take on this look"}</Txt>
             </View>
             <Txt style={styles.feedbackTxt}>{feedback}</Txt>
+            {addition ? (
+              <Txt style={styles.swapWhy} testID="builder-addition">
+                Optional idea: add {addition.name}
+                {addition.why ? ` — ${addition.why}` : ""} (not part of your outfit yet)
+              </Txt>
+            ) : null}
             {swap?.in_item ? (
               <View style={styles.swapCard} testID="builder-swap">
                 <Txt style={styles.swapTitle}>One optional swap</Txt>

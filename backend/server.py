@@ -2647,8 +2647,12 @@ OUTFIT_FEEDBACK_SYSTEM = (
     "wants your honest feedback on it. Be constructive, specific and encouraging — never mock or "
     "criticise the user, their body or their taste. Comment on what genuinely works (proportion, "
     "colour, texture, formality) and, only if it would clearly improve the look, suggest ONE optional "
-    "swap using an item id from the REST OF WARDROBE list. Never suggest replacing more than one piece "
-    "and never invent items. "
+    "swap using an item id from the REST OF WARDROBE list. A swap MUST stay in the SAME category as "
+    "the piece it replaces (shoes for shoes, top for top, bottom for bottom, outerwear for "
+    "outerwear) — never swap across categories. If what would really help is ADDING a piece the "
+    "outfit does not have (e.g. a blazer over a top), do NOT put it in swap: describe it in `tip` "
+    "instead. Never suggest replacing more than one piece and never invent items. Describe ONLY the "
+    "pieces listed in THE USER'S OUTFIT — never speak as though an extra item is already being worn. "
     "Return STRICT JSON with keys: verdict (a short encouraging headline), feedback (2-3 sentences on "
     "what works and why), swap (either null or an object: out_id, in_id, why — one short line), "
     "tip (optional one short line). Return ONLY JSON."
@@ -2697,17 +2701,22 @@ async def outfit_feedback(payload: OutfitFeedbackRequest, user: dict = Depends(g
     if not result.get("feedback"):
         raise HTTPException(status_code=502, detail="Could not review this outfit")
     swap = result.get("swap") if isinstance(result.get("swap"), dict) else None
+    result["swap"] = None
     if swap:
         out_it, in_it = by_id.get(swap.get("out_id")), by_id.get(swap.get("in_id"))
-        if out_it and in_it and out_it["id"] in set(ids):
+        same_slot = bool(out_it and in_it) and _norm(out_it.get("category")) == _norm(in_it.get("category"))
+        if out_it and in_it and out_it["id"] in set(ids) and same_slot:
             result["swap"] = {
                 "out_id": out_it["id"], "in_id": in_it["id"], "why": swap.get("why", ""),
                 "out_item": out_it, "in_item": in_it,
             }
-        else:
-            result["swap"] = None
-    else:
-        result["swap"] = None
+        elif out_it and in_it and not same_slot:
+            # Cross-category "swap" is really an addition. Never let it empty a
+            # slot — surface it as optional advice instead.
+            result["addition"] = {
+                "name": in_it.get("name"), "category": in_it.get("category"),
+                "why": swap.get("why", ""),
+            }
     return result
 
 
