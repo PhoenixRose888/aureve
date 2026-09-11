@@ -40,6 +40,9 @@ export default function DressMe() {
   const started = React.useRef(false);
   const [askActivity, setAskActivity] = useState(false);
   const [activity, setActivity] = useState("");
+  const [otherText, setOtherText] = useState("");
+  const [askOther, setAskOther] = useState(false);
+  const hasContext = React.useRef(false);
 
   const generateRef = React.useRef<null | (() => void)>(null);
   const now = new Date();
@@ -48,6 +51,12 @@ export default function DressMe() {
   useEffect(() => { api<any[]>("/items").then(setWardrobe).catch(() => {}); }, []);
 
   const generate = useCallback(async () => {
+    // Hard guard: with no calendar/plan context and no stated activity we ask
+    // instead of inventing an occasion.
+    if (!activity && !hasContext.current) {
+      setAskActivity(true);
+      return;
+    }
     setLoading(true);
     setError("");
     setSaved(false);
@@ -81,16 +90,37 @@ export default function DressMe() {
     // Only style straight away when today already has real context (a planned
     // look or calendar events). Otherwise ask what they're actually doing.
     api<any>("/dressme/context")
-      .then((c) => (c?.has_context ? generate() : setAskActivity(true)))
-      .catch(() => generate());
+      .then((c) => {
+        hasContext.current = !!c?.has_context;
+        if (c?.has_context) generate();
+        else setAskActivity(true);
+      })
+      // If we can't tell, ask rather than guess.
+      .catch(() => setAskActivity(true));
   }, [status, generate]);
 
   const items = result?.resolved_items || [];
 
   const chooseActivity = (label: string) => {
     haptics.tap();
+    if (label === "Other") {
+      setAskOther(true);
+      return;
+    }
     setActivity(label);
     setAskActivity(false);
+    setAskOther(false);
+    setResult(null);
+    setTimeout(() => generateRef.current?.(), 0);
+  };
+
+  const submitOther = () => {
+    const t = otherText.trim();
+    if (!t) return;
+    haptics.tap();
+    setActivity(t);
+    setAskActivity(false);
+    setAskOther(false);
     setResult(null);
     setTimeout(() => generateRef.current?.(), 0);
   };
@@ -174,11 +204,29 @@ export default function DressMe() {
             <Txt style={styles.activitySub}>Nothing in your plans or calendar for today — tell me and I&apos;ll style for it.</Txt>
             <View style={styles.activityChips}>
               {["Work", "Day off", "Shopping / errands", "Lunch / casual outing", "Evening / dinner", "Date", "Event", "Staying home", "Other"].map((a) => (
-                <Pressable key={a} testID={`dressme-activity-${a}`} style={styles.activityChip} onPress={() => chooseActivity(a === "Other" ? "something out of the ordinary" : a)}>
+                <Pressable key={a} testID={`dressme-activity-${a}`} style={styles.activityChip} onPress={() => chooseActivity(a)}>
                   <Txt style={styles.activityChipTxt}>{a}</Txt>
                 </Pressable>
               ))}
             </View>
+            {askOther ? (
+              <View style={styles.otherWrap}>
+                <TextInput
+                  style={styles.otherInput}
+                  value={otherText}
+                  onChangeText={setOtherText}
+                  placeholder="What's on today?"
+                  placeholderTextColor={colors.onSurfaceTertiary}
+                  onSubmitEditing={submitOther}
+                  returnKeyType="done"
+                  autoFocus
+                  testID="dressme-activity-other-input"
+                />
+                <Pressable style={styles.otherBtn} testID="dressme-activity-other-go" onPress={submitOther}>
+                  <Txt style={styles.otherBtnTxt}>Style me for this</Txt>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -306,6 +354,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.border,
   },
   activityChipTxt: { fontSize: 14, color: colors.onSurface },
+  otherWrap: { gap: spacing.sm, marginTop: spacing.md },
+  otherInput: {
+    height: 48, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, color: colors.onSurface, fontSize: 15,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  otherBtn: { height: 46, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  otherBtnTxt: { color: colors.onBrandPrimary, fontSize: 15 },
   loadingWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 2, gap: spacing.xl },
   loadingTxt: { color: colors.onSurfaceSecondary, fontSize: 15, fontStyle: "italic", textAlign: "center" },
   errorWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 1.5, paddingHorizontal: spacing.xl, gap: spacing.lg },
