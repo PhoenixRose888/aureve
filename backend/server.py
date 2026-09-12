@@ -1491,6 +1491,10 @@ ANALYZE_SYSTEM = (
     "Return a strict JSON object. Keys: name (short descriptive name, e.g. 'Purple oversized sunglasses'), "
     "category (ALWAYS your best guess from exactly: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery — "
     "sunglasses/hats/belts/scarves = Accessories; rings/necklaces/earrings/watches = Jewellery; never leave blank), "
+    "IMPORTANT for tops: bodysuits/leotards (a one-piece fitted top that fastens through the crotch), "
+    "corsets/bustiers, camisoles, singlets, halter tops and cropped tops are ALL category Tops — never "
+    "Dresses or Outerwear. Always state the actual garment type in the name (e.g. 'Black long-sleeve "
+    "bodysuit', 'Ivory halterneck top', 'Cream silk camisole', 'White cotton t-shirt', 'Navy poplin shirt'), "
     "photo_quality (\"good\" or \"poor\" — say \"poor\" ONLY when glare, harsh shadow, blown "
     "highlights, washed-out colour or a very dark garment blending into the background genuinely "
     "obscures the item's real colour or detail), "
@@ -2075,10 +2079,12 @@ class DressMeRequest(BaseModel):
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
     avoid_item_ids: List[str] = []  # current on-screen look when asking for another
     local_date: Optional[str] = None  # the user's OWN calendar date (YYYY-MM-DD)
+    tz_offset: Optional[int] = None   # minutes east of UTC, so the day is the user's local day
 
 
 @api_router.get("/dressme/context")
-async def dressme_context(date: Optional[str] = None, user: dict = Depends(get_scope)):
+async def dressme_context(date: Optional[str] = None, tz_offset: int = 0,
+                          user: dict = Depends(get_scope)):
     """Does today already have useful context (a planned look or calendar
     events)? If not, the app asks the user what they're doing before styling.
     `date` is the user's LOCAL calendar date — without it a UTC 'today' can read
@@ -2086,7 +2092,7 @@ async def dressme_context(date: Optional[str] = None, user: dict = Depends(get_s
     today = date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or "") else now_utc().strftime("%Y-%m-%d")
     plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
     plan_occasion = ((plan or {}).get("occasion") or (plan or {}).get("title") or "").strip()
-    events = await _gcal_events(user["account_id"], today)
+    events = await _gcal_events(user["account_id"], today, tz_offset)
     label = plan_occasion or (_fmt_events_for_ai(events) if events else "")
     return {
         "has_context": bool(plan_occasion or events),
@@ -2107,7 +2113,7 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
              else now_utc().strftime("%Y-%m-%d"))
     occasion = (payload.occasion or "").strip()
     plan_title = None
-    cal_events = await _gcal_events(user["account_id"], today)
+    cal_events = await _gcal_events(user["account_id"], today, payload.tz_offset or 0)
     if not occasion:
         plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
         if plan:
@@ -2253,7 +2259,7 @@ async def _gcal_valid_token(account_id: str) -> Optional[str]:
     return tok["access_token"]
 
 
-async def _gcal_events(account_id: str, date_str: str) -> List[dict]:
+async def _gcal_events(account_id: str, date_str: str, tz_offset: int = 0) -> List[dict]:
     token = await _gcal_valid_token(account_id)
     if not token:
         return []
@@ -2261,7 +2267,9 @@ async def _gcal_events(account_id: str, date_str: str) -> List[dict]:
         day = datetime.fromisoformat(date_str)
     except Exception:
         day = now_utc()
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    # tz_offset = minutes east of UTC, so the window is the user's LOCAL day.
+    start = (day.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+             - timedelta(minutes=tz_offset or 0))
     end = start + timedelta(days=1)
     params = {
         "timeMin": start.isoformat(), "timeMax": end.isoformat(),
@@ -2654,7 +2662,9 @@ OUTFIT_FEEDBACK_SYSTEM = (
     "clash or one piece is clearly letting the look down, say so plainly and explain why. Do NOT open "
     "with a compliment you do not mean and do NOT praise an outfit that is not working; equally, if it "
     "genuinely works, say so and say why. Never mock or criticise the user, their body or their taste "
-    "— judge the clothes, not the person. Comment on proportion, colour, texture and formality and, "
+    "— judge the clothes, not the person. Assess colour harmony, formality, proportion and silhouette, "
+    "season/weather suitability, the footwear, competing textures or patterns and overall cohesion "
+    "— then comment on the ones that actually matter for this look and, "
     "only if it would clearly improve the look, suggest ONE optional "
     "swap using an item id from the REST OF WARDROBE list. A swap MUST stay in the SAME category as "
     "the piece it replaces (shoes for shoes, top for top, bottom for bottom, outerwear for "

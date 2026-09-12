@@ -20,16 +20,31 @@ const FILTERS = ["All", ...CATEGORIES];
 // Presentation-only classification. Every item keeps its stored category (the
 // All tab always shows everything) — this only decides which chip it appears
 // under, and each item lands in exactly ONE subcategory.
-const T = (i: any) => `${i.name || ""} ${i.style || ""} ${i.fabric || ""}`.toLowerCase();
+// Construction cues live across several catalogued fields, not just the name.
+const T = (i: any) => {
+  const sleeve = /long/.test(String(i.sleeve_length || "").toLowerCase())
+    ? "long sleeve"
+    : /short/.test(String(i.sleeve_length || "").toLowerCase())
+    ? "short sleeve"
+    : /sleeveless|none|n\/a/.test(String(i.sleeve_length || "").toLowerCase())
+    ? "sleeveless"
+    : "";
+  return `${i.name || ""} ${i.style || ""} ${i.fabric || ""} ${i.pattern || ""} ${i.description || ""} ${i.fit_notes || ""} ${sleeve}`.toLowerCase();
+};
+
+/** A one-piece top that fastens through the crotch is a top, whatever it was
+ *  saved as (the AI sometimes files bodysuits under Dresses or Outerwear). */
+const BODYSUIT_RE = /(body ?suit|bodysuit|leotard|unitard)/;
 
 /** Knitwear/outer layers read as Outerwear even if they were saved as Tops. */
 function displayCategory(item: any): string {
   const cat = item.category || "";
-  if (cat !== "Tops" && cat !== "Outerwear") return cat;
   const t = T(item);
+  if (BODYSUIT_RE.test(t) && !/(swimsuit|swimwear|one-?piece swim)/.test(t)) return "Tops";
+  if (cat !== "Tops" && cat !== "Outerwear") return cat;
   // Never let a fabric/word match drag an obvious top into Outerwear
   // (a "knit bodysuit" or "halter cami" is a top, not a cardigan).
-  if (/(bodysuit|leotard|unitard|bustier|corset|bralette|halter|cami|singlet|tank|tube top|crop top|t-?shirt|\btee\b|blouse|button-?up|button-?down)/.test(t)) {
+  if (/(bustier|corset|bralette|halter|cami|singlet|tank|tube top|crop top|t-?shirt|\btee\b|blouse|button-?up|button-?down)/.test(t)) {
     return "Tops";
   }
   if (/\b(vest top)\b/.test(t)) return "Tops";
@@ -40,16 +55,19 @@ function displayCategory(item: any): string {
 }
 
 const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
+  // Most specific construction cue first — each item resolves to ONE label.
   Tops: [
-    { label: "Bodysuits", match: /(bodysuit|leotard|unitard)/ },
-    { label: "Halter / Crop tops", match: /(halter|halterneck|crop top|tube top|bandeau|off-?shoulder)/ },
-    { label: "Singlets / Camis", match: /(singlet|cami|tank|vest top|spaghetti|strappy top)/ },
-    { label: "T-shirts", match: /(t-?shirt|\btee\b|jersey top)/ },
-    { label: "Blouses / Shirts", match: /(blouse|shirt|oxford|button-?up|button-?down)/ },
-    { label: "Knit tops", match: /(knit|rib{1,2}ed|merino|cashmere)/ },
-    { label: "Bustiers / Corsets", match: /(bustier|corset|bralette)/ },
-    { label: "Blouses / Shirts", match: /(wrap top|peplum|smock|tunic)/ },
-    { label: "T-shirts", match: /(\btop\b|long sleeve|short sleeve)/ },
+    { label: "Bodysuits", match: BODYSUIT_RE },
+    { label: "Corsets", match: /(corset|bustier|basque|boned|lace-?up (top|bodice|back)|bralette)/ },
+    { label: "Halter", match: /(halter|halter-?neck|tie-?neck|neck-?tie top)/ },
+    { label: "Crops", match: /(crop top|cropped top|crop tee|cropped tee|\bcropped\b|\bcrop\b|bandeau|tube top|strapless top)/ },
+    { label: "Camis", match: /(camisole|\bcami\b|spaghetti|slip top|silk slip)/ },
+    { label: "Singlets", match: /(singlet|\btank\b|tank top|vest top|sleeveless)/ },
+    { label: "T-Shirts", match: /(t-?shirt|tshirt|tee shirt|\btee\b|jersey top|crew ?neck|scoop ?neck)/ },
+    { label: "Blouses", match: /(blouse|peplum|smock|tunic|wrap top|ruffle|satin|chiffon|georgette|silk top)/ },
+    { label: "Shirts", match: /(\bshirt\b|\bshirts\b|oxford|button-?up|button-?down|poplin|collared|flannel)/ },
+    { label: "Long Sleeve", match: /(long ?sleeve|turtle ?neck|roll ?neck|polo ?neck|henley|knit top|rib{1,2}ed|merino|cashmere|\bknit\b)/ },
+    { label: "T-Shirts", match: /short ?sleeve/ },
   ],
   Outerwear: [
     { label: "Blazers", match: /(blazer|suit jacket)/ },
@@ -64,6 +82,13 @@ const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
     { label: "Shorts", match: /short/ },
     { label: "Pants", match: /(pant|trouser|legging|culotte|chino|slack)/ },
   ],
+};
+
+/** Chip order shown to the user (matching priority above is deliberately
+ *  different — most specific cue wins). */
+const SUB_ORDER: Record<string, string[]> = {
+  Tops: ["T-Shirts", "Shirts", "Blouses", "Singlets", "Camis", "Crops", "Halter",
+         "Long Sleeve", "Bodysuits", "Corsets"],
 };
 
 /** Exactly one subcategory per item — first matching rule wins, and anything
@@ -131,7 +156,7 @@ export default function Wardrobe() {
     }
   }
   const subOptions = Array.from(
-    new Set([...(SUB_RULES[filter] || []).map((r) => r.label), "Other"])
+    new Set([...(SUB_ORDER[filter] || (SUB_RULES[filter] || []).map((r) => r.label)), "Other"])
   ).filter((label) => (subCounts.get(label) || 0) > 0);
   const filtered = sub ? byCategory.filter((i) => primarySub(i, filter) === sub) : byCategory;
 

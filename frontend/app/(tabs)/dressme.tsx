@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, TextInput } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
@@ -49,6 +49,8 @@ export default function DressMe() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
+  const tzOffset = () => -new Date().getTimezoneOffset(); // minutes east of UTC
+  const dayRef = React.useRef(localDate());
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 
@@ -71,6 +73,7 @@ export default function DressMe() {
         body.weather = weather.description;
       }
       body.local_date = localDate();
+      body.tz_offset = tzOffset();
       if (activity) body.occasion = activity;
       const currentItems = result?.resolved_items || [];
       if (currentItems.length > 0) {
@@ -94,7 +97,7 @@ export default function DressMe() {
     started.current = true;
     // Only style straight away when today already has real context (a planned
     // look or calendar events). Otherwise ask what they're actually doing.
-    api<any>(`/dressme/context?date=${localDate()}`)
+    api<any>(`/dressme/context?date=${localDate()}&tz_offset=${tzOffset()}`)
       .then((c) => {
         hasContext.current = !!c?.has_context;
         if (c?.has_context) generate();
@@ -103,6 +106,27 @@ export default function DressMe() {
       // If we can't tell, ask rather than guess.
       .catch(() => setAskActivity(true));
   }, [status, generate]);
+
+  // A new styling day begins at LOCAL midnight: once the device date changes,
+  // yesterday's look, activity and context are dropped and the day re-probed.
+  useFocusEffect(
+    useCallback(() => {
+      const check = () => {
+        if (dayRef.current === localDate()) return;
+        dayRef.current = localDate();
+        hasContext.current = false;
+        started.current = false;
+        setResult(null);
+        setActivity("");
+        setOtherText("");
+        setAskOther(false);
+        setAskActivity(false);
+      };
+      check();
+      const t = setInterval(check, 60000);
+      return () => clearInterval(t);
+    }, [])
+  );
 
   const items = result?.resolved_items || [];
 

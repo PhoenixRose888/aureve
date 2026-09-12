@@ -307,3 +307,12 @@ Verified: backend syntax + boot, duplicate strictness both ways, outfit feedback
 - Check My Outfit (/api/outfit/feedback) prompt rewritten to be candid (names clashing colour / formality / season / weak pieces) while never criticising the user. Same-slot swap guard unchanged.
 - Internal planner moved from My Outfits ("View Calendar") to Home as "Plan Your Week" (testID home-plan-week) -> /planner. Google Calendar untouched.
 - Verified by testing agent iteration 33: 5/5 backend pytest (/app/backend/tests/test_iteration33_local_date_and_feedback.py) + frontend flows. No push/merge/publish/deploy.
+
+## Iteration 34 (branch recovery-implementation-2026-09-10)
+- Tops subfilters: labels/order now T-Shirts, Shirts, Blouses, Singlets, Camis, Crops, Halter, Long Sleeve, Bodysuits, Corsets, Other (SUB_ORDER for display, SUB_RULES most-specific-first for matching; one chip per item, empty chips hidden).
+- Classification text now reads name+style+fabric+pattern+description+fit_notes+normalised sleeve_length.
+- Bodysuit root cause: bodysuits were often STORED under Dresses/Outerwear, so they never reached the Tops chips. BODYSUIT_RE now hoists them to Tops for display (swimsuits excluded).
+- ANALYZE_SYSTEM tells the AI bodysuits/corsets/camis/singlets/halters/crops are Tops and to name the garment type.
+- Dress Me local midnight: _gcal_events(tz_offset) windows the users LOCAL day; /dressme/context?tz_offset= and POST /dressme {tz_offset}; screen drops yesterdays look/activity and re-probes when the device date changes.
+- OUTFIT_FEEDBACK_SYSTEM assesses colour, formality, proportion/silhouette, season/weather, footwear, texture/pattern competition, cohesion. Swap guard unchanged.
+- Verified by testing agent iteration 34 (8/8 backend + 5/5 frontend). No push/merge/publish/deploy.
