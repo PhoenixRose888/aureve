@@ -45,6 +45,10 @@ export default function DressMe() {
   const hasContext = React.useRef(false);
 
   const generateRef = React.useRef<null | (() => void)>(null);
+  const localDate = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 
@@ -66,6 +70,7 @@ export default function DressMe() {
         body.temperature = weather.temperature;
         body.weather = weather.description;
       }
+      body.local_date = localDate();
       if (activity) body.occasion = activity;
       const currentItems = result?.resolved_items || [];
       if (currentItems.length > 0) {
@@ -89,7 +94,7 @@ export default function DressMe() {
     started.current = true;
     // Only style straight away when today already has real context (a planned
     // look or calendar events). Otherwise ask what they're actually doing.
-    api<any>("/dressme/context")
+    api<any>(`/dressme/context?date=${localDate()}`)
       .then((c) => {
         hasContext.current = !!c?.has_context;
         if (c?.has_context) generate();

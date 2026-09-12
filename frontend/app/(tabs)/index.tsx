@@ -147,6 +147,13 @@ export default function Home() {
           </View>
         ) : null}
 
+        {/* Internal week planner (separate from Google Calendar) */}
+        <Pressable style={styles.weekBtn} testID="home-plan-week" onPress={() => router.push("/planner")}>
+          <Feather name="calendar" size={16} color={colors.onSurface} />
+          <Txt style={styles.weekTxt}>Plan Your Week</Txt>
+          <Feather name="chevron-right" size={16} color={colors.onSurfaceTertiary} />
+        </Pressable>
+
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.weatherCluster}>
@@ -268,6 +275,12 @@ const styles = StyleSheet.create({
   weatherDesc: { fontSize: 12, color: colors.onSurfaceTertiary },
   greetBlock: { paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
   greeting: { fontSize: 22, color: colors.onSurface },
+  weekBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.sm,
+    marginHorizontal: spacing.xl, marginBottom: spacing.md, paddingHorizontal: spacing.lg,
+    height: 52, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.border,
+  },
+  weekTxt: { flex: 1, fontSize: 15, color: colors.onSurface },
   wearCheck: {
     marginHorizontal: spacing.xl, marginBottom: spacing.md, padding: spacing.lg,
     borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, gap: spacing.md,

@@ -27,7 +27,12 @@ function displayCategory(item: any): string {
   const cat = item.category || "";
   if (cat !== "Tops" && cat !== "Outerwear") return cat;
   const t = T(item);
-  if (/\b(vest top|tank|singlet|cami)\b/.test(t)) return "Tops";
+  // Never let a fabric/word match drag an obvious top into Outerwear
+  // (a "knit bodysuit" or "halter cami" is a top, not a cardigan).
+  if (/(bodysuit|leotard|unitard|bustier|corset|bralette|halter|cami|singlet|tank|tube top|crop top|t-?shirt|\btee\b|blouse|button-?up|button-?down)/.test(t)) {
+    return "Tops";
+  }
+  if (/\b(vest top)\b/.test(t)) return "Tops";
   if (/(hoodie|sweatshirt|jumper|sweater|cardigan|coat|trench|parka|puffer|blazer|jacket|waistcoat|gilet|\bvest\b)/.test(t)) {
     return "Outerwear";
   }
@@ -37,11 +42,14 @@ function displayCategory(item: any): string {
 const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
   Tops: [
     { label: "Bodysuits", match: /(bodysuit|leotard|unitard)/ },
-    { label: "Singlets / Camis", match: /(singlet|cami|tank|vest top|spaghetti)/ },
+    { label: "Halter / Crop tops", match: /(halter|halterneck|crop top|tube top|bandeau|off-?shoulder)/ },
+    { label: "Singlets / Camis", match: /(singlet|cami|tank|vest top|spaghetti|strappy top)/ },
     { label: "T-shirts", match: /(t-?shirt|\btee\b|jersey top)/ },
     { label: "Blouses / Shirts", match: /(blouse|shirt|oxford|button-?up|button-?down)/ },
     { label: "Knit tops", match: /(knit|rib{1,2}ed|merino|cashmere)/ },
     { label: "Bustiers / Corsets", match: /(bustier|corset|bralette)/ },
+    { label: "Blouses / Shirts", match: /(wrap top|peplum|smock|tunic)/ },
+    { label: "T-shirts", match: /(\btop\b|long sleeve|short sleeve)/ },
   ],
   Outerwear: [
     { label: "Blazers", match: /(blazer|suit jacket)/ },
@@ -122,9 +130,9 @@ export default function Wardrobe() {
       subCounts.set(label, (subCounts.get(label) || 0) + 1);
     }
   }
-  const subOptions = [...(SUB_RULES[filter] || []).map((r) => r.label), "Other"].filter(
-    (label) => (subCounts.get(label) || 0) > 0
-  );
+  const subOptions = Array.from(
+    new Set([...(SUB_RULES[filter] || []).map((r) => r.label), "Other"])
+  ).filter((label) => (subCounts.get(label) || 0) > 0);
   const filtered = sub ? byCategory.filter((i) => primarySub(i, filter) === sub) : byCategory;
 
   const chooseFilter = (f: string) => {

@@ -2074,13 +2074,16 @@ class DressMeRequest(BaseModel):
     weather: Optional[str] = None
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
     avoid_item_ids: List[str] = []  # current on-screen look when asking for another
+    local_date: Optional[str] = None  # the user's OWN calendar date (YYYY-MM-DD)
 
 
 @api_router.get("/dressme/context")
-async def dressme_context(user: dict = Depends(get_scope)):
+async def dressme_context(date: Optional[str] = None, user: dict = Depends(get_scope)):
     """Does today already have useful context (a planned look or calendar
-    events)? If not, the app asks the user what they're doing before styling."""
-    today = now_utc().strftime("%Y-%m-%d")
+    events)? If not, the app asks the user what they're doing before styling.
+    `date` is the user's LOCAL calendar date — without it a UTC 'today' can read
+    the previous day's plan for anyone ahead of UTC."""
+    today = date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or "") else now_utc().strftime("%Y-%m-%d")
     plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
     plan_occasion = ((plan or {}).get("occasion") or (plan or {}).get("title") or "").strip()
     events = await _gcal_events(user["account_id"], today)
@@ -2099,7 +2102,9 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "dressme")
-    today = now_utc().strftime("%Y-%m-%d")
+    today = (payload.local_date
+             if re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload.local_date or "")
+             else now_utc().strftime("%Y-%m-%d"))
     occasion = (payload.occasion or "").strip()
     plan_title = None
     cal_events = await _gcal_events(user["account_id"], today)
@@ -2644,17 +2649,21 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
 
 OUTFIT_FEEDBACK_SYSTEM = (
     "You are Aureve, a warm, expert personal stylist. The user has put together their OWN outfit and "
-    "wants your honest feedback on it. Be constructive, specific and encouraging — never mock or "
-    "criticise the user, their body or their taste. Comment on what genuinely works (proportion, "
-    "colour, texture, formality) and, only if it would clearly improve the look, suggest ONE optional "
+    "wants your honest feedback on it. Be specific and genuinely useful — a good stylist tells the "
+    "truth. If the colours fight, the proportions are off, the formality is mismatched, the seasons "
+    "clash or one piece is clearly letting the look down, say so plainly and explain why. Do NOT open "
+    "with a compliment you do not mean and do NOT praise an outfit that is not working; equally, if it "
+    "genuinely works, say so and say why. Never mock or criticise the user, their body or their taste "
+    "— judge the clothes, not the person. Comment on proportion, colour, texture and formality and, "
+    "only if it would clearly improve the look, suggest ONE optional "
     "swap using an item id from the REST OF WARDROBE list. A swap MUST stay in the SAME category as "
     "the piece it replaces (shoes for shoes, top for top, bottom for bottom, outerwear for "
     "outerwear) — never swap across categories. If what would really help is ADDING a piece the "
     "outfit does not have (e.g. a blazer over a top), do NOT put it in swap: describe it in `tip` "
     "instead. Never suggest replacing more than one piece and never invent items. Describe ONLY the "
     "pieces listed in THE USER'S OUTFIT — never speak as though an extra item is already being worn. "
-    "Return STRICT JSON with keys: verdict (a short encouraging headline), feedback (2-3 sentences on "
-    "what works and why), swap (either null or an object: out_id, in_id, why — one short line), "
+    "Return STRICT JSON with keys: verdict (a short honest headline — it may be positive OR flag the "
+    "main problem), feedback (2-3 sentences: what works, what does not, and why), swap (either null or an object: out_id, in_id, why — one short line), "
     "tip (optional one short line). Return ONLY JSON."
 )
 

@@ -299,3 +299,11 @@ Verified: backend syntax + boot, vague/answered/specific stylist probes, hair su
 11. Category subfilters: Tops/Outerwear/Bottoms subfilter chips derived from existing name/style/fabric metadata (no schema change); Shoes untouched.
 12. Bulk Add copy now says processing continues in the background (true — the async loop keeps running after navigation).
 Verified: backend syntax + boot, duplicate strictness both ways, outfit feedback (incl. 400 guard), photo_quality output, wear pending/confirm (incl. bad-date guard and no-repeat), dressme context probe, Expo boot, wardrobe subfilters rendering. Still on branch recovery-implementation-2026-09-10; nothing pushed, merged, published or deployed.
+
+## Iteration 33 (branch recovery-implementation-2026-09-10)
+- Dress Me now uses the device LOCAL date: GET /api/dressme/context?date=YYYY-MM-DD and POST /api/dressme { local_date }. Yesterday/deleted plans no longer leak into the next local day; with no context the screen asks "What are you doing today?" (chips + Other free text).
+- Wardrobe displayCategory(): obvious tops (bodysuit, leotard, bustier, corset, bralette, halter, cami, singlet, tank, tube/crop, tee, blouse, button-up) can never be re-mapped to Outerwear, so knit bodysuits stay in Tops and show under the Bodysuits chip.
+- New Tops subfilter rules: "Halter / Crop tops", broader Blouses/Shirts and T-shirts, so halters no longer fall into Other. subOptions is de-duped (no duplicate T-shirts chip).
+- Check My Outfit (/api/outfit/feedback) prompt rewritten to be candid (names clashing colour / formality / season / weak pieces) while never criticising the user. Same-slot swap guard unchanged.
+- Internal planner moved from My Outfits ("View Calendar") to Home as "Plan Your Week" (testID home-plan-week) -> /planner. Google Calendar untouched.
+- Verified by testing agent iteration 33: 5/5 backend pytest (/app/backend/tests/test_iteration33_local_date_and_feedback.py) + frontend flows. No push/merge/publish/deploy.

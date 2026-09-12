@@ -118,14 +118,6 @@ export default function OutfitsHub() {
         )}
       </ScrollView>
 
-      <Pressable
-        style={[styles.calendarBtn, { bottom: insets.bottom + 8 }]}
-        testID="outfits-view-calendar"
-        onPress={() => router.push("/planner")}
-      >
-        <Feather name="calendar" size={16} color={colors.onSurface} />
-        <Txt style={styles.calendarTxt}>View Calendar</Txt>
-      </Pressable>
     </View>
   );
 }
@@ -153,6 +145,4 @@ const styles = StyleSheet.create({
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", lineHeight: 21, marginBottom: spacing.xl },
   emptyCta: { backgroundColor: colors.sage, paddingHorizontal: spacing["2xl"], paddingVertical: spacing.md, borderRadius: radius.md },
   emptyCtaTxt: { color: colors.onSage, fontSize: 15, fontFamily: fonts.displayBold },
-  calendarBtn: { position: "absolute", left: spacing.lg, right: spacing.lg, height: 48, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
-  calendarTxt: { fontSize: 15, color: colors.onSurface, fontFamily: fonts.displayMedium },
 });
