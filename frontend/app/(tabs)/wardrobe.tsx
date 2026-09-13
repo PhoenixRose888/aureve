@@ -15,11 +15,12 @@ import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
 
 const GUTTER = spacing.md;
 
-const FILTERS = ["All", ...CATEGORIES];
+// Organised main categories only — no mixed top-level "All" list.
+const FILTERS = [...CATEGORIES];
 
-// Presentation-only classification. Every item keeps its stored category (the
-// All tab always shows everything) — this only decides which chip it appears
-// under, and each item lands in exactly ONE subcategory.
+// Presentation-only classification. Every item keeps its stored category —
+// this only decides which chip it appears under, and each item lands in
+// exactly ONE subcategory. Opening a category always shows all of its pieces.
 // Construction cues live across several catalogued fields, not just the name.
 const T = (i: any) => {
   const sleeve = /long/.test(String(i.sleeve_length || "").toLowerCase())
@@ -47,8 +48,8 @@ function displayCategory(item: any): string {
   if (/(bustier|corset|bralette|halter|cami|singlet|tank|tube top|crop top|t-?shirt|\btee\b|blouse|button-?up|button-?down)/.test(t)) {
     return "Tops";
   }
-  if (/\b(vest top)\b/.test(t)) return "Tops";
-  if (/(hoodie|sweatshirt|jumper|sweater|cardigan|coat|trench|parka|puffer|blazer|jacket|waistcoat|gilet|\bvest\b)/.test(t)) {
+  if (/\b(vest|vest top|waistcoat|gilet)\b/.test(t)) return "Tops";
+  if (/(hoodie|sweatshirt|jumper|sweater|cardigan|coat|trench|parka|puffer|blazer|jacket)/.test(t)) {
     return "Outerwear";
   }
   return cat;
@@ -61,38 +62,78 @@ const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
     { label: "Corsets", match: /(corset|bustier|basque|boned|lace-?up (top|bodice|back)|bralette)/ },
     { label: "Halter", match: /(halter|halter-?neck|tie-?neck|neck-?tie top)/ },
     { label: "Crops", match: /(crop top|cropped top|crop tee|cropped tee|\bcropped\b|\bcrop\b|bandeau|tube top|strapless top)/ },
+    { label: "Polos", match: /(\bpolo\b(?! ?neck)|polo shirt|piqu)/ },
+    { label: "Vests", match: /(\bvest\b|\bvests\b|vest top|waistcoat|gilet)/ },
     { label: "Camis", match: /(camisole|\bcami\b|spaghetti|slip top|silk slip)/ },
-    { label: "Singlets", match: /(singlet|\btank\b|tank top|vest top|sleeveless)/ },
-    { label: "T-Shirts", match: /(t-?shirt|tshirt|tee shirt|\btee\b|jersey top|crew ?neck|scoop ?neck)/ },
+    { label: "Singlets", match: /(singlet|\btank\b|tank top|sleeveless)/ },
+    { label: "T-Shirts", match: /(t-?shirt|tshirt|tee shirt|\btee\b|jersey top|crew ?neck|scoop ?neck|v-?neck tee)/ },
     { label: "Blouses", match: /(blouse|peplum|smock|tunic|wrap top|ruffle|satin|chiffon|georgette|silk top)/ },
     { label: "Shirts", match: /(\bshirt\b|\bshirts\b|oxford|button-?up|button-?down|poplin|collared|flannel)/ },
     { label: "Long Sleeve", match: /(long ?sleeve|turtle ?neck|roll ?neck|polo ?neck|henley|knit top|rib{1,2}ed|merino|cashmere|\bknit\b)/ },
     { label: "T-Shirts", match: /short ?sleeve/ },
   ],
   Outerwear: [
-    { label: "Blazers", match: /(blazer|suit jacket)/ },
-    { label: "Coats", match: /(coat|trench|parka|puffer|overcoat|mac\b)/ },
-    { label: "Cardigans / Jumpers", match: /(cardigan|jumper|sweater|hoodie|sweatshirt|knit)/ },
-    { label: "Vests", match: /(vest|waistcoat|gilet)/ },
-    { label: "Jackets", match: /(jacket|bomber|biker|windbreaker|anorak)/ },
+    { label: "Blazers", match: /(blazer|suit jacket|tuxedo jacket)/ },
+    { label: "Cardigans", match: /(cardigan|\bcardi\b)/ },
+    { label: "Jumpers", match: /(jumper|sweater|hoodie|sweatshirt|pullover|\bknit\b|merino|cashmere)/ },
+    { label: "Coats", match: /(coat|trench|parka|puffer|overcoat|\bmac\b|peacoat)/ },
+    { label: "Jackets", match: /(jacket|bomber|biker|windbreaker|anorak|shacket|gilet)/ },
   ],
   Bottoms: [
+    { label: "Skirts", match: /(skirt|skort)/ },
+    { label: "Shorts", match: /(\bshorts?\b|bermuda|cut-?off)/ },
+    { label: "Leggings", match: /(legging|jegging|yoga pant|\btights\b)/ },
     { label: "Jeans", match: /(jean|denim)/ },
-    { label: "Skirts", match: /skirt/ },
-    { label: "Shorts", match: /short/ },
-    { label: "Pants", match: /(pant|trouser|legging|culotte|chino|slack)/ },
+    { label: "Pants", match: /(pant|trouser|chino|slack|culotte|cargo|jogger|track ?pant|palazzo|\bwide ?leg\b)/ },
+  ],
+  Shoes: [
+    { label: "Boots", match: /(boot|chelsea|ankle ?boot)/ },
+    { label: "Sneakers", match: /(sneaker|trainer|runner|running shoe|plimsoll|converse|high-?top|skate shoe)/ },
+    { label: "Heels", match: /(heel|stiletto|\bpump\b|\bpumps\b|wedge|court shoe)/ },
+    { label: "Sandals", match: /(sandal|slide|flip ?flop|thong|espadrille|\bmule\b)/ },
+    { label: "Dress Shoes", match: /(oxford|derby|brogue|dress shoe|monk strap|formal shoe|wingtip)/ },
+    { label: "Flats", match: /(\bflat\b|\bflats\b|ballet|loafer|moccasin|\bpump\b|slipper)/ },
+  ],
+  Bags: [
+    { label: "Backpacks", match: /(backpack|rucksack|knapsack)/ },
+    { label: "Clutches", match: /(clutch|evening bag|\bpouch\b)/ },
+    { label: "Briefcases", match: /(briefcase|laptop bag|work bag|attach)/ },
+    { label: "Crossbody", match: /(cross ?body|shoulder bag|\bsling\b|baguette)/ },
+    { label: "Handbags", match: /(handbag|hand bag|\btote\b|\bpurse\b|\bhobo\b|bucket bag|shopper|top ?handle|\bbag\b)/ },
+  ],
+  Accessories: [
+    { label: "Sunglasses", match: /(sunglass|\bshades\b|eyewear|\bglasses\b)/ },
+    { label: "Hats", match: /(\bhat\b|\bhats\b|\bcap\b|beanie|beret|fedora|visor|bucket hat)/ },
+    { label: "Scarves", match: /(scarf|scarves|shawl|pashmina|snood|wrap\b)/ },
+    { label: "Ties", match: /(necktie|\btie\b|\bties\b|bow ?tie|cravat)/ },
+    { label: "Belts", match: /(\bbelt\b|\bbelts\b)/ },
+    { label: "Gloves", match: /(glove|mitten)/ },
+  ],
+  Jewellery: [
+    { label: "Necklaces", match: /(necklace|pendant|\bchain\b|choker|locket)/ },
+    { label: "Bracelets", match: /(bracelet|bangle|\bcuff\b|anklet)/ },
+    { label: "Earrings", match: /(earring|ear ?stud|\bhoops?\b)/ },
+    { label: "Watches", match: /(watch)/ },
+    { label: "Rings", match: /(\bring\b|\brings\b|signet)/ },
   ],
 };
 
 /** Chip order shown to the user (matching priority above is deliberately
- *  different — most specific cue wins). */
+ *  different — most specific cue wins). Dresses stay a single category. */
 const SUB_ORDER: Record<string, string[]> = {
-  Tops: ["T-Shirts", "Shirts", "Blouses", "Singlets", "Camis", "Crops", "Halter",
-         "Long Sleeve", "Bodysuits", "Corsets"],
+  Tops: ["T-Shirts", "Shirts", "Blouses", "Polos", "Singlets", "Camis", "Crops",
+         "Halter", "Long Sleeve", "Vests", "Bodysuits", "Corsets"],
+  Bottoms: ["Jeans", "Pants", "Shorts", "Skirts", "Leggings"],
+  Outerwear: ["Blazers", "Jackets", "Coats", "Cardigans", "Jumpers"],
+  Shoes: ["Sneakers", "Boots", "Heels", "Flats", "Sandals", "Dress Shoes"],
+  Bags: ["Handbags", "Backpacks", "Clutches", "Briefcases", "Crossbody"],
+  Accessories: ["Hats", "Sunglasses", "Scarves", "Ties", "Belts", "Gloves"],
+  Jewellery: ["Necklaces", "Bracelets", "Earrings", "Rings", "Watches"],
 };
 
-/** Exactly one subcategory per item — first matching rule wins, and anything
- *  unmatched falls into "Other" so nothing can vanish from the subfilters. */
+/** Exactly one subcategory per item — first matching rule wins. Anything the
+ *  cues can't place keeps an internal "Other" label, which is never offered as
+ *  a user-facing chip (the category view still shows every piece). */
 function primarySub(item: any, category: string): string {
   const rules = SUB_RULES[category];
   if (!rules) return "";
@@ -103,7 +144,7 @@ function primarySub(item: any, category: string): string {
 
 // Remembered between visits so opening a piece and coming back lands you where
 // you left off rather than at the top of the catalogue.
-let lastFilter = "All";
+let lastFilter = FILTERS[0];
 let lastSub: string | null = null;
 let lastOffset = 0;
 
@@ -146,8 +187,8 @@ export default function Wardrobe() {
     }, [load, profileLoading])
   );
 
-  const byCategory = filter === "All" ? items : items.filter((i) => displayCategory(i) === filter);
-  // Only offer chips that actually hold something.
+  const byCategory = items.filter((i) => displayCategory(i) === filter);
+  // Only offer chips that actually hold something — "Other" is never shown.
   const subCounts = new Map<string, number>();
   if (SUB_RULES[filter]) {
     for (const i of byCategory) {
@@ -156,7 +197,7 @@ export default function Wardrobe() {
     }
   }
   const subOptions = Array.from(
-    new Set([...(SUB_ORDER[filter] || (SUB_RULES[filter] || []).map((r) => r.label)), "Other"])
+    new Set(SUB_ORDER[filter] || (SUB_RULES[filter] || []).map((r) => r.label))
   ).filter((label) => (subCounts.get(label) || 0) > 0);
   const filtered = sub ? byCategory.filter((i) => primarySub(i, filter) === sub) : byCategory;
 
@@ -350,7 +391,7 @@ export default function Wardrobe() {
         <ScrollView contentContainerStyle={styles.emptyWrap}>
           <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
           <Display weight="semibold" style={styles.emptyTitle}>
-            {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
+            No {filter.toLowerCase()} yet
           </Display>
           <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
           <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>

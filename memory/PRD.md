@@ -316,3 +316,12 @@ Verified: backend syntax + boot, duplicate strictness both ways, outfit feedback
 - Dress Me local midnight: _gcal_events(tz_offset) windows the users LOCAL day; /dressme/context?tz_offset= and POST /dressme {tz_offset}; screen drops yesterdays look/activity and re-probes when the device date changes.
 - OUTFIT_FEEDBACK_SYSTEM assesses colour, formality, proportion/silhouette, season/weather, footwear, texture/pattern competition, cohesion. Swap guard unchanged.
 - Verified by testing agent iteration 34 (8/8 backend + 5/5 frontend). No push/merge/publish/deploy.
+
+## Iteration 35 (branch recovery-implementation-2026-09-10)
+- Removed the top-level "All" wardrobe view; FILTERS = the 8 main categories, default Tops. Opening a category lists all of its pieces; subfilters are optional narrowing chips.
+- No user-facing "Other" chip anywhere (unplaced items keep an internal label and still show in the category view).
+- Final subfilter sets: Tops [T-Shirts, Shirts, Blouses, Polos, Singlets, Camis, Crops, Halter, Long Sleeve, Vests, Bodysuits, Corsets]; Bottoms [Jeans, Pants, Shorts, Skirts, Leggings]; Dresses none; Outerwear [Blazers, Jackets, Coats, Cardigans, Jumpers]; Shoes [Sneakers, Boots, Heels, Flats, Sandals, Dress Shoes]; Bags [Handbags, Backpacks, Clutches, Briefcases, Crossbody]; Accessories [Hats, Sunglasses, Scarves, Ties, Belts, Gloves]; Jewellery [Necklaces, Bracelets, Earrings, Rings, Watches].
+- Vests/waistcoats now live under Tops (removed from Outerwear); hoodies/sweatshirts -> Jumpers; bodysuits still hoisted to Tops.
+- ANALYZE_SYSTEM now asks for the specific garment word per category so NEW uploads land in the right subfilter.
+- Verified by testing agent iteration 35 (6/6 backend, 32/32 frontend assertions). No push/merge/publish/deploy.
+- Google Calendar prod failure (unchanged code): production backend runs a STALE GOOGLE_CALENDAR_CLIENT_ID (529785392979-9jdd...) while the workspace/intended client is 538895898254-0ns95m6...; redirect URI is correct. Fix = update production env var + redeploy.
