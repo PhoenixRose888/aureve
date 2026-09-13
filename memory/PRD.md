@@ -325,3 +325,11 @@ Verified: backend syntax + boot, duplicate strictness both ways, outfit feedback
 - ANALYZE_SYSTEM now asks for the specific garment word per category so NEW uploads land in the right subfilter.
 - Verified by testing agent iteration 35 (6/6 backend, 32/32 frontend assertions). No push/merge/publish/deploy.
 - Google Calendar prod failure (unchanged code): production backend runs a STALE GOOGLE_CALENDAR_CLIENT_ID (529785392979-9jdd...) while the workspace/intended client is 538895898254-0ns95m6...; redirect URI is correct. Fix = update production env var + redeploy.
+
+## Iteration 36 (branch recovery-implementation-2026-09-10)
+- Guest/demo flow removed: backend POST /api/auth/guest + seed_demo_wardrobe() deleted; AuthContext.guestLogin removed; "Explore as guest" button and Profile guest card/badges removed. New accounts start completely empty. Reviewer seeding/Premium untouched.
+- /welcome is now the account screen shown whenever there is no valid session: Welcome to Aureve + tagline + [Start Free] -> onboarding slides -> /login?mode=signup, and [Log In] -> /login. app/index.tsx: session -> /(tabs), else /welcome.
+- Registration sets storage flag aureve_tour_pending; Home pushes /tour once. /tour = 5-step first-run tour (Home, Add/Bulk Add, Wardrobe, Dress Me, Profile) with Next/Skip, clears the flag. Profile row "How Aureve Works" replays it.
+- Wardrobe empty state: "Your wardrobe is ready when you are" + Add Item / Bulk Add.
+- Sign out / switch account / delete account now return to /welcome or /login as appropriate.
+- Verified by testing agent iteration 36 (12/12 backend + frontend flows); two minor findings fixed afterwards (Profile switch-account login ref, onboarding pointerEvents deprecation).

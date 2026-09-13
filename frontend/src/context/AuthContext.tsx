@@ -29,7 +29,6 @@ type AuthCtx = {
   signingIn: boolean;
   login: () => Promise<void>;
   loginApple: () => Promise<void>;
-  guestLogin: () => Promise<void>;
   loginEmail: (email: string, password: string) => Promise<void>;
   registerEmail: (email: string, password: string, name?: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -155,20 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = await getToken();
     if (token) await storage.secureSet(GUEST_MIGRATE_KEY, token);
   }, [user]);
-
-  const guestLogin = useCallback(async () => {
-    setSigningIn(true);
-    try {
-      const data = await api<{ session_token: string; user: User }>("/auth/guest", {
-        method: "POST",
-        auth: false,
-      });
-      await setToken(data.session_token);
-      setUser(data.user);
-    } finally {
-      setSigningIn(false);
-    }
-  }, [setUser]);
 
   const login = useCallback(async () => {
     setSigningIn(true);
@@ -298,7 +283,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signingIn,
         login,
         loginApple,
-        guestLogin,
         loginEmail,
         registerEmail,
         deleteAccount,

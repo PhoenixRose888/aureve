@@ -74,6 +74,7 @@ export default function RootLayout() {
               <Stack.Screen name="profile-edit" options={{ presentation: "modal" }} />
               <Stack.Screen name="health-report" options={{ presentation: "modal" }} />
               <Stack.Screen name="audit" options={{ presentation: "modal" }} />
+              <Stack.Screen name="tour" options={{ presentation: "transparentModal", animation: "fade" }} />
             </Stack>
             </ProfileProvider>
           </AuthProvider>

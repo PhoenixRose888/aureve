@@ -391,11 +391,14 @@ export default function Wardrobe() {
         <ScrollView contentContainerStyle={styles.emptyWrap}>
           <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
           <Display weight="semibold" style={styles.emptyTitle}>
-            No {filter.toLowerCase()} yet
+            {items.length === 0 ? "Your wardrobe is ready when you are" : `No ${filter.toLowerCase()} yet`}
           </Display>
-          <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
+          <Txt style={styles.emptySub}>Add your clothes to start getting personalised outfits.</Txt>
           <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>
-            <Txt style={styles.emptyBtnTxt}>Add first piece</Txt>
+            <Txt style={styles.emptyBtnTxt}>Add Item</Txt>
+          </Pressable>
+          <Pressable style={styles.emptyBtnAlt} testID="wardrobe-empty-bulk" onPress={() => router.push("/bulk-add")}>
+            <Txt style={styles.emptyBtnAltTxt}>Bulk Add</Txt>
           </Pressable>
         </ScrollView>
       ) : (
@@ -573,6 +576,15 @@ const styles = StyleSheet.create({
   emptyImg: { width: "100%", height: 260, borderRadius: radius.md, marginBottom: spacing.xl },
   emptyTitle: { fontSize: 20, textAlign: "center", marginBottom: spacing.sm, letterSpacing: -0.3 },
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", marginBottom: spacing.xl },
+  emptyBtnAlt: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing["2xl"],
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  emptyBtnAltTxt: { color: colors.onSurface, fontSize: 15, fontFamily: fonts.displayMedium },
   emptyBtn: {
     backgroundColor: colors.brandPrimary,
     paddingHorizontal: spacing["2xl"],

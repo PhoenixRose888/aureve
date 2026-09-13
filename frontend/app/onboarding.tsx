@@ -7,7 +7,6 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
-import { useAuth } from "@/src/context/AuthContext";
 
 type Slide = { icon: React.ReactNode; title: string; body: string };
 
@@ -32,7 +31,6 @@ const VALUE_SLIDES: Slide[] = [
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { guestLogin } = useAuth();
   const { width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
@@ -52,16 +50,13 @@ export default function Onboarding() {
     router.replace("/login");
   };
 
-  // Finish onboarding → spin up a guest session and fade into Home.
+  // Finish onboarding → create a normal free account.
   const enterApp = async () => {
     if (entering) return;
     setEntering(true);
     await storage.setItem("aureve_onboarded", true);
-    try {
-      await guestLogin();
-    } catch {}
-    const go = () => router.replace("/(tabs)");
-    fade.value = withTiming(1, { duration: 550, easing: Easing.inOut(Easing.cubic) }, (finished) => {
+    const go = () => router.replace({ pathname: "/login", params: { mode: "signup" } });
+    fade.value = withTiming(1, { duration: 450, easing: Easing.inOut(Easing.cubic) }, (finished) => {
       if (finished) runOnJS(go)();
     });
   };
@@ -89,7 +84,7 @@ export default function Onboarding() {
               {entering && i === VALUE_SLIDES.length - 1 ? (
                 <ActivityIndicator color={colors.onSage} />
               ) : (
-                <Txt style={styles.primaryTxt}>{i === VALUE_SLIDES.length - 1 ? "Enter Aureve" : "Continue"}</Txt>
+                <Txt style={styles.primaryTxt}>{i === VALUE_SLIDES.length - 1 ? "Create Free Account" : "Continue"}</Txt>
               )}
             </Pressable>
             <Pressable style={styles.signIn} testID={`onb-skip-${i}`} onPress={finish} disabled={entering}>
@@ -108,7 +103,7 @@ export default function Onboarding() {
       </View>
 
       {/* Fade-to-cream overlay when entering the app */}
-      <Animated.View style={[styles.fadeCover, fadeStyle]} pointerEvents={entering ? "auto" : "none"} />
+      <Animated.View style={[styles.fadeCover, fadeStyle, { pointerEvents: entering ? "auto" : "none" }]} />
     </View>
   );
 }

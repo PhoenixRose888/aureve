@@ -16,7 +16,7 @@ import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, login, isGuest, signingIn, deleteAccount } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const { profiles, active } = useProfiles();
   const { premium } = usePremiumAccess();
   const initials = (user?.name || user?.email || "?")
@@ -58,11 +58,11 @@ export default function Profile() {
 
   const handleSignOut = async () => {
     await logout();
-    router.replace("/login");
+    router.replace("/welcome");
   };
   const handleSwitchAccount = async () => {
     await logout();
-    await login();
+    router.replace("/login");
   };
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -72,7 +72,7 @@ export default function Profile() {
     try {
       await deleteAccount();
       setConfirmDelete(false);
-      router.replace("/login");
+      router.replace("/welcome");
     } catch {
       setDeleting(false);
     }
@@ -99,18 +99,16 @@ export default function Profile() {
               <Txt style={styles.avatarInitials}>{initials}</Txt>
             </View>
             <View style={{ flex: 1 }}>
-              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{isGuest ? "Guest" : (user?.name || "Your account")}</Display>
-              {!isGuest && user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
+              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{user?.name || "Your account"}</Display>
+              {user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
               <View style={premium ? styles.badgePremium : styles.badgeFree}>
                 <Feather name={premium ? "award" : "user"} size={11} color={premium ? colors.onSage : colors.onSurfaceSecondary} />
-                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : isGuest ? "Guest mode" : "Free plan"}</Txt>
+                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : "Free plan"}</Txt>
               </View>
             </View>
-            {!isGuest && (
-              <Pressable onPress={handleSignOut} testID="logout-button" hitSlop={10}>
-                <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            )}
+            <Pressable onPress={handleSignOut} testID="logout-button" hitSlop={10}>
+              <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
+            </Pressable>
           </View>
 
           <View style={styles.metricRow}>
@@ -132,27 +130,6 @@ export default function Profile() {
         </View>
 
         <View style={styles.body}>
-          {isGuest && (
-            <Pressable
-              style={styles.guestCard}
-              testID="guest-backup-cta"
-              onPress={login}
-              disabled={signingIn}
-            >
-              <View style={styles.guestIcon}>
-                <Feather name="cloud" size={20} color={colors.onSage} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Txt style={styles.guestTitle}>Back up your wardrobe</Txt>
-                <Txt style={styles.guestBody}>You&apos;re exploring as a guest. Sign in with Google and everything you&apos;ve added moves to your account.</Txt>
-              </View>
-              {signingIn ? (
-                <ActivityIndicator color={colors.sage} />
-              ) : (
-                <Feather name="chevron-right" size={18} color={colors.sage} />
-              )}
-            </Pressable>
-          )}
           {/* Style profile */}
           <Pressable style={styles.styleProfileCta} testID="open-style-profile" onPress={() => router.push("/profile-edit")}>
             <View style={styles.spIcon}>
@@ -226,16 +203,19 @@ export default function Profile() {
           {/* Account */}
           <View style={styles.section}>
             <Txt style={styles.sectionTitle}>ACCOUNT</Txt>
-            {!isGuest && (
-              <Pressable style={styles.acctRow} testID="switch-account" onPress={handleSwitchAccount}>
-                <Feather name="repeat" size={18} color={colors.onSurface} />
-                <Txt style={styles.acctTxt}>Switch account</Txt>
-                <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            )}
+            <Pressable style={styles.acctRow} testID="how-aureve-works" onPress={() => router.push("/tour")}>
+              <Feather name="help-circle" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>How Aureve Works</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
+            <Pressable style={styles.acctRow} testID="switch-account" onPress={handleSwitchAccount}>
+              <Feather name="repeat" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>Switch account</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
             <Pressable style={styles.acctRow} testID="sign-out" onPress={handleSignOut}>
               <Feather name="log-out" size={18} color={colors.error} />
-              <Txt style={[styles.acctTxt, { color: colors.error }]}>{isGuest ? "Exit guest mode" : "Sign out"}</Txt>
+              <Txt style={[styles.acctTxt, { color: colors.error }]}>Sign out</Txt>
               <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
             </Pressable>
           </View>
@@ -258,13 +238,11 @@ export default function Profile() {
               <Txt style={styles.acctTxt}>Terms of Service</Txt>
               <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
             </Pressable>
-            {!isGuest && (
-              <Pressable style={styles.acctRow} testID="delete-account" onPress={() => setConfirmDelete(true)}>
-                <Feather name="trash-2" size={18} color={colors.error} />
-                <Txt style={[styles.acctTxt, { color: colors.error }]}>Delete my account</Txt>
-                <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            )}
+            <Pressable style={styles.acctRow} testID="delete-account" onPress={() => setConfirmDelete(true)}>
+              <Feather name="trash-2" size={18} color={colors.error} />
+              <Txt style={[styles.acctTxt, { color: colors.error }]}>Delete my account</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
           </View>
 
           <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
@@ -342,22 +320,6 @@ const styles = StyleSheet.create({
   addInput: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm },
   addBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  guestCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: colors.brandTertiary,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  guestIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.sage,
-    alignItems: "center", justifyContent: "center",
-  },
-  guestTitle: { fontSize: 15, fontFamily: fonts.displayMedium, color: colors.onBrandTertiary, marginBottom: 2 },
-  guestBody: { fontSize: 12.5, color: colors.onBrandTertiary, opacity: 0.8, lineHeight: 17 },
   styleProfileCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   spIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   spTitle: { fontSize: 15, color: colors.onSurface },

@@ -11,6 +11,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
 import GarmentImage from "@/src/components/GarmentImage";
 import * as haptics from "@/src/utils/haptics";
+import { storage } from "@/src/utils/storage";
 
 function weatherIcon(code?: number) {
   if (code == null) return "cloud";
@@ -102,6 +103,15 @@ export default function Home() {
   }, [wearCheck]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Brand-new accounts get the short first-run tour once.
+  React.useEffect(() => {
+    let cancelled = false;
+    storage.getItem<boolean>("aureve_tour_pending", false).then((pending) => {
+      if (pending && !cancelled) router.push("/tour");
+    });
+    return () => { cancelled = true; };
+  }, [router]);
 
   const onRefresh = async () => {
     setRefreshing(true);
