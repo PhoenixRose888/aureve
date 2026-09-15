@@ -264,9 +264,9 @@ export default function ProfileEdit() {
         />
 
         <View style={styles.beautyBlock}>
-          <Txt style={styles.groupLabel}>HAIR & MAKEUP</Txt>
+          <Txt style={styles.groupLabel}>HAIR</Txt>
           <Txt style={styles.beautyIntro}>
-            Get hair and makeup tuned to your skin tone and undertone — colour theory, not guesswork.
+            Hairstyles picked for the occasion, your outfit’s neckline and the weather.
           </Txt>
           <Pressable style={styles.beautyBtn} testID="open-beauty-from-profile" onPress={goBeauty} disabled={goingBeauty}>
             {goingBeauty ? (
@@ -274,7 +274,7 @@ export default function ProfileEdit() {
             ) : (
               <>
                 <Feather name="feather" size={17} color={colors.onBrandTertiary} />
-                <Txt style={styles.beautyBtnTxt}>Get my hair & makeup</Txt>
+                <Txt style={styles.beautyBtnTxt}>Get my hairstyles</Txt>
               </>
             )}
           </Pressable>

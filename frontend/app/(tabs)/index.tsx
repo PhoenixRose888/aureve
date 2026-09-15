@@ -7,8 +7,11 @@ import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius, fonts } from "@/src/theme";
 import { useWeather } from "@/src/hooks/useWeather";
 import { api } from "@/src/api/client";
+import { useAuth } from "@/src/context/AuthContext";
+import { useProfiles } from "@/src/context/ProfileContext";
 import GarmentImage from "@/src/components/GarmentImage";
 import * as haptics from "@/src/utils/haptics";
+import { storage } from "@/src/utils/storage";
 
 function weatherIcon(code?: number) {
   if (code == null) return "cloud";
@@ -65,6 +68,11 @@ export default function Home() {
   const [itemCount, setItemCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [growDismissed, setGrowDismissed] = useState(false);
+  const [wearCheck, setWearCheck] = useState<any>(null);
+  const { user } = useAuth();
+  const { active } = useProfiles();
+  // Prefer the wardrobe/profile name, then the account name — first name only.
+  const firstName = String(active?.name || user?.name || "").trim().split(/\s+/)[0] || "";
 
   const load = useCallback(async () => {
     try {
@@ -72,9 +80,38 @@ export default function Home() {
       setOutfits(Array.isArray(o) ? o.slice(0, 8) : []);
       setItemCount(Array.isArray(items) ? items.length : 0);
     } catch {}
+    // Ask about YESTERDAY in the user's own local calendar day.
+    try {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      const localYesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const res = await api<any>(`/wear/pending?date=${localYesterday}`);
+      setWearCheck(res?.pending ? res : null);
+    } catch {}
   }, []);
 
+  const answerWearCheck = useCallback(async (wore: boolean) => {
+    const pending = wearCheck;
+    setWearCheck(null);
+    if (!pending) return;
+    try {
+      await api("/wear/confirm", {
+        method: "POST",
+        body: { date: pending.date, item_ids: pending.item_ids, wore },
+      });
+    } catch {}
+  }, [wearCheck]);
+
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Brand-new accounts get the short first-run tour once.
+  React.useEffect(() => {
+    let cancelled = false;
+    storage.getItem<boolean>("aureve_tour_pending", false).then((pending) => {
+      if (pending && !cancelled) router.push("/tour");
+    });
+    return () => { cancelled = true; };
+  }, [router]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -103,6 +140,30 @@ export default function Home() {
         contentContainerStyle={{ paddingTop: insets.top + spacing.sm, paddingBottom: spacing["3xl"] + 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.onSurface} />}
       >
+        {wearCheck ? (
+          <View style={styles.wearCheck} testID="wear-checkin">
+            <Txt style={styles.wearCheckTxt}>
+              Quick check-in — did you wear yesterday&apos;s look
+              {wearCheck.occasion ? ` for ${wearCheck.occasion}` : ""}?
+            </Txt>
+            <View style={styles.wearCheckBtns}>
+              <Pressable style={styles.wearYes} testID="wear-checkin-yes" onPress={() => answerWearCheck(true)}>
+                <Txt style={styles.wearYesTxt}>Yes</Txt>
+              </Pressable>
+              <Pressable style={styles.wearNo} testID="wear-checkin-no" onPress={() => answerWearCheck(false)}>
+                <Txt style={styles.wearNoTxt}>No</Txt>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Internal week planner (separate from Google Calendar) */}
+        <Pressable style={styles.weekBtn} testID="home-plan-week" onPress={() => router.push("/planner")}>
+          <Feather name="calendar" size={16} color={colors.onSurface} />
+          <Txt style={styles.weekTxt}>Plan Your Week</Txt>
+          <Feather name="chevron-right" size={16} color={colors.onSurfaceTertiary} />
+        </Pressable>
+
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.weatherCluster}>
@@ -121,7 +182,9 @@ export default function Home() {
         </View>
 
         <View style={styles.greetBlock}>
-          <Display weight="semibold" style={styles.greeting}>{greeting()}</Display>
+          <Display weight="semibold" style={styles.greeting}>
+            {firstName ? `${greeting()}, ${firstName}` : greeting()}
+          </Display>
           {status === "done" && weather ? (
             <Txt style={styles.suggestion} testID="home-weather-suggestion">{stylingRecommendation(weather)}</Txt>
           ) : status === "loading" ? (
@@ -222,6 +285,22 @@ const styles = StyleSheet.create({
   weatherDesc: { fontSize: 12, color: colors.onSurfaceTertiary },
   greetBlock: { paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
   greeting: { fontSize: 22, color: colors.onSurface },
+  weekBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.sm,
+    marginHorizontal: spacing.xl, marginBottom: spacing.md, paddingHorizontal: spacing.lg,
+    height: 52, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.border,
+  },
+  weekTxt: { flex: 1, fontSize: 15, color: colors.onSurface },
+  wearCheck: {
+    marginHorizontal: spacing.xl, marginBottom: spacing.md, padding: spacing.lg,
+    borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, gap: spacing.md,
+  },
+  wearCheckTxt: { fontSize: 14, color: colors.onSurface, lineHeight: 20 },
+  wearCheckBtns: { flexDirection: "row", gap: spacing.sm },
+  wearYes: { flex: 1, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  wearYesTxt: { color: colors.onBrandPrimary, fontSize: 14 },
+  wearNo: { flex: 1, height: 40, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  wearNoTxt: { color: colors.onSurface, fontSize: 14 },
   suggestion: { fontSize: 13.5, color: colors.onSurfaceSecondary, marginTop: 3, lineHeight: 19 },
   growBanner: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginHorizontal: spacing.lg, marginBottom: spacing.md },
   growTitle: { fontSize: 14, color: colors.onBrandTertiary, fontFamily: fonts.displayMedium },

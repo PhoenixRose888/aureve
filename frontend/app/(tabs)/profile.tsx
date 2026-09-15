@@ -12,12 +12,11 @@ import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import { useAuth } from "@/src/context/AuthContext";
 import { useProfiles } from "@/src/context/ProfileContext";
 import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
-import GarmentImage from "@/src/components/GarmentImage";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, login, isGuest, signingIn, deleteAccount } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const { profiles, active } = useProfiles();
   const { premium } = usePremiumAccess();
   const initials = (user?.name || user?.email || "?")
@@ -27,15 +26,16 @@ export default function Profile() {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-  const [data, setData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Only the small header counts (pieces / looks) use this — the analytics
+  // dashboard that used to live further down this page is gone.
+  const [data, setData] = useState<any>(null);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [calConnected, setCalConnected] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const d = await api<any>("/insights");
-      setData(d);
+      setData(await api<any>("/insights"));
     } catch {}
     try {
       const s = await api<any>("/calendar/status");
@@ -55,15 +55,14 @@ export default function Profile() {
     setRefreshing(false);
   };
 
-  const unworn = data ? (data.least_worn || []).filter((i: any) => (i.wear_count || 0) === 0) : [];
 
   const handleSignOut = async () => {
     await logout();
-    router.replace("/login");
+    router.replace("/welcome");
   };
   const handleSwitchAccount = async () => {
     await logout();
-    await login();
+    router.replace("/login");
   };
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -73,7 +72,7 @@ export default function Profile() {
     try {
       await deleteAccount();
       setConfirmDelete(false);
-      router.replace("/login");
+      router.replace("/welcome");
     } catch {
       setDeleting(false);
     }
@@ -93,25 +92,23 @@ export default function Profile() {
               <Display weight="semibold" style={styles.pageTitle}>Profile</Display>
               <BrandMark />
             </View>
-            <Txt style={styles.pageSub}>Your wardrobe, insights and preferences — all in one place.</Txt>
+            <Txt style={styles.pageSub}>Your wardrobe, your style profile and your preferences.</Txt>
           </View>
           <View style={styles.accountCard}>
             <View style={styles.avatarLg}>
               <Txt style={styles.avatarInitials}>{initials}</Txt>
             </View>
             <View style={{ flex: 1 }}>
-              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{isGuest ? "Guest" : (user?.name || "Your account")}</Display>
-              {!isGuest && user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
+              <Display weight="medium" style={styles.accountNameLg} numberOfLines={1}>{user?.name || "Your account"}</Display>
+              {user?.email ? <Txt style={styles.accountEmail} numberOfLines={1}>{user.email}</Txt> : null}
               <View style={premium ? styles.badgePremium : styles.badgeFree}>
                 <Feather name={premium ? "award" : "user"} size={11} color={premium ? colors.onSage : colors.onSurfaceSecondary} />
-                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : isGuest ? "Guest mode" : "Free plan"}</Txt>
+                <Txt style={premium ? styles.badgePremiumTxt : styles.badgeFreeTxt}>{premium ? "Premium" : "Free plan"}</Txt>
               </View>
             </View>
-            {!isGuest && (
-              <Pressable onPress={handleSignOut} testID="logout-button" hitSlop={10}>
-                <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            )}
+            <Pressable onPress={handleSignOut} testID="logout-button" hitSlop={10}>
+              <Feather name="log-out" size={20} color={colors.onSurfaceTertiary} />
+            </Pressable>
           </View>
 
           <View style={styles.metricRow}>
@@ -133,27 +130,6 @@ export default function Profile() {
         </View>
 
         <View style={styles.body}>
-          {isGuest && (
-            <Pressable
-              style={styles.guestCard}
-              testID="guest-backup-cta"
-              onPress={login}
-              disabled={signingIn}
-            >
-              <View style={styles.guestIcon}>
-                <Feather name="cloud" size={20} color={colors.onSage} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Txt style={styles.guestTitle}>Back up your wardrobe</Txt>
-                <Txt style={styles.guestBody}>You&apos;re exploring as a guest. Sign in with Google and everything you&apos;ve added moves to your account.</Txt>
-              </View>
-              {signingIn ? (
-                <ActivityIndicator color={colors.sage} />
-              ) : (
-                <Feather name="chevron-right" size={18} color={colors.sage} />
-              )}
-            </Pressable>
-          )}
           {/* Style profile */}
           <Pressable style={styles.styleProfileCta} testID="open-style-profile" onPress={() => router.push("/profile-edit")}>
             <View style={styles.spIcon}>
@@ -163,8 +139,8 @@ export default function Profile() {
               <Txt style={styles.spTitle}>Your style profile</Txt>
               <Txt style={styles.spSub}>
                 {active?.profile && Object.keys(active.profile).length > 0
-                  ? "Measurements, colouring & hair/makeup — tap to edit"
-                  : "Add measurements & colouring for fits + hair & makeup"}
+                  ? "Measurements, colouring & hairstyles — tap to edit"
+                  : "Add measurements & colouring for better fit advice"}
               </Txt>
             </View>
             <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />
@@ -224,95 +200,22 @@ export default function Profile() {
             {!premium ? <Feather name="lock" size={16} color={colors.onSurfaceTertiary} /> : <Feather name="chevron-right" size={20} color={colors.onSurfaceTertiary} />}
           </Pressable>
 
-          {/* Shopping Intelligence — wardrobe gap analysis lives inside */}
-          <Pressable
-            style={styles.missingCard}
-            testID="shopping-intelligence-profile"
-            onPress={() => router.push(premium ? "/shop" : "/premium")}
-          >
-            <Txt style={styles.missingKicker}>SHOPPING INTELLIGENCE</Txt>
-            <Display weight="medium" style={styles.missingTitle}>
-              Buy smarter, not more
-            </Display>
-            <Txt style={styles.missingReason}>
-              Check something before you buy it, or let Aureve read your wardrobe and suggest what would actually add the most outfits.
-            </Txt>
-            <View style={styles.missingRedo}>
-              <Txt style={styles.missingRedoTxt}>{premium ? "Open Shopping Intelligence" : "Unlock with Premium"}</Txt>
-              <Feather name={premium ? "arrow-right" : "lock"} size={14} color={colors.brandTertiary} />
-            </View>
-          </Pressable>
-
-          {/* Confidence scores */}
-          {data?.avg_confidence != null && (
-            <View style={styles.section}>
-              <Txt style={styles.sectionTitle}>HOW YOUR OUTFITS FEEL</Txt>
-              <Bar label="Flattering" value={data.avg_flattering} />
-              <Bar label="Comfort" value={data.avg_comfort} />
-              <Bar label="Confidence" value={data.avg_confidence} />
-            </View>
-          )}
-
-          {/* Category breakdown */}
-          {data?.categories && Object.keys(data.categories).length > 0 && (
-            <View style={styles.section}>
-              <Txt style={styles.sectionTitle}>WHAT YOU OWN</Txt>
-              {Object.entries(data.categories)
-                .sort((a: any, b: any) => b[1] - a[1])
-                .map(([cat, count]: any) => {
-                  const max = Math.max(...Object.values(data.categories).map((v: any) => v));
-                  return (
-                    <View key={cat} style={styles.catRow}>
-                      <Txt style={styles.catName}>{cat}</Txt>
-                      <View style={styles.catBarTrack}>
-                        <View style={[styles.catBarFill, { width: `${(count / max) * 100}%` }]} />
-                      </View>
-                      <Txt style={styles.catCount}>{count}</Txt>
-                    </View>
-                  );
-                })}
-            </View>
-          )}
-
-          {/* Most worn */}
-          {data?.most_worn?.some((i: any) => (i.wear_count || 0) > 0) && (
-            <RankList title="MOST WORN" items={data.most_worn.filter((i: any) => (i.wear_count || 0) > 0)} router={router} />
-          )}
-
-          {/* Wardrobe health — unworn */}
-          {unworn.length > 0 && (
-            <View style={styles.section}>
-              <Txt style={styles.sectionTitle}>WARDROBE HEALTH</Txt>
-              <View style={styles.healthCard}>
-                <Feather name="rotate-ccw" size={18} color={colors.brand} />
-                <Txt style={styles.healthTxt}>
-                  You have not worn {unworn.length} {unworn.length === 1 ? "piece" : "pieces"} yet. Style them, sell, or donate to keep your wardrobe lean.
-                </Txt>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.xl, marginTop: spacing.md }}>
-                {unworn.map((it: any) => (
-                  <Pressable key={it.id} style={styles.simCard} onPress={() => router.push(`/item/${it.id}`)}>
-                    <GarmentImage photo={it.photo} category={it.category} style={styles.simImg} iconSize={18} />
-                    <Txt style={styles.simName} numberOfLines={1}>{it.name}</Txt>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Account */}
           <View style={styles.section}>
             <Txt style={styles.sectionTitle}>ACCOUNT</Txt>
-            {!isGuest && (
-              <Pressable style={styles.acctRow} testID="switch-account" onPress={handleSwitchAccount}>
-                <Feather name="repeat" size={18} color={colors.onSurface} />
-                <Txt style={styles.acctTxt}>Switch account</Txt>
-                <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            )}
+            <Pressable style={styles.acctRow} testID="how-aureve-works" onPress={() => router.push("/tour")}>
+              <Feather name="help-circle" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>How Aureve Works</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
+            <Pressable style={styles.acctRow} testID="switch-account" onPress={handleSwitchAccount}>
+              <Feather name="repeat" size={18} color={colors.onSurface} />
+              <Txt style={styles.acctTxt}>Switch account</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
             <Pressable style={styles.acctRow} testID="sign-out" onPress={handleSignOut}>
               <Feather name="log-out" size={18} color={colors.error} />
-              <Txt style={[styles.acctTxt, { color: colors.error }]}>{isGuest ? "Exit guest mode" : "Sign out"}</Txt>
+              <Txt style={[styles.acctTxt, { color: colors.error }]}>Sign out</Txt>
               <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
             </Pressable>
           </View>
@@ -335,13 +238,11 @@ export default function Profile() {
               <Txt style={styles.acctTxt}>Terms of Service</Txt>
               <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
             </Pressable>
-            {!isGuest && (
-              <Pressable style={styles.acctRow} testID="delete-account" onPress={() => setConfirmDelete(true)}>
-                <Feather name="trash-2" size={18} color={colors.error} />
-                <Txt style={[styles.acctTxt, { color: colors.error }]}>Delete my account</Txt>
-                <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
-              </Pressable>
-            )}
+            <Pressable style={styles.acctRow} testID="delete-account" onPress={() => setConfirmDelete(true)}>
+              <Feather name="trash-2" size={18} color={colors.error} />
+              <Txt style={[styles.acctTxt, { color: colors.error }]}>Delete my account</Txt>
+              <Feather name="chevron-right" size={18} color={colors.onSurfaceTertiary} />
+            </Pressable>
           </View>
 
           <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
@@ -361,11 +262,6 @@ export default function Profile() {
             </View>
           </Modal>
 
-          {!data || data.total_items === 0 ? (
-            <View style={styles.empty}>
-              <Txt style={styles.emptyTxt}>Add clothes and log what you wear to unlock insights.</Txt>
-            </View>
-          ) : null}
         </View>
       </ScrollView>
 
@@ -379,37 +275,6 @@ function Metric({ value, label }: { value: any; label: string }) {
     <View style={styles.metric}>
       <Display weight="medium" style={styles.metricValue}>{value}</Display>
       <Txt style={styles.metricLabel}>{label}</Txt>
-    </View>
-  );
-}
-
-function Bar({ label, value }: { label: string; value: number }) {
-  const pct = Math.max(0, Math.min(1, (value || 0) / 5)) * 100;
-  return (
-    <View style={styles.barRow}>
-      <Txt style={styles.barLabel}>{label}</Txt>
-      <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${pct}%` }]} />
-      </View>
-      <Txt style={styles.barVal}>{value?.toFixed(1)}</Txt>
-    </View>
-  );
-}
-
-function RankList({ title, items, router }: { title: string; items: any[]; router: any }) {
-  return (
-    <View style={styles.section}>
-      <Txt style={styles.sectionTitle}>{title}</Txt>
-      {items.map((it, i) => (
-        <Pressable key={it.id} style={styles.rankRow} onPress={() => router.push(`/item/${it.id}`)}>
-          <Txt style={styles.rankNum}>{i + 1}</Txt>
-          <GarmentImage photo={it.photo} category={it.category} style={styles.rankImg} iconSize={16} />
-          <View style={{ flex: 1 }}>
-            <Txt style={styles.rankName} numberOfLines={1}>{it.name}</Txt>
-            <Txt style={styles.rankMeta}>{it.wear_count} wears{it.price ? ` · $${(it.price / it.wear_count).toFixed(2)}/wear` : ""}</Txt>
-          </View>
-        </Pressable>
-      ))}
     </View>
   );
 }
@@ -455,22 +320,6 @@ const styles = StyleSheet.create({
   addInput: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.onSurface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm },
   addBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  guestCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: colors.brandTertiary,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  guestIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.sage,
-    alignItems: "center", justifyContent: "center",
-  },
-  guestTitle: { fontSize: 15, fontFamily: fonts.displayMedium, color: colors.onBrandTertiary, marginBottom: 2 },
-  guestBody: { fontSize: 12.5, color: colors.onBrandTertiary, opacity: 0.8, lineHeight: 17 },
   styleProfileCta: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.lg },
   spIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
   spTitle: { fontSize: 15, color: colors.onSurface },

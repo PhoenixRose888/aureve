@@ -15,8 +15,9 @@ import { storage } from "@/src/utils/storage";
 import WelcomeDecor from "@/src/components/WelcomeDecor";
 
 /**
- * First-launch welcome screen. Shown once, then never again (gated by the
- * `aureve_launched` flag). Get Started begins onboarding.
+ * Welcome / account screen. Shown whenever there is no valid session (fresh
+ * install, sign-out or a new device). Start Free runs the normal free account
+ * sign-up; Log In returns existing members.
  */
 export default function Welcome() {
   const router = useRouter();
@@ -35,21 +36,24 @@ export default function Welcome() {
     transform: [{ translateY: ty.value }],
   }));
 
-  const getStarted = async () => {
+  const startFree = async () => {
     await storage.setItem("aureve_launched", true);
     router.replace("/onboarding");
   };
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.content, aStyle, { paddingTop: insets.top + height * 0.16 }]}>
+      <Animated.View style={[styles.content, aStyle, { paddingTop: insets.top + height * 0.14 }]}>
         {/* Official Aureve wordmark — upper third */}
         <Txt style={styles.wordmark}>Aureve</Txt>
 
         <View style={{ flex: 1 }} />
 
-        <Txt style={styles.headline}>Your AI Personal Stylist</Txt>
-        <Txt style={styles.support}>Create smarter outfits from the clothes you already own.</Txt>
+        <Txt style={styles.headline}>Welcome to Aureve</Txt>
+        <Txt style={styles.tagline}>Your wardrobe. Your style. Your personal stylist.</Txt>
+        <Txt style={styles.support}>
+          Add your wardrobe, discover new combinations and see what Aureve can do with the clothes you already own.
+        </Txt>
 
         <View style={{ flex: 1.5 }} />
       </Animated.View>
@@ -58,8 +62,12 @@ export default function Welcome() {
       <WelcomeDecor />
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.xl }]}>
-        <Pressable style={styles.cta} testID="welcome-get-started" onPress={getStarted}>
-          <Txt style={styles.ctaTxt}>Get Started</Txt>
+        <Txt style={styles.footerLabel}>New to Aureve?</Txt>
+        <Pressable style={styles.cta} testID="welcome-start-free" onPress={startFree}>
+          <Txt style={styles.ctaTxt}>Start Free</Txt>
+        </Pressable>
+        <Pressable style={styles.secondary} testID="welcome-log-in" onPress={() => router.push("/login")}>
+          <Txt style={styles.secondaryTxt}>Already have an account? Log In</Txt>
         </Pressable>
       </View>
     </View>
@@ -83,15 +91,28 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     textAlign: "center",
   },
-  support: {
+  tagline: {
     fontSize: 15,
-    color: colors.onSurfaceSecondary,
+    color: colors.onSurface,
     textAlign: "center",
     lineHeight: 22,
+    marginTop: spacing.sm,
+  },
+  support: {
+    fontSize: 14,
+    color: colors.onSurfaceSecondary,
+    textAlign: "center",
+    lineHeight: 21,
     marginTop: spacing.md,
     paddingHorizontal: spacing.md,
   },
   footer: { paddingHorizontal: spacing.xl },
+  footerLabel: {
+    fontSize: 13,
+    color: colors.onSurfaceSecondary,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
   cta: {
     alignSelf: "stretch",
     backgroundColor: colors.sage,
@@ -101,4 +122,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ctaTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayBold },
+  secondary: {
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  secondaryTxt: {
+    fontSize: 14,
+    color: colors.onSurface,
+    fontFamily: fonts.body,
+    textDecorationLine: "underline",
+  },
 });

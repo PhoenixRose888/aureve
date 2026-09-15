@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 33 — verified the 5 user-reported bug fixes on branch recovery-implementation-2026-09-10. BACKEND (5/5 pytest passed): (1) GET /api/dressme/context — with a plan for YESTERDAY only, probing with `date=TODAY` returns has_context=false; probing with `date=YESTERDAY` returns has_context=true, source='plan', label carrying the plan's title/occasion. Yesterday's plan no longer leaks into today's context (UTC+10/+11 fix). (2) POST /api/dressme — with `local_date=TODAY` while only a yesterday plan exists, response.occasion_used never contains the yesterday plan's occasion and response.from_plan is null; with `local_date=YESTERDAY` it may use that plan; an explicit `occasion` in the body ALWAYS wins over any plan for that date. (3) Feedback tone — POST /api/outfit/feedback on a formal-top + sporty-shoes clash produced verdict+feedback that either names a problem, offers a swap/addition, or is not a hollow compliment (verified via regex over verdict+feedback). (4) Same-slot swap guard from iteration 31 still holds — any returned swap has _norm(out_item.category) == _norm(in_item.category) AND out_id in submitted ids; swap and addition never both present. FRONTEND (Expo web, 390x844, reviewer login): (a) HOME shows the new 'Plan Your Week' button (testID home-plan-week) and tapping it routes to /planner which renders 'The week ahead' with 7 date rows. (b) MY OUTFITS: testID `outfits-view-calendar` is GONE and no 'View Calendar' text is rendered anywhere on the screen — the old button has been fully removed. (c) DRESS ME on the reviewer account (no plan for today): does NOT auto-generate (no dressme-item-0 rendered), shows the 'What are you doing today?' prompt (testID dressme-activity) with all chips; tapping the 'Work' chip fires POST /api/dressme with body `{\"temperature\":27.7,\"weather\":\"Clear sky\",\"local_date\":\"2026-09-11\",\"occasion\":\"Work\"}` — local_date IS present. (d) WARDROBE subfilters — created 6 test items (bodysuit, halterneck, silk cami, cotton t-shirt, ribbed knit top, bustier) via API, all appeared under Tops>All, and each landed in exactly the expected chip: Bodysuits, Halter / Crop tops, Singlets / Camis, T-shirts, Knit tops, Bustiers / Corsets. The bodysuit is visible under Tops (never demoted to Outerwear); the halter top is under Halter / Crop tops and NOT under Other. Cleanup completed via /items/bulk-delete (6 deleted).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Wardrobe > Tops subfilter chips", "issue": "Two entries render for `subfilter-chip-T-shirts` (and would for `subfilter-chip-Blouses / Shirts` when both rules match) because SUB_RULES.Tops contains duplicate labels ('T-shirts' at index 3 & 8, 'Blouses / Shirts' at index 4 & 7). This produces a React 'Encountered two children with the same key' warning and a duplicate testID/chip in the row. Fix: dedupe `subOptions` — e.g. `Array.from(new Set([...(SUB_RULES[filter]||[]).map(r=>r.label), 'Other'])).filter(...)`. Reference: /app/frontend/app/(tabs)/wardrobe.tsx:133", "testID": "subfilter-chip-T-shirts", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration33_local_date_and_feedback.py",
+    "/app/test_reports/pytest/pytest_iteration33.xml"
+  ],
+  "action_items": [
+    "Dedupe SUB_RULES labels in /app/frontend/app/(tabs)/wardrobe.tsx (line 133): apply `Array.from(new Set(labels))` before the count filter so 'T-shirts' and 'Blouses / Shirts' render as a single chip with a single testID. Currently renders twice when the extra rule (\\btop\\b|long sleeve|short sleeve for T-shirts, wrap top|peplum|smock|tunic for Blouses/Shirts) also matches at least one item — reproducible today with any t-shirt in the wardrobe."
+  ],
+  "critical_code_review_comments": [
+    "server.py:2081-2095 dressme_context — accepts YYYY-MM-DD `date` query param, validates via regex, falls back to UTC only when missing/malformed. Correct.",
+    "server.py:2098-2129 dress_me — uses payload.local_date with regex validation, otherwise UTC. `occasion` override still wins because it's read before the plan lookup. `from_plan` returned only when the plan for the resolved date supplied the occasion. Correct.",
+    "server.py:2650-2668 OUTFIT_FEEDBACK_SYSTEM — prompt now explicitly forbids opening with a hollow compliment and instructs the model to name colour/formality/season/proportion problems and to keep additions out of `swap`. Guardrail at 2703-2729 still strips cross-category swaps and surfaces them as `addition` with swap=null.",
+    "frontend/app/(tabs)/dressme.tsx L48-105 — sends `local_date` from the DEVICE (constructed as YYYY-MM-DD from `new Date()` locals), probes /dressme/context with that same date on mount, and holds the 'What are you doing today?' prompt when has_context is false or the probe rejects. Guard `if (!activity && !hasContext.current) { setAskActivity(true); return; }` prevents inventing an occasion.",
+    "frontend/app/(tabs)/wardrobe.tsx L26-40 displayCategory — the top-word regex (bodysuit|leotard|…|blouse|button-up|button-down) hard-stops the Outerwear demotion for obvious tops. `vest top` is separately routed back to Tops. Correct.",
+    "frontend/app/(tabs)/wardrobe.tsx L42-77 SUB_RULES + primarySub — first-match wins ensures each item lands under exactly one chip; unmatched -> 'Other'. Fine as-is except for the duplicate-label chip issue noted above."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration33_local_date_and_feedback.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 pytest passed)",
+    "frontend": "100% on the 4 flows tested (plan-week home button, view-calendar removed, dressme prompt+local_date, wardrobe subfilter classification)"
+  },
+  "seed_data_creation": "Created 6 temporary reviewer items via POST /api/items (TEST33_Black knit bodysuit, TEST33_Ivory halterneck top, TEST33_Cream silk cami, TEST33_White cotton t-shirt, TEST33_Navy ribbed knit top, TEST33_Burgundy bustier). All 6 deleted at end of run via /api/items/bulk-delete (response: {\"deleted\":6}, leftover=0). Backend test also creates+deletes a yesterday plan on the seeded (test-session-token-aura-123) account within the test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All five user-reported bugs are fixed and verified. Only outstanding item: subfilter chip label duplication in wardrobe.tsx L133 — cosmetic, causes a duplicate 'T-shirts · N' chip and a React duplicate-key warning when a t-shirt is present. Fix is a one-line dedupe. If you retest, seed the same 6 items above and click each subfilter chip. Do NOT need to re-run backend suite unless server changes touch /dressme/context, /dressme, or /outfit/feedback. Reviewer login flow on this Metro/web env: welcome-get-started -> onb-skip-0 -> login-email/login-password -> email-submit, then navigate via tab-bar text (Home/Dress Me/Wardrobe/Outfits/Profile) rather than page.goto reloads (AsyncStorage is in-memory only on this web build).",
+  "rca_of_issue": "N/A — all fixes were already applied by main agent. Verification-only iteration. Duplicate T-shirts chip is a new (pre-existing) minor UI issue surfaced by the wider testing coverage, not caused by this iteration's fixes."
+}

@@ -6,16 +6,21 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import BrandMark from "@/src/components/BrandMark";
-import { colors, spacing, radius, fonts, CATEGORIES } from "@/src/theme";
+import { colors, spacing, radius, fonts } from "@/src/theme";
 import { api } from "@/src/api/client";
 import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import { useProfiles } from "@/src/context/ProfileContext";
 import GarmentImage from "@/src/components/GarmentImage";
 import WardrobeSwitcher from "@/src/components/WardrobeSwitcher";
+import { FILTERS, SUB_RULES, SUB_ORDER, displayCategory, primarySub } from "@/src/utils/taxonomy";
 
 const GUTTER = spacing.md;
 
-const FILTERS = ["All", ...CATEGORIES];
+// Remembered between visits so opening a piece and coming back lands you where
+// you left off rather than at the top of the catalogue.
+let lastFilter = FILTERS[0];
+let lastSub: string | null = null;
+let lastOffset = 0;
 
 const EMPTY_IMG =
   "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd2FyZHJvYmUlMjBjbG90aGluZyUyMHJhY2t8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85";
@@ -28,7 +33,10 @@ export default function Wardrobe() {
   const { width } = useWindowDimensions();
   const COL_W = (width - spacing.xl * 2 - GUTTER) / 2;
   const [items, setItems] = useState<any[]>([]);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState(lastFilter);
+  const [sub, setSub] = useState<string | null>(lastSub);
+  const listRef = React.useRef<FlatList<any>>(null);
+  const restored = React.useRef(false);
   const [loading, setLoading] = useState(true);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -36,8 +44,8 @@ export default function Wardrobe() {
   const [deleting, setDeleting] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await api<any[]>("/items");
       setItems(data);
@@ -47,13 +55,47 @@ export default function Wardrobe() {
 
   useFocusEffect(
     useCallback(() => {
+      // Coming back from an item: keep the grid mounted (no loading flash) and
+      // allow the saved scroll offset to be restored again.
+      restored.current = false;
       // Wait until the active profile is resolved so /items is always scoped to
       // the correct profile (never a null-header fallback to the default one).
-      if (!profileLoading) load();
-    }, [load, profileLoading, active?.id])
+      if (!profileLoading) load(items.length > 0);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [load, profileLoading])
   );
 
-  const filtered = filter === "All" ? items : items.filter((i) => i.category === filter);
+  const byCategory = items.filter((i) => displayCategory(i) === filter);
+  // Only offer chips that actually hold something — "Other" is never shown.
+  const subCounts = new Map<string, number>();
+  if (SUB_RULES[filter]) {
+    for (const i of byCategory) {
+      const label = primarySub(i, filter);
+      subCounts.set(label, (subCounts.get(label) || 0) + 1);
+    }
+  }
+  const subOptions = Array.from(
+    new Set(SUB_ORDER[filter] || (SUB_RULES[filter] || []).map((r) => r.label))
+  ).filter((label) => (subCounts.get(label) || 0) > 0);
+  const filtered = sub ? byCategory.filter((i) => primarySub(i, filter) === sub) : byCategory;
+
+  const chooseFilter = (f: string) => {
+    setFilter(f);
+    setSub(null);
+    lastFilter = f;
+    lastSub = null;
+    lastOffset = 0;
+    restored.current = true;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
+  const chooseSub = (label: string) => {
+    const next = sub === label ? null : label;
+    setSub(next);
+    lastSub = next;
+    lastOffset = 0;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
 
   const exitSelect = () => {
     setSelectMode(false);
@@ -86,12 +128,6 @@ export default function Wardrobe() {
       testID={`wardrobe-item-${item.id}`}
       style={[styles.card, { width: COL_W, marginRight: index % 2 === 0 ? GUTTER : 0 }]}
       onPress={() => (selectMode ? toggle(item.id) : router.push(`/item/${item.id}`))}
-      onLongPress={() => {
-        if (!selectMode) {
-          setSelectMode(true);
-          setSelected([item.id]);
-        }
-      }}
     >
       <GarmentImage photo={item.photo} fallbackPhoto={item.worn_photo} category={item.category} style={[styles.cardImg, { width: COL_W, height: COL_W * 1.3 }, selectMode && isSel && styles.cardImgSelected]} iconSize={28} testID={`wardrobe-img-${item.id}`} />
       {selectMode && (
@@ -101,12 +137,14 @@ export default function Wardrobe() {
       )}
       {(item.pairs_count || 0) > 0 && (
         <View style={styles.pairsBadge}>
-          <Txt style={styles.pairsBadgeTxt}>Pairs with {item.pairs_count}</Txt>
+          <Txt style={styles.pairsBadgeTxt}>
+            Pairs with {item.pairs_count} {item.pairs_count === 1 ? "piece" : "pieces"}
+          </Txt>
         </View>
       )}
       <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
       <Txt style={styles.cardMeta} numberOfLines={1}>
-        {item.brand ? `${item.brand} · ` : ""}{item.category}
+        {item.brand ? `${item.brand} · ` : ""}{displayCategory(item)}
       </Txt>
     </Pressable>
     );
@@ -175,13 +213,37 @@ export default function Wardrobe() {
                 key={f}
                 testID={`filter-chip-${f}`}
                 style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setFilter(f)}
+                onPress={() => chooseFilter(f)}
               >
                 <Txt style={[styles.chipTxt, active && styles.chipTxtActive]}>{f}</Txt>
               </Pressable>
             );
           })}
         </ScrollView>
+
+        {subOptions.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subContent}
+          >
+            {subOptions.map((label) => {
+              const on = sub === label;
+              return (
+                <Pressable
+                  key={label}
+                  testID={`subfilter-chip-${label}`}
+                  style={[styles.subChip, on && styles.subChipActive]}
+                  onPress={() => chooseSub(label)}
+                >
+                  <Txt style={[styles.subChipTxt, on && styles.subChipTxtActive]}>
+                    {label} · {subCounts.get(label)}
+                  </Txt>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
       </View>
 
       {!selectMode && (
@@ -207,15 +269,19 @@ export default function Wardrobe() {
         <ScrollView contentContainerStyle={styles.emptyWrap}>
           <Image source={{ uri: EMPTY_IMG }} style={styles.emptyImg} contentFit="cover" />
           <Display weight="semibold" style={styles.emptyTitle}>
-            {filter === "All" ? "Your wardrobe is a blank canvas" : `No ${filter.toLowerCase()} yet`}
+            {items.length === 0 ? "Your wardrobe is ready when you are" : `No ${filter.toLowerCase()} yet`}
           </Display>
-          <Txt style={styles.emptySub}>Snap or upload a photo to catalogue your first piece.</Txt>
+          <Txt style={styles.emptySub}>Add your clothes to start getting personalised outfits.</Txt>
           <Pressable style={styles.emptyBtn} testID="wardrobe-empty-add" onPress={() => router.push("/add-item")}>
-            <Txt style={styles.emptyBtnTxt}>Add first piece</Txt>
+            <Txt style={styles.emptyBtnTxt}>Add Item</Txt>
+          </Pressable>
+          <Pressable style={styles.emptyBtnAlt} testID="wardrobe-empty-bulk" onPress={() => router.push("/bulk-add")}>
+            <Txt style={styles.emptyBtnAltTxt}>Bulk Add</Txt>
           </Pressable>
         </ScrollView>
       ) : (
         <FlatList
+          ref={listRef}
           data={filtered}
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
@@ -223,6 +289,13 @@ export default function Wardrobe() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={{ justifyContent: "flex-start" }}
+          onScroll={(e) => { lastOffset = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={80}
+          onContentSizeChange={() => {
+            if (restored.current || lastOffset <= 0) return;
+            restored.current = true;
+            listRef.current?.scrollToOffset({ offset: lastOffset, animated: false });
+          }}
         />
       )}
 
@@ -239,7 +312,7 @@ export default function Wardrobe() {
             </Txt>
             <Pressable style={styles.deleteBtn} testID="confirm-bulk-delete" onPress={deleteSelected} disabled={deleting}>
               {deleting ? (
-                <ActivityIndicator color={colors.onError} />
+                <ActivityIndicator color={colors.onSurfaceInverse} />
               ) : (
                 <Txt style={styles.deleteTxt}>Delete</Txt>
               )}
@@ -311,6 +384,14 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   selectDotOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  subContent: { gap: spacing.sm, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  subChip: {
+    height: 30, paddingHorizontal: spacing.md, borderRadius: radius.pill,
+    borderWidth: 0.5, borderColor: colors.border, alignItems: "center", justifyContent: "center",
+  },
+  subChipActive: { backgroundColor: colors.surfaceSecondary, borderColor: colors.borderStrong },
+  subChipTxt: { fontSize: 12, color: colors.onSurfaceTertiary },
+  subChipTxtActive: { color: colors.onSurface },
   switcherChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4, minHeight: 28 },
   switcherTxt: { fontSize: 12, letterSpacing: 1, color: colors.onSurfaceSecondary, textTransform: "uppercase" },
   switcherCount: {
@@ -329,7 +410,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 22, marginBottom: spacing.sm },
   sheetSub: { fontSize: 14, color: colors.onSurfaceSecondary, marginBottom: spacing.xl, lineHeight: 20 },
   deleteBtn: { backgroundColor: colors.error, height: 52, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
-  deleteTxt: { color: colors.onError, fontSize: 15 },
+  deleteTxt: { color: colors.onSurfaceInverse, fontSize: 15 },
   keepBtn: { alignItems: "center", paddingVertical: spacing.md, marginTop: spacing.sm },
   keepTxt: { fontSize: 15, color: colors.onSurfaceTertiary },
   placeholder: { alignItems: "center", justifyContent: "center" },
@@ -373,6 +454,15 @@ const styles = StyleSheet.create({
   emptyImg: { width: "100%", height: 260, borderRadius: radius.md, marginBottom: spacing.xl },
   emptyTitle: { fontSize: 20, textAlign: "center", marginBottom: spacing.sm, letterSpacing: -0.3 },
   emptySub: { fontSize: 14, color: colors.onSurfaceSecondary, textAlign: "center", marginBottom: spacing.xl },
+  emptyBtnAlt: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing["2xl"],
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  emptyBtnAltTxt: { color: colors.onSurface, fontSize: 15, fontFamily: fonts.displayMedium },
   emptyBtn: {
     backgroundColor: colors.brandPrimary,
     paddingHorizontal: spacing["2xl"],

@@ -14,6 +14,7 @@ import { diag } from "@/src/utils/diag";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
 import GarmentImage from "@/src/components/GarmentImage";
+import { SUB_ORDER, primarySub } from "@/src/utils/taxonomy";
 
 type Photos = { photo?: string; worn_photo?: string };
 
@@ -27,6 +28,7 @@ export default function AddItem() {
   const [origPhoto, setOrigPhoto] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Tops");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [colour, setColour] = useState("");
   const [fabric, setFabric] = useState("");
   const [pattern, setPattern] = useState("");
@@ -43,6 +45,8 @@ export default function AddItem() {
   const [analyzing, setAnalyzing] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [lowConf, setLowConf] = useState(false);
+  const [photoWarn, setPhotoWarn] = useState("");
+  const [showTips, setShowTips] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
@@ -62,6 +66,8 @@ export default function AddItem() {
         setPhotos({ photo: it.photo, worn_photo: it.worn_photo });
         setName(it.name || "");
         setCategory(it.category || "Tops");
+        const derived = primarySub(it, it.category || "Tops");
+        setSubcategory(it.subcategory || (derived && derived !== "Other" ? derived : null));
         setColour(it.colour || "");
         setFabric(it.fabric || "");
         setPattern(it.pattern || "");
@@ -125,6 +131,8 @@ export default function AddItem() {
         }
       }
       setAnalyzing(false);
+      // Cleanup is independent of recognition: tidy the hanging photo either way.
+      if (!worn) runClean(base64);
       if (!res) return;
       const r = res.analysis || {};
       diag("analyze.done", { name: r.name, category: r.category, confidence: r.confidence });
@@ -134,10 +142,19 @@ export default function AddItem() {
         return;
       }
       if (r.name && !name) setName(r.name);
-      if (r.category && CATEGORIES.includes(r.category)) setCategory(r.category);
+      if (r.category && CATEGORIES.includes(r.category)) {
+        setCategory(r.category);
+        setSubcategory(null);
+      }
       // Real-world photos: if the AI is unsure, keep its best guess but ask the
       // user to confirm the category rather than silently trusting it.
       setLowConf(typeof r.confidence === "number" && r.confidence < 60);
+      // Soft, non-blocking: the photo may not represent the garment faithfully.
+      setPhotoWarn(
+        String(r.photo_quality || "").toLowerCase() === "poor"
+          ? r.photo_quality_note || "Lighting or shadows may be affecting the colour or detail."
+          : ""
+      );
       if (r.colour) setColour(r.colour);
       if (r.fabric) setFabric(r.fabric);
       if (r.pattern) setPattern(r.pattern);
@@ -146,9 +163,6 @@ export default function AddItem() {
       setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
       setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
       haptics.success();
-      // Tidy the hanging photo in the background once details are filled in.
-      // Worn photos are kept exactly as shot (they show the item on a person).
-      if (!worn) runClean(base64);
     },
     [name, runClean]
   );
@@ -182,6 +196,8 @@ export default function AddItem() {
     const body: any = {
       name: finalName,
       category,
+      // "" clears a previous correction so classification goes back to auto.
+      subcategory: subcategory || "",
       colour,
       fabric,
       pattern,
@@ -196,6 +212,8 @@ export default function AddItem() {
       condition,
       price: price ? parseFloat(price) : null,
       photo: photos.photo || null,
+      // Keep the untouched upload internally when the photo was cleaned up.
+      orig_photo: origPhoto || null,
       worn_photo: photos.worn_photo || null,
       flatters,
     };
@@ -297,6 +315,36 @@ export default function AddItem() {
           </View>
         ) : null}
 
+        {photoWarn ? (
+          <View style={styles.warnCard} testID="photo-quality-warning">
+            <Txt style={styles.warnTitle}>This photo may not show the item accurately</Txt>
+            <Txt style={styles.warnTxt}>
+              I&apos;ve done my best with the image, but {photoWarn.charAt(0).toLowerCase() + photoWarn.slice(1)}
+            </Txt>
+            <View style={styles.warnBtns}>
+              <Pressable
+                style={styles.warnPrimary}
+                testID="photo-warn-retake"
+                onPress={() => { setPhotoWarn(""); setPickerTarget("photo"); }}
+              >
+                <Txt style={styles.warnPrimaryTxt}>Retake photo</Txt>
+              </Pressable>
+              <Pressable style={styles.warnGhost} testID="photo-warn-keep" onPress={() => setPhotoWarn("")}>
+                <Txt style={styles.warnGhostTxt}>Keep this one</Txt>
+              </Pressable>
+            </View>
+            <Pressable testID="photo-warn-tips" onPress={() => setShowTips((t) => !t)} hitSlop={8}>
+              <Txt style={styles.warnLink}>{showTips ? "Hide photo tips" : "Photo tips"}</Txt>
+            </Pressable>
+            {showTips ? (
+              <Txt style={styles.warnTips}>
+                Use even natural light · avoid direct sun and harsh shadows · use a contrasting background ·
+                keep the whole item visible
+              </Txt>
+            ) : null}
+          </View>
+        ) : null}
+
         <PhotoTips />
 
         {duplicates.length > 0 ? (
@@ -333,11 +381,34 @@ export default function AddItem() {
         ) : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
           {CATEGORIES.map((c) => (
-            <Pressable key={c} testID={`cat-${c}`} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
+            <Pressable
+              key={c}
+              testID={`cat-${c}`}
+              style={[styles.chip, category === c && styles.chipActive]}
+              onPress={() => { if (c !== category) { setCategory(c); setSubcategory(null); } }}
+            >
               <Txt style={[styles.chipTxt, category === c && styles.chipTxtActive]}>{c}</Txt>
             </Pressable>
           ))}
         </ScrollView>
+
+        {SUB_ORDER[category] ? (
+          <>
+            <Txt style={styles.groupLabel}>SUBCATEGORY</Txt>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
+              {SUB_ORDER[category].map((sc) => (
+                <Pressable
+                  key={sc}
+                  testID={`sub-${sc}`}
+                  style={[styles.chip, subcategory === sc && styles.chipActive]}
+                  onPress={() => setSubcategory(subcategory === sc ? null : sc)}
+                >
+                  <Txt style={[styles.chipTxt, subcategory === sc && styles.chipTxtActive]}>{sc}</Txt>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
 
         <View style={styles.row2}>
           <Field label="Colour" value={colour} onChangeText={setColour} placeholder="Cream" flex testID="field-colour" />
@@ -446,6 +517,19 @@ const styles = StyleSheet.create({
   revertPill: { position: "absolute", bottom: 6, right: 6, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brandPrimary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill },
   revertTxt: { color: colors.onBrandPrimary, fontSize: 10 },
   error: { color: colors.error, fontSize: 13, flex: 1, lineHeight: 18 },
+  warnCard: {
+    marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.sm, padding: spacing.lg, gap: spacing.sm,
+  },
+  warnTitle: { fontSize: 14, color: colors.onSurface },
+  warnTxt: { fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  warnBtns: { flexDirection: "row", gap: spacing.sm },
+  warnPrimary: { flex: 1, height: 42, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  warnPrimaryTxt: { color: colors.onBrandPrimary, fontSize: 14 },
+  warnGhost: { flex: 1, height: 42, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  warnGhostTxt: { color: colors.onSurface, fontSize: 14 },
+  warnLink: { fontSize: 13, color: colors.brand },
+  warnTips: { fontSize: 12, color: colors.onSurfaceTertiary, lineHeight: 18 },
   errorRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg },
   retryBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,

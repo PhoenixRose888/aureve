@@ -13,8 +13,8 @@ const FEATURES = [
   "Unlimited AI styling & outfits",
   "Dress Me — one tap every morning",
   "Shopping Intelligence (skip duplicates)",
-  "Colour analysis + hair & makeup",
-  "Capsule wardrobes & occasion planning",
+  "Occasion-aware hairstyle advice",
+  "Occasion planning",
   "Household — one plan for everyone",
 ];
 

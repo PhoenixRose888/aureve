@@ -6,38 +6,49 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
 import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api/client";
+import { useWeather } from "@/src/hooks/useWeather";
 
 const OCCASIONS = ["Everyday", "Work", "Evening", "Wedding", "Date", "Interview"];
+const NECKLINES = ["Not sure", "High / crew", "V-neck", "Strapless", "Collared", "Halter", "Scoop"];
+const LENGTHS = ["Not sure", "Short", "Mid-length", "Long"];
+const TYPES = ["Not sure", "Straight", "Wavy", "Curly", "Coily"];
 
-export default function Beauty() {
+export default function Hair() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { weather, status } = useWeather();
   const [occasion, setOccasion] = useState("Everyday");
+  const [neckline, setNeckline] = useState("Not sure");
+  const [length, setLength] = useState("Not sure");
+  const [hairType, setHairType] = useState("Not sure");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
-  const [needsProfile, setNeedsProfile] = useState(false);
 
   const generate = useCallback(async () => {
     setLoading(true);
     setError("");
-    setNeedsProfile(false);
     setResult(null);
     try {
-      const r = await api<any>("/beauty/suggest", { method: "POST", body: { occasion } });
-      setResult(r);
+      const body: any = { occasion };
+      if (neckline !== "Not sure") body.neckline = neckline;
+      if (length !== "Not sure") body.hair_length = length;
+      if (hairType !== "Not sure") body.hair_type = hairType;
+      if (weather && status === "done") {
+        body.temperature = weather.temperature;
+        body.weather = weather.description;
+      }
+      setResult(await api<any>("/beauty/suggest", { method: "POST", body }));
     } catch (e: any) {
-      const msg = e.message || "Couldn't generate recommendations";
       if (e.status === 402) {
         router.push("/premium");
         setLoading(false);
         return;
       }
-      if (msg.toLowerCase().includes("skin tone")) setNeedsProfile(true);
-      setError(msg);
+      setError(e.message || "Couldn't generate hairstyles");
     }
     setLoading(false);
-  }, [occasion, router]);
+  }, [occasion, neckline, length, hairType, weather, status, router]);
 
   return (
     <View style={styles.container}>
@@ -45,102 +56,59 @@ export default function Beauty() {
         <Pressable onPress={() => router.back()} testID="beauty-back" hitSlop={12}>
           <Feather name="arrow-left" size={24} color={colors.onSurface} />
         </Pressable>
-        <Txt style={styles.headerKicker}>HAIR & MAKEUP</Txt>
+        <Txt style={styles.headerKicker}>HAIR</Txt>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Display weight="semibold" style={styles.title}>Beauty for your colouring</Display>
-        <Txt style={styles.sub}>Hair and makeup tuned to your skin tone and undertone — colour theory, not guesswork.</Txt>
+        <Display weight="semibold" style={styles.title}>How to wear your hair</Display>
+        <Txt style={styles.sub}>
+          Hairstyles chosen for the occasion, your outfit&apos;s neckline and the weather.
+        </Txt>
 
-        <Txt style={styles.groupLabel}>OCCASION</Txt>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
-          {OCCASIONS.map((o) => (
-            <Pressable
-              key={o}
-              testID={`beauty-occasion-${o}`}
-              style={[styles.chip, occasion === o && styles.chipActive]}
-              onPress={() => setOccasion(o)}
-            >
-              <Txt style={[styles.chipTxt, occasion === o && styles.chipTxtActive]}>{o}</Txt>
-            </Pressable>
-          ))}
-        </ScrollView>
+        <Chips label="OCCASION" options={OCCASIONS} value={occasion} onChange={setOccasion} testPrefix="beauty-occasion" />
+        <Chips label="OUTFIT NECKLINE" options={NECKLINES} value={neckline} onChange={setNeckline} testPrefix="hair-neckline" />
+        <Chips label="HAIR LENGTH" options={LENGTHS} value={length} onChange={setLength} testPrefix="hair-length" />
+        <Chips label="HAIR TYPE" options={TYPES} value={hairType} onChange={setHairType} testPrefix="hair-type" />
 
         <Pressable style={styles.genBtn} testID="beauty-generate" onPress={generate} disabled={loading}>
           {loading ? (
             <ActivityIndicator color={colors.onBrandPrimary} />
           ) : (
-            <Txt style={styles.genTxt}>{result ? "Regenerate" : "Get my hair & makeup"}</Txt>
+            <Txt style={styles.genTxt}>{result ? "Try other styles" : "Get my hairstyles"}</Txt>
           )}
         </Pressable>
 
         {loading && (
           <View style={styles.center}>
-            <Txt style={styles.loadingTxt}>Analysing your colouring…</Txt>
+            <Txt style={styles.loadingTxt}>Working out what suits…</Txt>
           </View>
         )}
 
         {error && !loading ? (
           <View style={styles.errorBox}>
             <Txt style={styles.errorTxt} testID="beauty-error">{error}</Txt>
-            {needsProfile && (
-              <Pressable style={styles.profileBtn} testID="beauty-open-profile" onPress={() => router.push("/profile-edit")}>
-                <Feather name="user" size={15} color={colors.onBrandPrimary} />
-                <Txt style={styles.profileBtnTxt}>Add skin tone & undertone</Txt>
-              </Pressable>
-            )}
           </View>
         ) : null}
 
         {result && !loading ? (
           <View testID="beauty-result">
-            <Txt style={styles.summary}>{result.summary}</Txt>
+            {result.summary ? <Txt style={styles.summary}>{result.summary}</Txt> : null}
 
-            {result.palette?.length > 0 && (
-              <View style={styles.section}>
-                <Txt style={styles.sectionTitle}>YOUR COLOURS</Txt>
-                <View style={styles.paletteWrap}>
-                  {result.palette.map((c: string, i: number) => (
-                    <View key={i} style={styles.paletteChip}>
-                      <Txt style={styles.paletteTxt}>{c}</Txt>
-                    </View>
-                  ))}
-                </View>
+            {(result.styles || []).map((st: any, i: number) => (
+              <View key={i} style={styles.styleCard}>
+                <Txt style={styles.styleName}>{st.name}</Txt>
+                {st.why ? <Txt style={styles.styleWhy}>{st.why}</Txt> : null}
+                {st.how ? <Txt style={styles.styleHow}>{st.how}</Txt> : null}
               </View>
-            )}
+            ))}
 
-            {result.makeup && (
-              <View style={styles.section}>
-                <Txt style={styles.sectionTitle}>MAKEUP</Txt>
-                <Row label="Base" text={result.makeup.foundation} />
-                <Row label="Blush" text={result.makeup.blush} />
-                <Row label="Lip" text={result.makeup.lip} />
-                <Row label="Eye" text={result.makeup.eye} />
-                {result.makeup.tip ? <Tip text={result.makeup.tip} /> : null}
+            {result.tip ? (
+              <View style={styles.tipRow}>
+                <Feather name="info" size={13} color={colors.onSurfaceTertiary} />
+                <Txt style={styles.tipTxt}>{result.tip}</Txt>
               </View>
-            )}
-
-            {result.hair && (
-              <View style={styles.section}>
-                <Txt style={styles.sectionTitle}>HAIR</Txt>
-                <Row label="Colour" text={result.hair.colour} />
-                <Row label="Style" text={result.hair.style} />
-                {result.hair.tip ? <Tip text={result.hair.tip} /> : null}
-              </View>
-            )}
-
-            {result.avoid?.length > 0 && (
-              <View style={styles.section}>
-                <Txt style={styles.sectionTitle}>WORTH AVOIDING</Txt>
-                {result.avoid.map((a: string, i: number) => (
-                  <View key={i} style={styles.avoidRow}>
-                    <Feather name="x" size={14} color={colors.warning} />
-                    <Txt style={styles.avoidTxt}>{a}</Txt>
-                  </View>
-                ))}
-              </View>
-            )}
+            ) : null}
 
             {result.occasion_note ? (
               <View style={styles.noteCard}>
@@ -155,22 +123,35 @@ export default function Beauty() {
   );
 }
 
-function Row({ label, text }: { label: string; text?: string }) {
-  if (!text) return null;
+function Chips({
+  label,
+  options,
+  value,
+  onChange,
+  testPrefix,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  testPrefix: string;
+}) {
   return (
-    <View style={styles.row}>
-      <Txt style={styles.rowLabel}>{label}</Txt>
-      <Txt style={styles.rowTxt}>{text}</Txt>
-    </View>
-  );
-}
-
-function Tip({ text }: { text: string }) {
-  return (
-    <View style={styles.tipRow}>
-      <Feather name="info" size={13} color={colors.onSurfaceTertiary} />
-      <Txt style={styles.tipTxt}>{text}</Txt>
-    </View>
+    <>
+      <Txt style={styles.groupLabel}>{label}</Txt>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
+        {options.map((o) => (
+          <Pressable
+            key={o}
+            testID={`${testPrefix}-${o}`}
+            style={[styles.chip, value === o && styles.chipActive]}
+            onPress={() => onChange(o)}
+          >
+            <Txt style={[styles.chipTxt, value === o && styles.chipTxtActive]}>{o}</Txt>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </>
   );
 }
 
@@ -193,21 +174,16 @@ const styles = StyleSheet.create({
   loadingTxt: { color: colors.onSurfaceTertiary, fontSize: 13, fontStyle: "italic" },
   errorBox: { marginTop: spacing.xl, gap: spacing.md },
   errorTxt: { color: colors.onSurfaceSecondary, fontSize: 14, lineHeight: 20 },
-  profileBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, height: 48, borderRadius: radius.sm, backgroundColor: colors.brandPrimary },
-  profileBtnTxt: { color: colors.onBrandPrimary, fontSize: 15 },
   summary: { fontSize: 18, color: colors.onSurface, lineHeight: 26, marginTop: spacing.xl, fontStyle: "italic" },
-  section: { marginTop: spacing["2xl"] },
-  sectionTitle: { fontSize: 11, letterSpacing: 1.5, color: colors.onSurfaceTertiary, marginBottom: spacing.md },
-  paletteWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  paletteChip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary },
-  paletteTxt: { fontSize: 13, color: colors.onSurface, textTransform: "capitalize" },
-  row: { marginBottom: spacing.lg },
-  rowLabel: { fontSize: 11, letterSpacing: 1, color: colors.onSurfaceTertiary, marginBottom: 3 },
-  rowTxt: { fontSize: 15, color: colors.onSurface, lineHeight: 22 },
-  tipRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", marginTop: spacing.xs },
+  styleCard: {
+    marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.md, padding: spacing.lg, gap: 4,
+  },
+  styleName: { fontSize: 16, color: colors.onSurface },
+  styleWhy: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20 },
+  styleHow: { fontSize: 13, color: colors.onSurfaceTertiary, lineHeight: 19 },
+  tipRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", marginTop: spacing.lg },
   tipTxt: { flex: 1, fontSize: 13, color: colors.onSurfaceTertiary, lineHeight: 19, fontStyle: "italic" },
-  avoidRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", marginBottom: spacing.sm },
-  avoidTxt: { flex: 1, fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20 },
   noteCard: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start", backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing["2xl"] },
   noteTxt: { flex: 1, fontSize: 14, color: colors.onBrandTertiary, lineHeight: 21 },
 });

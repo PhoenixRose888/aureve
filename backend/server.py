@@ -51,9 +51,13 @@ REVIEWER_EMAIL = (os.environ.get('REVIEWER_EMAIL', 'review@aureve.app') or '').s
 APPLE_AUDIENCES = [a.strip() for a in os.environ.get('APPLE_AUDIENCES', '').split(',') if a.strip()]
 _APPLE_JWK_CLIENT = None
 
-GCAL_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '')
-GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '')
-GCAL_REDIRECT_URI = os.environ.get('GOOGLE_CALENDAR_REDIRECT_URI', '')
+# .strip() so a stray space/newline in the deployed env can't break the token
+# exchange (Google returns invalid_client for a padded id/secret).
+GCAL_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip().strip('"').strip("'")
+GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip().strip('"').strip("'")
+GCAL_REDIRECT_URI = os.environ.get('GOOGLE_CALENDAR_REDIRECT_URI', '').strip()
+# Last callback failure (reason only, never a secret) for the read-only diagnostic.
+GCAL_LAST_ERROR: dict = {}
 GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 
 # Premium membership — one-time payment grants a time-boxed entitlement (whole household).
@@ -184,6 +188,17 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
     ).sort("created_at", 1).to_list(1)
     is_primary = bool(primary) and primary[0]["id"] == prof["id"]
     account_premium = is_premium(account)
+
+    is_guest = bool(account.get("is_guest"))
+    is_reviewer = _norm_email(account.get("email") or "") == REVIEWER_EMAIL
+    show_demo = is_guest
+    if is_reviewer and not is_guest:
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        show_demo = real_item_count == 0
+
     return {
         "user_id": prof["id"],       # data scope = profile id
         "account_id": account_id,
@@ -193,9 +208,7 @@ async def get_scope(x_profile_id: Optional[str] = Header(None),
         "is_primary": is_primary,
         "account_premium": account_premium,
         "premium": account_premium and is_primary,
-        # Sample/practice pieces belong to Guest mode and the Apple review
-        # account only — never to a real signed-in wardrobe.
-        "show_demo": bool(account.get("is_guest")) or _norm_email(account.get("email") or "") == REVIEWER_EMAIL,
+        "show_demo": show_demo,
     }
 
 
@@ -228,7 +241,7 @@ def is_premium(account: dict) -> bool:
 
 PREMIUM_MESSAGES = {
     "stylist": "You've used your 5 free AI stylist sessions this month. Go Premium for unlimited styling.",
-    "beauty": "Colour analysis is 1/month on Free. Go Premium for unlimited analyses.",
+    "beauty": "Hair styling is 1/month on Free. Go Premium for unlimited hair recommendations.",
     "packing": "The Packing Assistant is a Premium feature.",
     "capsule": "Capsule wardrobes are a Premium feature.",
     "shop": "Shopping Intelligence is a Premium feature.",
@@ -306,79 +319,6 @@ async def migrate_guest_data(guest_token: str, account_id: str):
     # Retire the guest user + all its sessions.
     await db.users.delete_one({"user_id": guest_id})
     await db.user_sessions.delete_many({"user_id": guest_id})
-
-
-async def seed_demo_wardrobe(profile_id: str):
-    """Populate a fresh guest profile with a curated demo wardrobe so Dress Me
-    and the wardrobe feel alive immediately. Items are flagged demo:True."""
-    try:
-        from demo_wardrobe import DEMO_ITEMS
-    except Exception as e:
-        logger.warning(f"Demo wardrobe unavailable: {e}")
-        return
-    now = now_utc().isoformat()
-    docs = []
-    for g in DEMO_ITEMS:
-        docs.append({
-            "id": new_id("item"),
-            "user_id": profile_id,
-            "name": g["name"],
-            "category": g["category"],
-            "colour": g.get("colour", ""),
-            "fabric": g.get("fabric", ""),
-            "season": g.get("season", "All"),
-            "pattern": "",
-            "style": g.get("style", ""),
-            "sleeve_length": "",
-            "formality": g.get("formality", ""),
-            "tone": g.get("tone", ""),
-            "fit_notes": "",
-            "brand": "",
-            "size": "",
-            "price": None,
-            "condition": "",
-            "availability": "Ready",
-            "photo": g["photo"],
-            "worn_photo": None,
-            "flatters": g.get("flatters", True),
-            "wear_count": 0,
-            "last_worn": None,
-            "created_at": now,
-            "demo": True,
-        })
-    if docs:
-        await db.items.insert_many(docs)
-
-
-@api_router.post("/auth/guest")
-async def create_guest():
-    """Mint a transient guest user + bearer session so people can explore, add
-    items and use AI immediately without signing in. Data migrates to their
-    real account on Google sign-in."""
-    user_id = new_id("guest")
-    session_token = "guest_" + secrets.token_urlsafe(32)
-    await db.users.insert_one({
-        "user_id": user_id,
-        "email": f"{user_id}@guest.aureve.local",
-        "name": "Guest",
-        "is_guest": True,
-        "created_at": now_utc().isoformat(),
-    })
-    await db.user_sessions.update_one(
-        {"session_token": session_token},
-        {"$set": {
-            "session_token": session_token,
-            "user_id": user_id,
-            "expires_at": now_utc() + timedelta(days=7),
-            "created_at": now_utc(),
-        }},
-        upsert=True,
-    )
-    # Give the guest a ready-to-explore wardrobe.
-    prof = await ensure_default_profile(user_id, "Guest")
-    await seed_demo_wardrobe(prof["id"])
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    return {"session_token": session_token, "user": user}
 
 
 @api_router.post("/auth/session")
@@ -935,7 +875,7 @@ async def terms_page():
 <p>Use Aureve for your personal styling only. Do not upload unlawful content, attempt to disrupt the service, or misuse the AI features.</p>
 
 <h2>Styling &amp; AI suggestions</h2>
-<p>Outfit, hair, makeup and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate &mdash; use your own judgement.</p>
+<p>Outfit, hair and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate &mdash; use your own judgement.</p>
 
 <h2>Subscriptions &amp; payments</h2>
 <p>Some features may require a paid subscription. Billing, renewals and refunds are handled by the store or payment provider you purchase through (Apple, Google, or Stripe), subject to their terms.</p>
@@ -1207,7 +1147,7 @@ async def delete_profile(profile_id: str, account: dict = Depends(get_current_us
     if count <= 1:
         raise HTTPException(status_code=400, detail="You need at least one profile")
     # Remove the profile and its wardrobe data
-    for coll in (db.items, db.outfits, db.wear_logs, db.plans):
+    for coll in (db.items, db.outfits, db.wear_logs, db.plans, db.style_suggestions):
         await coll.delete_many({"user_id": profile_id})
     await db.body_photos.delete_one({"profile_id": profile_id})
     await db.profiles.delete_one({"id": profile_id, "user_id": account["user_id"]})
@@ -1229,6 +1169,8 @@ async def update_profile(payload: ProfileUpdate, scope: dict = Depends(get_scope
 class ItemCreate(BaseModel):
     name: str
     category: str
+    # User-corrected subcategory (presentation filter). "" = classify automatically.
+    subcategory: Optional[str] = ""
     colour: Optional[str] = ""
     fabric: Optional[str] = ""
     season: Optional[str] = "All"
@@ -1243,8 +1185,9 @@ class ItemCreate(BaseModel):
     price: Optional[float] = None
     condition: Optional[str] = ""
     availability: Optional[str] = "Ready"  # Ready | Dirty | Washing | Drying
-    photo: Optional[str] = None        # base64 (hanging)
-    worn_photo: Optional[str] = None   # base64 (worn)
+    photo: Optional[str] = None        # base64 (hanging, cleaned when available)
+    orig_photo: Optional[str] = None   # base64 (original upload, kept internally)
+    worn_photo: Optional[str] = None   # base64 (worn — never altered)
     flatters: Optional[bool] = None
 
     @field_validator("price", mode="before")
@@ -1258,6 +1201,7 @@ class ItemCreate(BaseModel):
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     colour: Optional[str] = None
     fabric: Optional[str] = None
     season: Optional[str] = None
@@ -1481,6 +1425,32 @@ ANALYZE_SYSTEM = (
     "Return a strict JSON object. Keys: name (short descriptive name, e.g. 'Purple oversized sunglasses'), "
     "category (ALWAYS your best guess from exactly: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery — "
     "sunglasses/hats/belts/scarves = Accessories; rings/necklaces/earrings/watches = Jewellery; never leave blank), "
+    "Identify the SPECIFIC garment type and let it win over general appearance — never decide from sleeve "
+    "length, colour, height or silhouette alone. Jumpsuits, playsuits and rompers are one-piece garments: "
+    "call them a jumpsuit and file them under Tops (Aureve groups them with bodysuits). High-top sneakers "
+    "are sneakers, not boots. Wedge sandals are sandals, not heels. Sweatshirts and hoodies are jumpers "
+    "(Outerwear); a leather jacket is a jacket; a blazer is a blazer; a cardigan is a cardigan. "
+    "For bags, name the carry style from the construction, not from the presence of a strap: two shoulder "
+    "straps worn on the back = backpack; a single long strap on a small essentials bag = crossbody; a "
+    "structured bag carried by hand/arm/shoulder (it may have a shoulder strap) = handbag; a small bag held "
+    "in the hand for evening = clutch; a structured document/work bag = briefcase. "
+    "IMPORTANT for tops: bodysuits/leotards/jumpsuits (one-piece garments that fasten through the crotch), "
+    "corsets/bustiers, camisoles, singlets, halter tops, cropped tops, polo shirts and "
+    "vests/waistcoats are ALL category Tops — never "
+    "Dresses or Outerwear. Always state the actual garment type in the name (e.g. 'Black long-sleeve "
+    "bodysuit', 'Ivory halterneck top', 'Cream silk camisole', 'White cotton t-shirt', 'Navy poplin shirt', "
+    "'Green pique polo shirt', 'Grey wool waistcoat', 'Black ribbed singlet', 'Blue denim shorts', "
+    "'Beige trench coat', 'Tan leather loafers', 'Black leather crossbody bag', 'Gold hoop earrings'). "
+    "Use the plain garment word a shopper would use — never a vague name like 'top' or 'shoes' when a "
+    "specific type (t-shirt, polo, blouse, shirt, cami, singlet, vest, jeans, leggings, skirt, shorts, "
+    "blazer, cardigan, jumper, coat, jacket, sneakers, boots, heels, flats, sandals, dress shoes, "
+    "handbag, backpack, clutch, briefcase, crossbody, hat, sunglasses, scarf, tie, belt, gloves, "
+    "necklace, bracelet, earrings, ring, watch) is visible, "
+    "photo_quality (\"good\" or \"poor\" — say \"poor\" ONLY when glare, harsh shadow, blown "
+    "highlights, washed-out colour or a very dark garment blending into the background genuinely "
+    "obscures the item's real colour or detail), "
+    "photo_quality_note (empty string when good, otherwise ONE short plain sentence naming what is "
+    "affecting the photo), "
     "confidence (integer 0-100 = how sure you are of the item identity AND category; be honest — "
     "use a low number when the photo is ambiguous or the object is partly hidden), "
     "colour (primary colour word), fabric (best guess, e.g. cotton/denim/wool/linen/leather/silk/metal/plastic), "
@@ -1525,20 +1495,36 @@ async def _analyze_core(image_b64: str, category_hint: Optional[str], scope_id: 
 async def _clean_photo(image_b64: str) -> Optional[str]:
     """Background-removed, catalogue-style version of a garment photo (best-effort)."""
     instruction = (
-        "Isolate the single main clothing item in this photo and remove the background. Return the SAME "
-        "garment with its shape, colour, pattern, texture and details completely unchanged — do NOT restyle "
-        "or redesign it. Place it centred on a clean, seamless, light neutral (#F1EFEA) studio background, "
-        "flat product-catalogue style. Output only the image."
+        "Isolate the single main clothing item or accessory in this photo and remove EVERYTHING else. "
+        "Remove the coat hanger, hook, clip, peg, rail, rack, wardrobe door, mannequin, hands, furniture, "
+        "floor, wall and any other background clutter completely — no hanger hook or loop may remain. "
+        "Return the SAME item with its shape, colour, pattern, texture and details completely unchanged — "
+        "do NOT restyle, recolour or redesign it, and do not add or remove garment details. Place it centred "
+        "on a clean, seamless, light neutral (#F1EFEA) studio background, flat product-catalogue style. "
+        "Output only the image."
     )
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"clean-{uuid.uuid4().hex[:8]}",
-        system_message="You are a product-photo background remover for a clothing catalogue.",
-    ).with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
-    _text, images = await chat.send_message_multimodal_response(
-        UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
-    )
-    return compress_b64(images[0]["data"]) if images else None
+
+    async def _attempt():
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"clean-{uuid.uuid4().hex[:8]}",
+            system_message="You are a product-photo background remover for a clothing catalogue.",
+        ).with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+        _text, images = await chat.send_message_multimodal_response(
+            UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
+        )
+        return compress_b64(images[0]["data"]) if images else None
+
+    # One retry only when the first pass errors or comes back empty, so a
+    # transient failure can't leave an item permanently uncleaned.
+    try:
+        out = await _attempt()
+    except Exception as e:
+        logger.warning("clean pass 1 failed, retrying once: %s", e)
+        out = None
+    if not out:
+        out = await _attempt()
+    return out
 
 
 @api_router.post("/analyze-item")
@@ -1568,40 +1554,53 @@ def _norm(v) -> str:
 
 
 def find_similar_items(analysis: dict, items: List[dict], limit: int = 3) -> List[dict]:
-    """Flag pieces in the wardrobe that look like the one just captured, so users
-    don't unknowingly re-add something they already own. Category must match; colour,
-    style, fabric and pattern add to a confidence score."""
+    """Flag only pieces that look like the SAME garment being added twice (or a
+    near-identical second photo of it). Deliberately strict: a shared colour or
+    garment type is NOT a duplicate, because loose matching pollutes both the
+    Bulk Add warnings and Shopping Intelligence."""
     cat = _norm(analysis.get("category"))
-    if not cat:
+    colour = _norm(analysis.get("colour"))
+    if not cat or not colour:
         return []
-    colour, style = _norm(analysis.get("colour")), _norm(analysis.get("style"))
-    fabric, pattern = _norm(analysis.get("fabric")), _norm(analysis.get("pattern"))
-    scored = []
+    style, fabric = _norm(analysis.get("style")), _norm(analysis.get("fabric"))
+    pattern = _norm(analysis.get("pattern"))
+    stop = {"a", "an", "the", "new", "with", "and", "in", "of", "top", "piece"}
+    words = {w for w in re.split(r"[^a-z0-9]+", _norm(analysis.get("name"))) if len(w) > 2 and w not in stop}
+    out = []
+    def same_colour(other: str) -> bool:
+        o = _norm(other)
+        if not o:
+            return False
+        # "Rust" vs "Rust orange" is the same garment described twice.
+        return o == colour or o in colour or colour in o or o.split()[0] == colour.split()[0]
+
     for it in items:
-        if _norm(it.get("category")) != cat:
+        if _norm(it.get("category")) != cat or not same_colour(it.get("colour")):
             continue
-        score = 0
-        if colour and _norm(it.get("colour")) == colour:
-            score += 2
-        if style and _norm(it.get("style")) == style:
-            score += 2
-        if fabric and _norm(it.get("fabric")) == fabric:
-            score += 1
-        if pattern and _norm(it.get("pattern")) == pattern:
-            score += 1
-        if score >= 3:
-            scored.append((score, it))
-    scored.sort(key=lambda s: s[0], reverse=True)
-    return [
-        {
+        detail_matches = sum(
+            1 for a, b in ((style, it.get("style")), (fabric, it.get("fabric")), (pattern, it.get("pattern")))
+            if a and _norm(b) == a
+        )
+        other_words = {w for w in re.split(r"[^a-z0-9]+", _norm(it.get("name"))) if len(w) > 2 and w not in stop}
+        shared = words & other_words
+        # Same category + same colour + at least two matching descriptors +
+        # a genuinely overlapping name. Anything looser is just "similar".
+        if detail_matches < 2 or len(shared) < 2:
+            continue
+        out.append({
             "id": it["id"],
             "name": it.get("name", ""),
             "category": it.get("category", ""),
             "colour": it.get("colour", ""),
             "photo": it.get("photo"),
-        }
-        for _, it in scored[:limit]
-    ]
+            "reason": (
+                f"Same category and colour as your {it.get('name') or 'existing piece'}"
+                + (f", also {', '.join(sorted(shared))}" if shared else "")
+            ),
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 @api_router.post("/capture")
@@ -1643,6 +1642,34 @@ async def capture_item(payload: CaptureRequest, user: dict = Depends(get_scope))
 
 class CleanPhotoRequest(BaseModel):
     image: str
+
+
+@api_router.post("/items/{item_id}/clean")
+async def clean_item_photo(item_id: str, user: dict = Depends(get_scope)):
+    """Run catalogue-style background cleanup on an item that was saved with its
+    raw photo (the Bulk Add path). The original is preserved in `orig_photo`,
+    worn photos are never touched, and a failure leaves the item untouched so a
+    cleanup problem can never fail an upload."""
+    item = await db.items.find_one({"id": item_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    source = item.get("orig_photo") or item.get("photo")
+    if not source:
+        return {"cleaned": False, "reason": "no photo"}
+    if not EMERGENT_LLM_KEY:
+        return {"cleaned": False, "reason": "ai key not configured"}
+    try:
+        img = await _clean_photo(source)
+    except Exception as e:
+        logger.warning("item clean failed for %s: %s", item_id, e)
+        return {"cleaned": False, "reason": "clean failed"}
+    if not img:
+        return {"cleaned": False, "reason": "empty result"}
+    await db.items.update_one(
+        {"id": item_id, "user_id": user["user_id"]},
+        {"$set": {"photo": img, "orig_photo": source}},
+    )
+    return {"cleaned": True, "photo": img}
 
 
 @api_router.post("/clean-photo")
@@ -1704,12 +1731,56 @@ def underused_line(items: List[dict], limit: int = 10) -> str:
 
 
 async def recent_looks_line(user_id: str, limit: int = 6) -> str:
-    """Summarise the most recent outfits so the stylist doesn't rebuild them."""
+    """Summarise outfits the user actually logged as worn."""
     logs = await db.wear_logs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     combos = [",".join(lg.get("item_ids", [])) for lg in logs if lg.get("item_ids")]
     if not combos:
         return ""
     return "RECENTLY WORN combinations (do not simply rebuild these): " + " | ".join(combos) + "\n"
+
+
+async def recent_suggestions(user_id: str, source: str = "dressme", limit: int = 12) -> List[dict]:
+    """Persisted AI suggestion history. This is deliberately separate from wear_logs:
+    a suggested outfit must influence rotation without pretending it was actually worn."""
+    return await db.style_suggestions.find(
+        {"user_id": user_id, "source": source}, {"_id": 0}
+    ).sort("created_at", -1).to_list(limit)
+
+
+def recent_suggestions_line(history: List[dict]) -> str:
+    combos = [",".join(x.get("item_ids", [])) for x in history if x.get("item_ids")]
+    if not combos:
+        return ""
+    counts = {}
+    for row in history:
+        for iid in row.get("item_ids", []):
+            counts[iid] = counts.get(iid, 0) + 1
+    repeated = [iid for iid, n in sorted(counts.items(), key=lambda kv: kv[1], reverse=True) if n >= 2][:12]
+    extra = f" Frequently suggested item ids to strongly deprioritise: {','.join(repeated)}." if repeated else ""
+    return (
+        "RECENTLY SUGGESTED combinations (do not repeat these, even if they were never logged as worn): "
+        + " | ".join(combos) + extra + "\n"
+    )
+
+
+async def record_style_suggestion(user_id: str, source: str, occasion: str, item_ids: List[str]):
+    ids = [i for i in item_ids if i]
+    if not ids:
+        return
+    await db.style_suggestions.insert_one({
+        "id": new_id("sugg"),
+        "user_id": user_id,
+        "source": source,
+        "occasion": occasion or "",
+        "item_ids": ids,
+        "created_at": now_utc().isoformat(),
+    })
+    # Bound storage per wardrobe/source. Keep the newest 60 only.
+    stale = await db.style_suggestions.find(
+        {"user_id": user_id, "source": source}, {"_id": 0, "id": 1}
+    ).sort("created_at", -1).skip(60).to_list(500)
+    if stale:
+        await db.style_suggestions.delete_many({"id": {"$in": [x["id"] for x in stale]}})
 
 
 def available_items(items: List[dict]) -> List[dict]:
@@ -1774,7 +1845,7 @@ STYLIST_SYSTEM = (
     "confidence_score (integer 0-100 rating the outfit on colour harmony, style cohesion, occasion + weather "
     "suitability, proportion/silhouette and use of existing wardrobe), "
     "score_reasons (array of 3-5 short bullet strings justifying the score), "
-    "styling_notes (string), hair (string), makeup (string), confidence_tip (string), "
+    "styling_notes (string), hair (string), confidence_tip (string), "
     "summary (ONE short editorial styling line, max ~12 words, describing the vibe and how it "
     "suits the occasion/weather — e.g. \"Clean, smart casual and ideal for today's cool drizzle.\" "
     "Do NOT list the garment names in the summary). "
@@ -1807,6 +1878,45 @@ class StylistChatMessage(BaseModel):
     content: str
 
 
+# Words that describe WHEN, not WHAT — they carry no styling context on their own.
+_VAGUE_TIME = re.compile(r"\b(today|tonight|this morning|this afternoon|this evening|tomorrow|later|now|the weekend)\b", re.I)
+_ASKS_WHAT_TO_WEAR = re.compile(
+    r"(what should i wear|what do i wear|what to wear|help me dress|dress me|style me|"
+    r"what should i put on|outfit ideas?|pick (?:me )?an outfit)", re.I)
+_HAS_OCCASION = re.compile(
+    r"\b(work|office|meeting|presentation|conference|interview|wedding|funeral|church|"
+    r"date|dinner|lunch|brunch|drinks|party|birthday|club|nightclub|pub|gig|concert|theatre|"
+    r"movie|movies|cinema|picnic|bbq|barbecue|school|uni|gym|workout|yoga|run|walk|hike|beach|"
+    r"pool|shopping|errands|airport|flight|travel|holiday|vacation|graduation|christening|"
+    r"baby shower|race day|gala|formal|black tie|cocktail|casual|smart casual|home|"
+    r"working from home|festival|funeral|reunion|girls night|night out|weekend away)\b", re.I)
+
+
+def needs_occasion_context(messages: List["StylistChatMessage"]) -> bool:
+    """True when the user has asked what to wear but given nothing to style for.
+    One short follow-up beats a confident guess — and we only ever ask once."""
+    users = [m.content or "" for m in messages if (m.role or "").lower() == "user"]
+    if not users:
+        return False
+    latest = users[-1]
+    if not _ASKS_WHAT_TO_WEAR.search(latest):
+        return False
+    # Never ask twice in the same conversation.
+    for m in messages[:-1]:
+        if (m.role or "").lower() == "assistant" and (m.content or "").rstrip().endswith("?"):
+            return False
+    # Any occasion mentioned anywhere in the conversation is enough to proceed.
+    return not any(_HAS_OCCASION.search(u) for u in users)
+
+
+def occasion_question(text: str) -> str:
+    when = _VAGUE_TIME.search(text or "")
+    when_txt = when.group(0).lower() if when else "it"
+    return (f"Happy to style you — what are you doing {when_txt}? "
+            "Tell me the occasion (work, dinner, date, church, drinks, something casual…) "
+            "and I'll build the right look.")
+
+
 class StylistChatRequest(BaseModel):
     messages: List[StylistChatMessage]
     temperature: Optional[float] = None
@@ -1817,6 +1927,11 @@ class StylistChatRequest(BaseModel):
 async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
+    # A vague "what should I wear tonight?" gets one short question instead of a
+    # guessed outfit. No AI call, so it costs the user nothing.
+    if needs_occasion_context(payload.messages):
+        latest = next((m.content for m in reversed(payload.messages) if (m.role or "").lower() == "user"), "")
+        return {"reply": occasion_question(latest), "outfit": None, "needs_context": True}
     await enforce_limit(user, "stylist")
     all_items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(all_items)
@@ -1829,7 +1944,9 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
         f"{profile_context(user)}\n{weather_line}"
         f"WARDROBE (use only these ids):\n{wardrobe}\n\n"
         f"Conversation so far:\n{convo}\n\n"
-        "Reply as Aureve to the user's most recent message."
+        "Reply as Aureve to the user's most recent message. If their request is missing the one "
+        "detail you genuinely need (usually the occasion), ask a single short question instead of "
+        "guessing, and do not include an outfit block in that reply."
     )
     chat = await ai_chat(f"stylistchat-{user['user_id']}-{uuid.uuid4().hex[:6]}", STYLIST_CHAT_SYSTEM)
     try:
@@ -1854,35 +1971,40 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
 
 async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
                         weather: Optional[str], notes: Optional[str],
-                        avoid_item_ids: Optional[List[str]] = None):
+                        avoid_item_ids: Optional[List[str]] = None,
+                        source: str = "stylist"):
     items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
     items = available_items(items)
     if len(items) < 2:
         raise HTTPException(status_code=400, detail="Not enough ready-to-wear items. Add more, or mark laundry as clean.")
+
+    explicit_avoid = {i for i in (avoid_item_ids or []) if i}
+    # Create Another Look is a hard instruction, not a polite hint. When the
+    # wardrobe has enough alternatives, remove the current look from the candidate
+    # pool entirely so the model cannot simply return it again.
+    if explicit_avoid:
+        alternatives = [it for it in items if it.get("id") not in explicit_avoid]
+        if len(alternatives) >= 2:
+            items = alternatives
+
+    suggestion_history = await recent_suggestions(user["user_id"], source=source) if source == "dressme" else []
     prefs = await learned_prefs(user["user_id"])
     wardrobe = summarize_items_for_ai(items)
     weather_line = ""
     if temperature is not None:
         weather_line = f"Temperature: {temperature}°C. Conditions: {weather or 'n/a'}."
-    # Cross-day variety: name the pieces already worn elsewhere this week so the
-    # stylist intentionally varies looks instead of repeating the same hero items.
     variety_line = ""
-    if avoid_item_ids:
-        avoid = set(avoid_item_ids)
-        used = [it for it in items if it.get("id") in avoid]
-        if used:
-            names = ", ".join(f"{it.get('name')} ({it.get('category')})" for it in used)
-            variety_line = (
-                f"ALREADY WORN elsewhere this week: {names}.\n"
-                "Deliberately create a DIFFERENT look: vary the silhouette, colour palette, footwear and "
-                "accessories, and avoid reusing the same hero pieces (tops, bottoms, dresses, outerwear, shoes, bags) "
-                "unless there is a clear styling reason. Versatile basics may be reused only if styled noticeably "
-                "differently. Make genuine use of the wider wardrobe.\n"
-            )
+    if explicit_avoid:
+        variety_line = (
+            "EXPLICIT EXCLUSION: the previous/current look must not be repeated. "
+            f"Excluded item ids: {','.join(sorted(explicit_avoid))}. "
+            "Build a materially different silhouette and hero-piece combination.\n"
+        )
     prompt = (
         f"Occasion: {occasion}\n{weather_line}\n"
         f"Extra notes: {notes or 'none'}\n"
         f"{variety_line}"
+        f"{recent_suggestions_line(suggestion_history)}"
         f"{underused_line(items)}"
         f"{await recent_looks_line(user['user_id'])}"
         f"{profile_context(user)}\n"
@@ -1909,6 +2031,12 @@ async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
         if it:
             enriched.append({"slot": slot.get("slot", it.get("category")), "reason": slot.get("reason", ""), "item": it})
     result["resolved_items"] = enriched
+    selected_ids = [x["item"]["id"] for x in enriched if x.get("item")]
+    if explicit_avoid and any(i in explicit_avoid for i in selected_ids):
+        logger.warning("STYLE_ROTATION source=%s exclusion_violation avoid=%s selected=%s", source, sorted(explicit_avoid), selected_ids)
+    else:
+        logger.info("STYLE_ROTATION source=%s avoid=%s recent=%s selected=%s", source, sorted(explicit_avoid), len(suggestion_history), selected_ids)
+    await record_style_suggestion(user["user_id"], source, occasion, selected_ids)
     return result
 
 
@@ -1916,6 +2044,28 @@ class DressMeRequest(BaseModel):
     temperature: Optional[float] = None
     weather: Optional[str] = None
     occasion: Optional[str] = None  # override; otherwise inferred from today's plan
+    avoid_item_ids: List[str] = []  # current on-screen look when asking for another
+    local_date: Optional[str] = None  # the user's OWN calendar date (YYYY-MM-DD)
+    tz_offset: Optional[int] = None   # minutes east of UTC, so the day is the user's local day
+
+
+@api_router.get("/dressme/context")
+async def dressme_context(date: Optional[str] = None, tz_offset: int = 0,
+                          user: dict = Depends(get_scope)):
+    """Does today already have useful context (a planned look or calendar
+    events)? If not, the app asks the user what they're doing before styling.
+    `date` is the user's LOCAL calendar date — without it a UTC 'today' can read
+    the previous day's plan for anyone ahead of UTC."""
+    today = date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or "") else now_utc().strftime("%Y-%m-%d")
+    plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
+    plan_occasion = ((plan or {}).get("occasion") or (plan or {}).get("title") or "").strip()
+    events = await _gcal_events(user["account_id"], today, tz_offset)
+    label = plan_occasion or (_fmt_events_for_ai(events) if events else "")
+    return {
+        "has_context": bool(plan_occasion or events),
+        "source": "plan" if plan_occasion else ("calendar" if events else None),
+        "label": label,
+    }
 
 
 @api_router.post("/dressme")
@@ -1925,10 +2075,12 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     await enforce_limit(user, "dressme")
-    today = now_utc().strftime("%Y-%m-%d")
+    today = (payload.local_date
+             if re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload.local_date or "")
+             else now_utc().strftime("%Y-%m-%d"))
     occasion = (payload.occasion or "").strip()
     plan_title = None
-    cal_events = await _gcal_events(user["account_id"], today)
+    cal_events = await _gcal_events(user["account_id"], today, payload.tz_offset or 0)
     if not occasion:
         plan = await db.plans.find_one({"user_id": user["user_id"], "date": today}, {"_id": 0})
         if plan:
@@ -1940,7 +2092,10 @@ async def dress_me(payload: DressMeRequest, user: dict = Depends(get_scope)):
     notes = "Dress me for today — one confident, ready-to-wear look."
     if cal_line:
         notes += f" My schedule today: {cal_line}. Pick something that works across these."
-    result = await _build_outfit(user, occasion, payload.temperature, payload.weather, notes)
+    result = await _build_outfit(
+        user, occasion, payload.temperature, payload.weather, notes,
+        payload.avoid_item_ids, source="dressme"
+    )
     result["occasion_used"] = occasion
     result["from_plan"] = plan_title
     result["calendar_events"] = cal_events
@@ -2071,7 +2226,7 @@ async def _gcal_valid_token(account_id: str) -> Optional[str]:
     return tok["access_token"]
 
 
-async def _gcal_events(account_id: str, date_str: str) -> List[dict]:
+async def _gcal_events(account_id: str, date_str: str, tz_offset: int = 0) -> List[dict]:
     token = await _gcal_valid_token(account_id)
     if not token:
         return []
@@ -2079,7 +2234,9 @@ async def _gcal_events(account_id: str, date_str: str) -> List[dict]:
         day = datetime.fromisoformat(date_str)
     except Exception:
         day = now_utc()
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    # tz_offset = minutes east of UTC, so the window is the user's LOCAL day.
+    start = (day.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+             - timedelta(minutes=tz_offset or 0))
     end = start + timedelta(days=1)
     params = {
         "timeMin": start.isoformat(), "timeMax": end.isoformat(),
@@ -2312,11 +2469,17 @@ async def calendar_config(request: Request):
         "client_id_length": len(cid),
         "client_secret_present": bool(GCAL_CLIENT_SECRET),
         "client_secret_length": len(GCAL_CLIENT_SECRET or ""),
+        # Non-reversible fingerprint so the deployed secret can be compared with
+        # the intended one without ever exposing it.
+        "client_secret_fingerprint": (
+            hashlib.sha256(GCAL_CLIENT_SECRET.encode()).hexdigest()[:10] if GCAL_CLIENT_SECRET else None
+        ),
         "env_redirect_uri_fallback": GCAL_REDIRECT_URI,
         "request_host": request.headers.get("host"),
         "forwarded_host": request.headers.get("x-forwarded-host"),
         "forwarded_proto": request.headers.get("x-forwarded-proto"),
         "scope": GCAL_SCOPE,
+        "last_callback_error": GCAL_LAST_ERROR or None,
     }
 
 
@@ -2375,8 +2538,25 @@ async def calendar_callback(request: Request, code: Optional[str] = None,
         })
     await db.calendar_oauth_states.delete_one({"state": state})
     if r.status_code != 200:
-        logger.error("gcal token exchange failed: %s", r.text[:200])
-        return _page("Couldn't connect calendar")
+        try:
+            err = r.json()
+        except Exception:
+            err = {"error": "unknown"}
+        reason = str(err.get("error") or "unknown")
+        detail = str(err.get("error_description") or "")
+        logger.error("gcal token exchange failed (%s): %s", r.status_code, r.text[:300])
+        GCAL_LAST_ERROR.clear()
+        GCAL_LAST_ERROR.update({
+            "at": now_utc().isoformat(),
+            "status": r.status_code,
+            "error": reason,
+            "error_description": detail,
+            "client_id_prefix": (GCAL_CLIENT_ID or "")[:20],
+            "redirect_uri": redirect_uri,
+        })
+        # Surface Google's own reason: invalid_client = the deployed client
+        # id/secret pair doesn't match the OAuth client that granted consent.
+        return _page(f"Couldn't connect calendar ({reason})")
     tok = r.json()
     expiry = (now_utc() + timedelta(seconds=tok.get("expires_in", 3600))).isoformat()
     update = {"account_id": account_id, "access_token": tok.get("access_token"), "expiry": expiry}
@@ -2424,6 +2604,14 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     others = available_items(others)
     if len(others) < 1:
         raise HTTPException(status_code=400, detail="Add more items to see what pairs together")
+    # Big wardrobes: score locally first and only ask the AI to rate the
+    # strongest shortlist, so the request stays fast and never times out.
+    total_compatible = sum(1 for it in others if _items_pair(focus, it))
+    if len(others) > 14:
+        pairable = [it for it in others if _items_pair(focus, it)]
+        pool = pairable or others
+        pool = sorted(pool, key=lambda it: ((it.get("wear_count", 0) or 0), it.get("name") or ""))
+        others = pool[:12]
     focus_desc = (
         f"id:{focus['id']} | {focus.get('category','')} | {focus.get('name','')} | "
         f"colour:{focus.get('colour','')} | tone:{focus.get('tone','')} | "
@@ -2451,7 +2639,93 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
             resolved.append({"item": it, "stars": m.get("stars", 3), "reason": m.get("reason", "")})
     result["resolved_matches"] = resolved
     result["match_count"] = len([m for m in resolved if m["stars"] >= 3])
+    result["total_compatible"] = total_compatible
+    result["shortlisted"] = len(others)
     result["focus"] = focus
+    return result
+
+
+OUTFIT_FEEDBACK_SYSTEM = (
+    "You are Aureve, a warm, expert personal stylist. The user has put together their OWN outfit and "
+    "wants your honest feedback on it. Be specific and genuinely useful — a good stylist tells the "
+    "truth. If the colours fight, the proportions are off, the formality is mismatched, the seasons "
+    "clash or one piece is clearly letting the look down, say so plainly and explain why. Do NOT open "
+    "with a compliment you do not mean and do NOT praise an outfit that is not working; equally, if it "
+    "genuinely works, say so and say why. Never mock or criticise the user, their body or their taste "
+    "— judge the clothes, not the person. Assess colour harmony, formality, proportion and silhouette, "
+    "season/weather suitability, the footwear, competing textures or patterns and overall cohesion "
+    "— then comment on the ones that actually matter for this look and, "
+    "only if it would clearly improve the look, suggest ONE optional "
+    "swap using an item id from the REST OF WARDROBE list. A swap MUST stay in the SAME category as "
+    "the piece it replaces (shoes for shoes, top for top, bottom for bottom, outerwear for "
+    "outerwear) — never swap across categories. If what would really help is ADDING a piece the "
+    "outfit does not have (e.g. a blazer over a top), do NOT put it in swap: describe it in `tip` "
+    "instead. Never suggest replacing more than one piece and never invent items. Describe ONLY the "
+    "pieces listed in THE USER'S OUTFIT — never speak as though an extra item is already being worn. "
+    "Return STRICT JSON with keys: verdict (a short honest headline — it may be positive OR flag the "
+    "main problem), feedback (2-3 sentences: what works, what does not, and why), swap (either null or an object: out_id, in_id, why — one short line), "
+    "tip (optional one short line). Return ONLY JSON."
+)
+
+
+class OutfitFeedbackRequest(BaseModel):
+    item_ids: List[str]
+    temperature: Optional[float] = None
+    weather: Optional[str] = ""
+    occasion: Optional[str] = ""
+
+
+@api_router.post("/outfit/feedback")
+async def outfit_feedback(payload: OutfitFeedbackRequest, user: dict = Depends(get_scope)):
+    """Feedback on the outfit the user chose themselves. Never returns a whole
+    new look — at most one optional swap, in the context of their full outfit."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="AI key not configured")
+    ids = [i for i in (payload.item_ids or []) if i]
+    if len(ids) < 2:
+        raise HTTPException(status_code=400, detail="Pick at least two pieces first.")
+    await enforce_limit(user, "stylist")
+    all_items = await db.items.find(items_scope(user), {"_id": 0}).to_list(1000)
+    by_id = {it["id"]: it for it in all_items}
+    chosen = [by_id[i] for i in ids if i in by_id]
+    if len(chosen) < 2:
+        raise HTTPException(status_code=404, detail="Those pieces are no longer in your wardrobe.")
+    rest = available_items([it for it in all_items if it["id"] not in set(ids)])[:60]
+    weather_line = (f"Weather: {payload.temperature}°C, {payload.weather}.\n"
+                    if payload.temperature is not None else "")
+    prompt = (
+        f"{profile_context(user)}\n{weather_line}"
+        f"Occasion: {payload.occasion or 'not specified'}\n\n"
+        f"THE USER'S OUTFIT:\n{summarize_items_for_ai(chosen)}\n\n"
+        f"REST OF WARDROBE (only source for an optional swap):\n{summarize_items_for_ai(rest)}\n\n"
+        "Give feedback on THIS outfit. Return JSON only."
+    )
+    chat = await ai_chat(f"outfitfb-{user['user_id']}-{uuid.uuid4().hex[:6]}", OUTFIT_FEEDBACK_SYSTEM)
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.exception("outfit feedback failed")
+        raise HTTPException(status_code=502, detail=f"AI error: {e}")
+    result = parse_json_block(resp) or {}
+    if not result.get("feedback"):
+        raise HTTPException(status_code=502, detail="Could not review this outfit")
+    swap = result.get("swap") if isinstance(result.get("swap"), dict) else None
+    result["swap"] = None
+    if swap:
+        out_it, in_it = by_id.get(swap.get("out_id")), by_id.get(swap.get("in_id"))
+        same_slot = bool(out_it and in_it) and _norm(out_it.get("category")) == _norm(in_it.get("category"))
+        if out_it and in_it and out_it["id"] in set(ids) and same_slot:
+            result["swap"] = {
+                "out_id": out_it["id"], "in_id": in_it["id"], "why": swap.get("why", ""),
+                "out_item": out_it, "in_item": in_it,
+            }
+        elif out_it and in_it and not same_slot:
+            # Cross-category "swap" is really an addition. Never let it empty a
+            # slot — surface it as optional advice instead.
+            result["addition"] = {
+                "name": in_it.get("name"), "category": in_it.get("category"),
+                "why": swap.get("why", ""),
+            }
     return result
 
 
@@ -2511,7 +2785,10 @@ async def create_outfit(payload: OutfitCreate, user: dict = Depends(get_scope)):
 
 @api_router.get("/outfits")
 async def list_outfits(user: dict = Depends(get_scope)):
-    outfits = await db.outfits.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    outfit_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        outfit_query["demo"] = {"$ne": True}
+    outfits = await db.outfits.find(outfit_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for o in outfits:
         o["items"] = [by_id[i] for i in o.get("item_ids", []) if i in by_id]
@@ -2656,6 +2933,8 @@ async def list_plans(from_date: Optional[str] = None, to_date: Optional[str] = N
             query["date"]["$gte"] = from_date
         if to_date:
             query["date"]["$lte"] = to_date
+    if not user.get("show_demo"):
+        query["demo"] = {"$ne": True}
     plans = await db.plans.find(query, {"_id": 0}).sort("date", 1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for p in plans:
@@ -2689,9 +2968,88 @@ async def log_wear(payload: WearLog, user: dict = Depends(get_scope)):
     return log
 
 
+class WearConfirmRequest(BaseModel):
+    date: str                 # the user's LOCAL calendar date (YYYY-MM-DD)
+    item_ids: List[str] = []
+    wore: bool = False
+
+
+@api_router.get("/wear/pending")
+async def pending_wear_check(date: str, user: dict = Depends(get_scope)):
+    """The look suggested for the user's LOCAL yesterday, if we haven't already
+    asked about it. Being suggested never counts as worn — only a Yes here does.
+    `date` is supplied by the app so this follows the user's local day, not UTC."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    asked = await db.wear_prompts.find_one({"user_id": user["user_id"], "date": date})
+    if asked:
+        return {"pending": False}
+    # Already logged a wear for that day? Nothing to ask.
+    logged = await db.wear_logs.find_one({
+        "user_id": user["user_id"], "created_at": {"$regex": f"^{date}"},
+    })
+    if logged:
+        return {"pending": False}
+    sugg = await db.style_suggestions.find(
+        {"user_id": user["user_id"], "created_at": {"$regex": f"^{date}"}}, {"_id": 0},
+    ).sort("created_at", -1).to_list(1)
+    if not sugg:
+        plan = await db.plans.find_one({"user_id": user["user_id"], "date": date}, {"_id": 0})
+        ids = (plan or {}).get("item_ids") or []
+        occasion = (plan or {}).get("occasion") or (plan or {}).get("title") or ""
+    else:
+        ids, occasion = sugg[0].get("item_ids") or [], sugg[0].get("occasion") or ""
+    ids = [i for i in ids if i]
+    if not ids:
+        return {"pending": False}
+    items = await db.items.find({**items_scope(user), "id": {"$in": ids}}, {"_id": 0}).to_list(20)
+    if not items:
+        return {"pending": False}
+    return {
+        "pending": True,
+        "date": date,
+        "occasion": occasion,
+        "item_ids": [it["id"] for it in items],
+        "items": [{"id": it["id"], "name": it.get("name"), "category": it.get("category"),
+                   "photo": it.get("photo")} for it in items],
+    }
+
+
+@api_router.post("/wear/confirm")
+async def confirm_wear(payload: WearConfirmRequest, user: dict = Depends(get_scope)):
+    """Yes updates wear_count/last_worn for that local date; No leaves wear
+    history completely untouched. Either way we never ask about that day again."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload.date or ""):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    await db.wear_prompts.update_one(
+        {"user_id": user["user_id"], "date": payload.date},
+        {"$set": {"user_id": user["user_id"], "date": payload.date, "wore": bool(payload.wore),
+                  "answered_at": now_utc().isoformat()}},
+        upsert=True,
+    )
+    if not payload.wore:
+        return {"ok": True, "recorded": False}
+    ids = [i for i in (payload.item_ids or []) if i]
+    if ids:
+        await db.wear_logs.insert_one({
+            "id": new_id("wear"), "user_id": user["user_id"], "item_ids": ids,
+            "occasion": "", "flattering": 3, "comfort": 3, "confidence": 3,
+            "created_at": f"{payload.date}T12:00:00+00:00",
+        })
+        for iid in ids:
+            await db.items.update_one(
+                {"id": iid, "user_id": user["user_id"]},
+                {"$inc": {"wear_count": 1}, "$set": {"last_worn": f"{payload.date}T12:00:00+00:00"}},
+            )
+    return {"ok": True, "recorded": True, "items": len(ids)}
+
+
 @api_router.get("/wear")
 async def list_wear(user: dict = Depends(get_scope)):
-    logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    wear_query = {"user_id": user["user_id"]}
+    if not user.get("show_demo"):
+        wear_query["demo"] = {"$ne": True}
+    logs = await db.wear_logs.find(wear_query, {"_id": 0}).sort("created_at", -1).to_list(500)
     by_id = {it["id"]: it async for it in db.items.find(items_scope(user), {"_id": 0})}
     for lg in logs:
         lg["items"] = [by_id[i] for i in lg.get("item_ids", []) if i in by_id]
@@ -2705,15 +3063,6 @@ async def insights(user: dict = Depends(get_scope)):
     logs = await db.wear_logs.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(2000)
     total_items = len(items)
     total_wears = sum(it.get("wear_count", 0) for it in items)
-    priced = [it for it in items if it.get("price")]
-    total_value = sum(it.get("price", 0) for it in priced)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0)
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    avg_cpw_vals = [cpw(it) for it in items if cpw(it) is not None]
-    avg_cpw = round(sum(avg_cpw_vals) / len(avg_cpw_vals), 2) if avg_cpw_vals else None
 
     most_worn = sorted(items, key=lambda x: x.get("wear_count", 0), reverse=True)[:5]
     least_worn = sorted(items, key=lambda x: x.get("wear_count", 0))[:5]
@@ -2731,8 +3080,6 @@ async def insights(user: dict = Depends(get_scope)):
     return {
         "total_items": total_items,
         "total_wears": total_wears,
-        "total_value": round(total_value, 2),
-        "avg_cost_per_wear": avg_cpw,
         "outfits_logged": len(logs),
         "avg_flattering": avg("flattering"),
         "avg_comfort": avg("comfort"),
@@ -2740,6 +3087,7 @@ async def insights(user: dict = Depends(get_scope)):
         "categories": cats,
         "most_worn": most_worn,
         "least_worn": least_worn,
+        "unworn_count": sum(1 for it in items if not (it.get("wear_count", 0) or 0)),
     }
 
 
@@ -3051,31 +3399,30 @@ async def health_report(user: dict = Depends(get_scope)):
         raise HTTPException(status_code=400, detail="Add a few more pieces to generate your report")
 
     unworn = [it for it in items if (it.get("wear_count", 0) or 0) == 0]
-    unworn_value = round(sum(it.get("price", 0) or 0 for it in unworn), 2)
-    total_value = round(sum(it.get("price", 0) or 0 for it in items), 2)
-
-    def cpw(it):
-        wc = it.get("wear_count", 0) or 0
-        return (it["price"] / wc) if it.get("price") and wc > 0 else None
-
-    high_cpw = sorted(
-        [it for it in items if cpw(it) is not None],
-        key=lambda x: cpw(x), reverse=True,
-    )[:3]
-    high_cpw_desc = "; ".join(f"{it['name']} (${cpw(it):.2f}/wear)" for it in high_cpw) or "none yet"
+    low_wear = sorted(
+        items,
+        key=lambda it: ((it.get("wear_count", 0) or 0), it.get("last_worn") or ""),
+    )[:8]
+    low_wear_desc = "; ".join(
+        f"{it.get('name')} ({it.get('category')}, worn {it.get('wear_count', 0) or 0}x)"
+        for it in low_wear
+    ) or "none yet"
     counts: dict = {}
     for it in items:
         counts[it.get("category", "Other")] = counts.get(it.get("category", "Other"), 0) + 1
     breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items())
 
     prompt = (
-        f"Total pieces: {len(items)}. Total wardrobe value: ${total_value}.\n"
-        f"Pieces not yet worn: {len(unworn)} worth ${unworn_value}.\n"
-        f"Highest cost-per-wear items: {high_cpw_desc}.\n"
+        f"Total pieces: {len(items)}.\n"
+        f"Pieces not yet worn: {len(unworn)}.\n"
+        f"Lowest-wear pieces: {low_wear_desc}.\n"
         f"Category breakdown: {breakdown}.\n\n"
-        "Write the monthly wardrobe health report. Frame the numbers as underused pieces and "
-        "opportunities to wear more, never as wasted money, and name the single purchase that "
-        "would unlock the most outfits. Return JSON only."
+        "Write the monthly wardrobe health report using wear history and category balance only. "
+        "Focus on underused pieces and practical rotation opportunities. Do not mention purchase "
+        "price, wardrobe value, money or cost-per-wear. Name the single purchase that would unlock "
+        "the most outfits. Phrase nudges as gentle invitations (\"Try bringing 4-6 dresses into "
+        "rotation this month\"), never as orders. Use ONLY the numbers given above and never invent "
+        "figures. Return JSON only."
     )
     chat = await ai_chat(f"health-{user['user_id']}-{uuid.uuid4().hex[:6]}", HEALTH_SYSTEM)
     try:
@@ -3088,69 +3435,71 @@ async def health_report(user: dict = Depends(get_scope)):
         raise HTTPException(status_code=502, detail="Could not generate your report")
     result["stats"] = {
         "total_items": len(items),
-        "total_value": total_value,
         "unworn_count": len(unworn),
-        "unworn_value": unworn_value,
+        "worn_count": len(items) - len(unworn),
+        "categories": counts,
     }
     return result
 
 
-# ----------------------------- AI: Hair & Makeup -----------------------------
+# ----------------------------- AI: Hair -----------------------------
 class BeautyRequest(BaseModel):
     occasion: Optional[str] = ""
+    neckline: Optional[str] = ""
+    hair_length: Optional[str] = ""
+    hair_type: Optional[str] = ""
+    temperature: Optional[float] = None
+    weather: Optional[str] = ""
 
 
-BEAUTY_SYSTEM = (
-    "You are Aureve's professional colour analyst and beauty stylist. Using the person's skin tone, undertone and "
-    "any personal notes, recommend hair and makeup that flatter THEM — grounded in colour theory (warm vs cool "
-    "undertones, contrast levels), never generic. Be confident, calm and specific; explain the reasoning briefly, "
-    "like a stylist, and stay inclusive of all genders and presentations. "
+HAIR_SYSTEM = (
+    "You are Aureve's hair stylist. You recommend HAIRSTYLES ONLY — how to wear the hair for a "
+    "specific occasion and outfit. Never mention hair colour, dye, highlights or toning, and never "
+    "mention makeup, skincare or clothing colour palettes. Consider the occasion and its formality, "
+    "the outfit's neckline (an updo or swept style suits high or embellished necklines; softer "
+    "down-styles suit open or strapless necklines), the weather (humidity, rain, wind, heat), and "
+    "the person's hair length and texture when given. Be specific, practical and warm; keep every "
+    "string short. Stay inclusive of all genders and presentations. "
     "Return STRICT JSON with keys: "
-    "summary (one sentence on the person's colouring and the direction), "
-    "palette (array of 5-8 flattering colour names to wear near the face), "
-    "makeup (object: foundation (undertone guidance), blush, lip, eye, tip — each a short string; keep it "
-    "wearable and optional), "
-    "hair (object: colour (flattering hair-colour directions), style (a styling suggestion for the occasion), "
-    "tip (one short string)), "
-    "avoid (array of 2-4 short strings — colours/finishes that fight this colouring), "
+    "summary (one sentence on the direction for this occasion and outfit), "
+    "styles (array of 2-3 objects: name (the hairstyle), why (one short line on why it suits this "
+    "occasion/neckline/weather), how (one or two short practical steps)), "
+    "tip (one short practical string, e.g. holding it through the day or weather-proofing), "
     "occasion_note (one short sentence tailoring the look to the stated occasion). "
     "Return ONLY JSON."
 )
 
 
 @api_router.post("/beauty/suggest")
-async def beauty_suggest(payload: BeautyRequest, user: dict = Depends(get_scope)):
+async def hair_suggest(payload: BeautyRequest, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
-    p = user.get("profile") or {}
-    skin = p.get("skin_tone")
-    undertone = p.get("undertone")
-    notes = p.get("notes")
-    if not skin and not undertone:
-        raise HTTPException(
-            status_code=400,
-            detail="Add your skin tone and undertone in your style profile for personalised beauty advice.",
-        )
     await enforce_limit(user, "beauty")
-    profile_line = "; ".join(
+    p = user.get("profile") or {}
+    context = "; ".join(
         f"{k}: {v}" for k, v in [
-            ("skin tone", skin), ("undertone", undertone), ("notes", notes),
+            ("occasion", payload.occasion or "everyday"),
+            ("outfit neckline", payload.neckline),
+            ("hair length", payload.hair_length),
+            ("hair type/texture", payload.hair_type),
+            ("weather", f"{payload.temperature}°C, {payload.weather}" if payload.temperature is not None else payload.weather),
+            ("personal notes", p.get("notes")),
         ] if v
     )
     prompt = (
-        f"Person's colouring — {profile_line}.\n"
-        f"Occasion: {payload.occasion or 'everyday'}.\n\n"
-        "Recommend flattering hair and makeup for this colouring and occasion. Return JSON only."
+        f"Context — {context}.\n\n"
+        "Recommend hairstyles (no colour advice, no makeup) for this occasion and outfit. "
+        "Return JSON only."
     )
-    chat = await ai_chat(f"beauty-{user['user_id']}-{uuid.uuid4().hex[:6]}", BEAUTY_SYSTEM)
+    chat = await ai_chat(f"hair-{user['user_id']}-{uuid.uuid4().hex[:6]}", HAIR_SYSTEM)
     try:
         resp = await chat.send_message(UserMessage(text=prompt))
     except Exception as e:
-        logger.exception("beauty failed")
+        logger.exception("hair suggest failed")
         raise HTTPException(status_code=502, detail=f"AI error: {e}")
     result = parse_json_block(resp)
     if not result:
-        raise HTTPException(status_code=502, detail="Could not generate beauty recommendations")
+        raise HTTPException(status_code=502, detail="Could not generate hair recommendations")
     return result
 
 
@@ -3249,11 +3598,22 @@ async def seed_reviewer_account():
                 "premium_source": "reviewer",
                 "created_at": now_utc().isoformat(),
             })
-        # Ensure representative content: a default profile with a clean demo
-        # wardrobe, reconciled deterministically (see below) so repeated
-        # startups/redeploys can never create duplicates.
+        # Keep seeded samples only while the reviewer wardrobe is genuinely empty.
+        # Once real uploads exist, remove old demo rows instead of resurrecting them
+        # on every restart/deploy.
         prof = await ensure_default_profile(user_id, "Reviewer")
-        await reconcile_reviewer_wardrobe(prof["id"])
+        real_item_count = await db.items.count_documents({
+            "user_id": prof["id"],
+            "demo": {"$ne": True},
+        })
+        if real_item_count == 0:
+            await reconcile_reviewer_wardrobe(prof["id"])
+        else:
+            removed = await db.items.delete_many({"user_id": prof["id"], "demo": True})
+            await db.outfits.delete_many({"user_id": prof["id"], "demo": True})
+            await db.wear_logs.delete_many({"user_id": prof["id"], "demo": True})
+            await db.plans.delete_many({"user_id": prof["id"], "demo": True})
+            logger.info("Reviewer has %s real pieces; removed %s seeded demo pieces", real_item_count, removed.deleted_count)
         logger.info(f"Reviewer account ready: {email}")
     except Exception as e:
         logger.warning(f"Reviewer account seeding skipped: {e}")

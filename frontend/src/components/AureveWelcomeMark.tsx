@@ -13,7 +13,7 @@ export default function AureveWelcomeMark({ size = 68 }: { size?: number }) {
   return (
     <View style={styles.wrap}>
       <Txt style={[styles.letter, { fontSize: size }]}>A</Txt>
-      <View style={[styles.sprig, { width: sprig, height: sprig, left: -sprig * 0.42, top: -sprig * 0.18 }]} pointerEvents="none">
+      <View style={[styles.sprig, { width: sprig, height: sprig, left: -sprig * 0.42, top: -sprig * 0.18, pointerEvents: "none" }]}>
         <Svg width="100%" height="100%" viewBox="0 0 60 60" fill="none">
           <G stroke={colors.sage} strokeWidth={1.6} strokeLinecap="round">
             {/* stem curving up toward the top-left */}

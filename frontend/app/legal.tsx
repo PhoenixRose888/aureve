@@ -14,7 +14,7 @@ type Section = { h: string; b: string };
 const PRIVACY: Section[] = [
   { h: "Overview", b: `Aureve ("we", "us") helps you catalogue your wardrobe and generate outfit and styling suggestions. This policy explains what we collect and how we use it. Effective ${EFFECTIVE}.` },
   { h: "What we collect", b: "• Account details you provide (email, name, or a Google sign-in identifier).\n• Wardrobe content you add (clothing photos, item details).\n• Style profile data you choose to enter (measurements, body shape, skin tone/undertone, sizes, preferences).\n• Usage data needed to run features (e.g. outfits generated, items saved).\n• Approximate location or coarse weather data, only to tailor weather-appropriate suggestions." },
-  { h: "How we use it", b: "We use your data solely to provide the app's features: storing your wardrobe, generating outfits, and personalising styling, hair and makeup suggestions. We do not sell your personal data." },
+  { h: "How we use it", b: "We use your data solely to provide the app's features: storing your wardrobe, generating outfits, and personalising styling and hair suggestions. We do not sell your personal data." },
   { h: "AI processing", b: "To auto-tag clothing and generate suggestions, item photos and relevant profile details may be sent to AI providers (e.g. OpenAI and Google Gemini, accessed via Emergent) strictly to return results to you. They are not used to identify you." },
   { h: "Payments", b: "If you purchase a subscription, payment is processed by the platform's billing provider (Apple, Google, or Stripe). We do not store your full card details." },
   { h: "Data storage & retention", b: "Your data is stored securely and retained while your account is active. Guest sessions are temporary and expire automatically." },
@@ -27,7 +27,7 @@ const TERMS: Section[] = [
   { h: "Acceptance", b: `By using Aureve you agree to these Terms. If you do not agree, please do not use the app. Effective ${EFFECTIVE}.` },
   { h: "Your account", b: "You are responsible for keeping your login details secure and for activity under your account. You must provide accurate information when creating an account." },
   { h: "Acceptable use", b: "Use Aureve for your personal styling only. Do not upload unlawful content, attempt to disrupt the service, or misuse the AI features." },
-  { h: "Styling & AI suggestions", b: "Outfit, hair, makeup and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate — use your own judgement." },
+  { h: "Styling & AI suggestions", b: "Outfit, hair and body-shape suggestions are provided for guidance and inspiration only. They are generated automatically and may not always be accurate — use your own judgement." },
   { h: "Subscriptions & payments", b: "Some features may require a paid subscription. Billing, renewals and refunds are handled by the store or payment provider you purchase through (Apple, Google, or Stripe), subject to their terms." },
   { h: "Your content", b: "You keep ownership of the photos and details you add. You grant us a limited licence to process them only to provide the app's features to you." },
   { h: "Termination", b: "You may delete your account at any time. We may suspend accounts that violate these Terms." },

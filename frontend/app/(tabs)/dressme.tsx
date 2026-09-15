@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, TextInput } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Display, Txt } from "@/src/components/Typography";
@@ -38,22 +38,47 @@ export default function DressMe() {
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const started = React.useRef(false);
+  const [askActivity, setAskActivity] = useState(false);
+  const [activity, setActivity] = useState("");
+  const [otherText, setOtherText] = useState("");
+  const [askOther, setAskOther] = useState(false);
+  const hasContext = React.useRef(false);
 
+  const generateRef = React.useRef<null | (() => void)>(null);
+  const localDate = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const tzOffset = () => -new Date().getTimezoneOffset(); // minutes east of UTC
+  const dayRef = React.useRef(localDate());
   const now = new Date();
   const dateLine = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
 
   useEffect(() => { api<any[]>("/items").then(setWardrobe).catch(() => {}); }, []);
 
   const generate = useCallback(async () => {
+    // Hard guard: with no calendar/plan context and no stated activity we ask
+    // instead of inventing an occasion.
+    if (!activity && !hasContext.current) {
+      setAskActivity(true);
+      return;
+    }
     setLoading(true);
     setError("");
-    setResult(null);
     setSaved(false);
     try {
       const body: any = {};
       if (weather && status === "done") {
         body.temperature = weather.temperature;
         body.weather = weather.description;
+      }
+      body.local_date = localDate();
+      body.tz_offset = tzOffset();
+      if (activity) body.occasion = activity;
+      const currentItems = result?.resolved_items || [];
+      if (currentItems.length > 0) {
+        body.occasion = result?.occasion_used || undefined;
+        body.avoid_item_ids = currentItems.map((x: any) => x.item?.id).filter(Boolean);
       }
       const r = await api<any>("/dressme", { method: "POST", body });
       setResult(r);
@@ -63,16 +88,71 @@ export default function DressMe() {
       else setError(e.message || "Couldn't put a look together.");
     }
     setLoading(false);
-  }, [weather, status, router]);
+  }, [weather, status, router, result, activity]);
+
+  useEffect(() => { generateRef.current = generate; }, [generate]);
 
   useEffect(() => {
-    if (!started.current && status !== "idle" && status !== "loading") {
-      started.current = true;
-      generate();
-    }
+    if (started.current || status === "idle" || status === "loading") return;
+    started.current = true;
+    // Only style straight away when today already has real context (a planned
+    // look or calendar events). Otherwise ask what they're actually doing.
+    api<any>(`/dressme/context?date=${localDate()}&tz_offset=${tzOffset()}`)
+      .then((c) => {
+        hasContext.current = !!c?.has_context;
+        if (c?.has_context) generate();
+        else setAskActivity(true);
+      })
+      // If we can't tell, ask rather than guess.
+      .catch(() => setAskActivity(true));
   }, [status, generate]);
 
+  // A new styling day begins at LOCAL midnight: once the device date changes,
+  // yesterday's look, activity and context are dropped and the day re-probed.
+  useFocusEffect(
+    useCallback(() => {
+      const check = () => {
+        if (dayRef.current === localDate()) return;
+        dayRef.current = localDate();
+        hasContext.current = false;
+        started.current = false;
+        setResult(null);
+        setActivity("");
+        setOtherText("");
+        setAskOther(false);
+        setAskActivity(false);
+      };
+      check();
+      const t = setInterval(check, 60000);
+      return () => clearInterval(t);
+    }, [])
+  );
+
   const items = result?.resolved_items || [];
+
+  const chooseActivity = (label: string) => {
+    haptics.tap();
+    if (label === "Other") {
+      setAskOther(true);
+      return;
+    }
+    setActivity(label);
+    setAskActivity(false);
+    setAskOther(false);
+    setResult(null);
+    setTimeout(() => generateRef.current?.(), 0);
+  };
+
+  const submitOther = () => {
+    const t = otherText.trim();
+    if (!t) return;
+    haptics.tap();
+    setActivity(t);
+    setAskActivity(false);
+    setAskOther(false);
+    setResult(null);
+    setTimeout(() => generateRef.current?.(), 0);
+  };
 
   const saveLook = async () => {
     if (!items.length || saved) return;
@@ -116,8 +196,12 @@ export default function DressMe() {
   ]);
 
   const swapCat = swapIndex != null ? items[swapIndex]?.item?.category : null;
+  const inLook = new Set(items.map((r: any) => r.item?.id));
   const swapOptions = wardrobe.filter(
-    (w) => w.category === swapCat && (!search || (w.name || "").toLowerCase().includes(search.toLowerCase()))
+    (w) =>
+      w.category === swapCat &&
+      (w.id === items[swapIndex ?? -1]?.item?.id || !inLook.has(w.id)) &&
+      (!search || (w.name || "").toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -143,6 +227,38 @@ export default function DressMe() {
               : "One considered outfit \u2014 styled from what you already own, tuned to today\u2019s weather."}
           </Txt>
         </View>
+        {askActivity && !loading ? (
+          <View style={styles.activityWrap} testID="dressme-activity">
+            <Txt style={styles.activityTitle}>What are you doing today?</Txt>
+            <Txt style={styles.activitySub}>Nothing in your plans or calendar for today — tell me and I&apos;ll style for it.</Txt>
+            <View style={styles.activityChips}>
+              {["Work", "Day off", "Shopping / errands", "Lunch / casual outing", "Evening / dinner", "Date", "Event", "Staying home", "Other"].map((a) => (
+                <Pressable key={a} testID={`dressme-activity-${a}`} style={styles.activityChip} onPress={() => chooseActivity(a)}>
+                  <Txt style={styles.activityChipTxt}>{a}</Txt>
+                </Pressable>
+              ))}
+            </View>
+            {askOther ? (
+              <View style={styles.otherWrap}>
+                <TextInput
+                  style={styles.otherInput}
+                  value={otherText}
+                  onChangeText={setOtherText}
+                  placeholder="What's on today?"
+                  placeholderTextColor={colors.onSurfaceTertiary}
+                  onSubmitEditing={submitOther}
+                  returnKeyType="done"
+                  autoFocus
+                  testID="dressme-activity-other-input"
+                />
+                <Pressable style={styles.otherBtn} testID="dressme-activity-other-go" onPress={submitOther}>
+                  <Txt style={styles.otherBtnTxt}>Style me for this</Txt>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         {loading && (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={colors.sage} />
@@ -176,7 +292,7 @@ export default function DressMe() {
                 </Pressable>
               ))}
             </View>
-            <Txt style={styles.tapHint}>Tap any item to change</Txt>
+            <Txt style={styles.tapHint}>Tap any piece to swap just that one</Txt>
 
             {result.summary ? (
               <View style={styles.explainWrap}>
@@ -222,7 +338,9 @@ export default function DressMe() {
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {swapOptions.length === 0 ? (
-                <Txt style={styles.pickerEmpty}>No other {(swapCat || "").toLowerCase()} in your wardrobe.</Txt>
+                <Txt style={styles.pickerEmpty}>
+                  No other {(swapCat || "").toLowerCase()} in your wardrobe yet — add one and it&apos;ll show up here.
+                </Txt>
               ) : (
                 <View style={styles.pickerGrid}>
                   {swapOptions.map((it) => {
@@ -256,6 +374,23 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 30, letterSpacing: -0.5 },
   pageSub: { fontSize: 14, color: colors.onSurfaceSecondary, lineHeight: 20, marginTop: spacing.xs, paddingRight: spacing.xl },
   scroll: { paddingBottom: spacing["3xl"] },
+  activityWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
+  activityTitle: { fontSize: 18, color: colors.onSurface, fontFamily: fonts.displayMedium },
+  activitySub: { fontSize: 13, color: colors.onSurfaceTertiary, lineHeight: 19, marginBottom: spacing.sm },
+  activityChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  activityChip: {
+    minHeight: 44, justifyContent: "center", paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.border,
+  },
+  activityChipTxt: { fontSize: 14, color: colors.onSurface },
+  otherWrap: { gap: spacing.sm, marginTop: spacing.md },
+  otherInput: {
+    height: 48, borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, color: colors.onSurface, fontSize: 15,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  otherBtn: { height: 46, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  otherBtnTxt: { color: colors.onBrandPrimary, fontSize: 15 },
   loadingWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 2, gap: spacing.xl },
   loadingTxt: { color: colors.onSurfaceSecondary, fontSize: 15, fontStyle: "italic", textAlign: "center" },
   errorWrap: { alignItems: "center", paddingTop: spacing["3xl"] * 1.5, paddingHorizontal: spacing.xl, gap: spacing.lg },

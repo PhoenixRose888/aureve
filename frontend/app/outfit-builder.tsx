@@ -32,9 +32,15 @@ export default function OutfitBuilder() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [naming, setNaming] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [swap, setSwap] = useState<any>(null);
+  const [addition, setAddition] = useState<any>(null);
+  const [verdict, setVerdict] = useState("");
 
   const load = useCallback(async () => {
+    setLoadingItems(true);
     try { setItems(await api<any[]>("/items")); } catch {}
+    setLoadingItems(false);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -49,26 +55,48 @@ export default function OutfitBuilder() {
     setFeedback("");
   };
 
-  const getInspiration = async () => {
+  const checkOutfit = async () => {
     if (!premium) { router.push("/premium"); return; }
     setAiBusy(true);
+    setSwap(null);
+    setAddition(null);
     haptics.tap();
     try {
-      const body: any = {};
+      const body: any = { item_ids: chosen.map((i) => i.id) };
       if (weather) { body.temperature = weather.temperature; body.weather = weather.description; }
-      const r = await api<any>("/dressme", { method: "POST", body });
-      const next: Record<string, any> = {};
-      for (const ri of r.resolved_items || []) {
-        const cat = ri.item?.category;
-        if (cat === "Tops" || cat === "Bottoms" || cat === "Shoes") next[cat] = ri.item;
-      }
-      if (Object.keys(next).length) setSelected(next);
-      setFeedback(r.rationale || r.explanation || r.notes || "A balanced look pulled from your wardrobe — comfortable, cohesive and ready to wear.");
+      const r = await api<any>("/outfit/feedback", { method: "POST", body });
+      // The user's own outfit stays exactly as they built it. At most we offer
+      // one optional swap, which they choose to apply.
+      setVerdict(r.verdict || "Here's my take on this look");
+      setFeedback(r.feedback || "");
+      setSwap(r.swap || null);
+      setAddition(r.addition || null);
       haptics.success();
     } catch (e: any) {
-      if (String(e?.message || e).includes("402")) router.push("/premium");
+      if (e?.status === 402) router.push("/premium");
+      else setFeedback(e?.message || "Couldn't review this look just now.");
     }
     setAiBusy(false);
+  };
+
+  const applySwap = () => {
+    const out = swap?.out_item, into = swap?.in_item;
+    // Same-slot only: replace the piece in its own category and leave every
+    // other selection exactly as it is. Never empty a slot.
+    if (!out || !into || out.category !== into.category) {
+      setSwap(null);
+      return;
+    }
+    haptics.tap();
+    setSelected((sel) => {
+      const next = { ...sel };
+      for (const k of Object.keys(next)) {
+        if (next[k]?.id === out.id) next[k] = into;
+      }
+      next[out.category] = into;
+      return next;
+    });
+    setSwap(null);
   };
 
   const doSave = async () => {
@@ -121,8 +149,37 @@ export default function OutfitBuilder() {
 
         {feedback ? (
           <View style={styles.feedback} testID="builder-feedback">
-            <View style={styles.feedbackHead}><Feather name="star" size={15} color={colors.onBrandTertiary} /><Txt style={styles.feedbackTitle}>You&rsquo;ve nailed this look!</Txt></View>
+            <View style={styles.feedbackHead}>
+              <Feather name="star" size={15} color={colors.onBrandTertiary} />
+              <Txt style={styles.feedbackTitle}>{verdict || "Here's my take on this look"}</Txt>
+            </View>
             <Txt style={styles.feedbackTxt}>{feedback}</Txt>
+            {addition ? (
+              <Txt style={styles.swapWhy} testID="builder-addition">
+                Optional idea: add {addition.name}
+                {addition.why ? ` — ${addition.why}` : ""} (not part of your outfit yet)
+              </Txt>
+            ) : null}
+            {swap?.in_item ? (
+              <View style={styles.swapCard} testID="builder-swap">
+                <Txt style={styles.swapTitle}>One optional swap</Txt>
+                <View style={styles.swapRow}>
+                  <GarmentImage photo={swap.out_item?.photo} category={swap.out_item?.category} style={styles.swapImg} iconSize={18} />
+                  <Feather name="arrow-right" size={16} color={colors.onBrandTertiary} />
+                  <GarmentImage photo={swap.in_item?.photo} category={swap.in_item?.category} style={styles.swapImg} iconSize={18} />
+                  <Txt style={styles.swapName} numberOfLines={2}>{swap.in_item?.name}</Txt>
+                </View>
+                {swap.why ? <Txt style={styles.swapWhy}>{swap.why}</Txt> : null}
+                <View style={styles.swapBtns}>
+                  <Pressable style={styles.swapApply} testID="builder-swap-apply" onPress={applySwap}>
+                    <Txt style={styles.swapApplyTxt}>Try the swap</Txt>
+                  </Pressable>
+                  <Pressable style={styles.swapKeep} testID="builder-swap-keep" onPress={() => setSwap(null)}>
+                    <Txt style={styles.swapKeepTxt}>Keep mine</Txt>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </ScrollView>
@@ -133,10 +190,14 @@ export default function OutfitBuilder() {
             <Txt style={styles.saveTxt}>Save Outfit</Txt>
           </Pressable>
         )}
-        <Pressable style={[styles.aiBtn, ready && styles.aiBtnGhost]} testID="builder-ai" onPress={getInspiration} disabled={aiBusy}>
-          {aiBusy ? <ActivityIndicator color={ready ? colors.onSurface : colors.onSage} size="small" /> : <Feather name="star" size={16} color={ready ? colors.onSurface : colors.onSage} />}
-          <Txt style={[styles.aiTxt, ready && styles.aiTxtGhost]}>Get AI Inspiration</Txt>
-        </Pressable>
+        {ready ? (
+          <Pressable style={[styles.aiBtn, styles.aiBtnGhost]} testID="builder-ai" onPress={checkOutfit} disabled={aiBusy}>
+            {aiBusy ? <ActivityIndicator color={colors.onSurface} size="small" /> : <Feather name="check-circle" size={16} color={colors.onSurface} />}
+            <Txt style={[styles.aiTxt, styles.aiTxtGhost]}>Check My Outfit</Txt>
+          </Pressable>
+        ) : (
+          <Txt style={styles.aiHint}>Pick at least two pieces, then Aureve can check your look.</Txt>
+        )}
       </View>
 
       {/* Item picker */}
@@ -152,7 +213,12 @@ export default function OutfitBuilder() {
               <TextInput style={styles.searchInput} placeholder={`Search ${(pickerCat || "").toLowerCase()}`} placeholderTextColor={colors.onSurfaceTertiary} value={search} onChangeText={setSearch} />
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {catItems.length === 0 ? (
+              {loadingItems ? (
+                <View style={styles.pickerLoading} testID="picker-loading">
+                  <ActivityIndicator color={colors.brand} />
+                  <Txt style={styles.pickerEmpty}>Loading your {(pickerCat || "").toLowerCase()}…</Txt>
+                </View>
+              ) : catItems.length === 0 ? (
                 <Txt style={styles.pickerEmpty}>No {(pickerCat || "").toLowerCase()} in your wardrobe yet.</Txt>
               ) : (
                 <View style={styles.pickerGrid}>
@@ -228,6 +294,19 @@ const styles = StyleSheet.create({
   pickerImg: { width: "100%", aspectRatio: 0.82, borderRadius: radius.sm, backgroundColor: colors.surfaceTertiary },
   pickCheck: { position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.sage, alignItems: "center", justifyContent: "center" },
   pickerName: { fontSize: 12, color: colors.onSurfaceSecondary, marginTop: 4 },
+  pickerLoading: { alignItems: "center", gap: spacing.md, paddingVertical: spacing["2xl"] },
+  aiHint: { fontSize: 13, color: colors.onSurfaceTertiary, textAlign: "center", paddingVertical: spacing.md },
+  swapCard: { marginTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.divider, paddingTop: spacing.md, gap: spacing.sm },
+  swapTitle: { fontSize: 11, letterSpacing: 1.2, color: colors.onBrandTertiary },
+  swapRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  swapImg: { width: 40, height: 52, borderRadius: radius.sm },
+  swapName: { flex: 1, fontSize: 13, color: colors.onBrandTertiary },
+  swapWhy: { fontSize: 13, color: colors.onBrandTertiary, lineHeight: 19 },
+  swapBtns: { flexDirection: "row", gap: spacing.sm },
+  swapApply: { flex: 1, height: 40, borderRadius: radius.sm, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  swapApplyTxt: { color: colors.onBrandPrimary, fontSize: 14 },
+  swapKeep: { flex: 1, height: 40, borderRadius: radius.sm, borderWidth: 0.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  swapKeepTxt: { color: colors.onSurface, fontSize: 14 },
   pickerEmpty: { fontSize: 14, color: colors.onSurfaceTertiary, textAlign: "center", paddingVertical: spacing["2xl"] },
   nameBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center", padding: spacing.xl },
   nameCard: { width: "100%", backgroundColor: colors.surface, borderRadius: 20, padding: spacing.xl },

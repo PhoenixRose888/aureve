@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 36 (guest/demo removal, /welcome + first-run tour + Wardrobe empty state) verified end-to-end. Backend: 12/12 tests pass — POST /api/auth/guest is gone (returns 405), brand-new register account returns empty /items, empty /outfits, is non-premium, no plans/wear history, can log out & log in again, and DELETE /api/auth/account cleans it up. Reviewer (review@aureve.app) still logs in, is Premium, and still returns the 16-item demo wardrobe. Frontend: splash correctly lands on /welcome when signed-out, welcome-start-free + welcome-log-in exist, guest-login-button testID nowhere in DOM, onboarding final CTA reads 'Create Free Account' and routes to /login?mode=signup with primary button 'Create account'; registering a brand-new account routes to Home and shows the 5-step app-tour once (5 Next clicks close it; tour flag cleared and does not reappear on subsequent Home visit); Wardrobe empty state shows new copy 'Your wardrobe is ready when you are' + 'Add your clothes to start getting personalised outfits.' with wardrobe-empty-add and wardrobe-empty-bulk buttons and NO demo garments; Profile 'How Aureve Works' (how-aureve-works) replays the tour; Sign-out routes to /login and re-opening / correctly lands on /welcome. Reviewer smoke: reviewer login still succeeds, tour does NOT appear for reviewer, home-plan-week present.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Profile › Switch account",
+        "issue": "handleSwitchAccount calls `login()` but `login` is not destructured from useAuth() (only user/logout/deleteAccount are). Tapping the 'Switch account' row (testID switch-account) will throw ReferenceError: login is not defined. Not on the current iteration-36 test surface but a latent regression to fix.",
+        "testID": "switch-account",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "onboarding.tsx (fadeCover Animated.View)",
+        "issue": "Runtime warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/onboarding.tsx:106 (pointerEvents={entering ? \"auto\" : \"none\"}) — should move to style.pointerEvents on the Animated.View."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration36_guest_removal.py",
+    "/app/test_reports/pytest/pytest_iteration36.xml"
+  ],
+  "action_items": [
+    "Fix profile.tsx: destructure `login` from useAuth() (or remove the Switch account row since login is Google-only now). Currently ReferenceError on tap.",
+    "Move `pointerEvents` from prop to style on the onboarding fade-cover Animated.View to silence the React Native deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "profile.tsx line 65 references `login()` without importing/destructuring — latent runtime bug on Switch account row.",
+    "AuthContext still exposes `isGuest`/`is_guest` plumbing (GUEST_MIGRATE_KEY, stashGuestToken, guest_token in register/apple bodies) even though the guest endpoint is gone; safe but dead-code candidate for cleanup in a follow-up.",
+    "wardrobe.tsx (596 lines) is close to the 700-line split threshold — consider extracting the SUB_RULES/primarySub taxonomy helpers into a small module for maintainability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration36_guest_removal.py (new)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "seed_data_creation": "Ran one throwaway QA email/password account qa+i36_<ts>@aureve.local (backend) which was deleted at end of test. UI test also created qa+ui<ts>@aureve.local via the app — left in DB (small, not premium, non-demo). Recorded pattern in /app/memory/test_credentials.md already covers this.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter36 guest/demo removal fully verified. If profile.tsx switch-account fix is applied, retest by clicking the switch-account row on Profile — it should trigger the Google auth flow (or be removed). Reviewer creds: review@aureve.app / AureveTest2026 (still Premium, wardrobe seeded).",
+  "rca_of_issue": "N/A — no failing behaviour in scope. Only lightly-related latent bugs surfaced during code review are captured under action_items."
+}

@@ -272,3 +272,74 @@ Still needs one redeploy + ONE new iOS build. Untouched: RevenueCat, auth provid
 **4. Bulk progress** — "Uploading and analysing X of Y — N done" + progress bar + note that larger batches can take up to a minute and to stay on the screen.
 Testing: iteration_30.json — backend 19/19 (incl. scan no-write proof and masked emails), frontend all pass.
 Deploy: backend items need a redeploy; the frontend fixes need ONE new iOS build for TestFlight.
+
+## WORKSPACE SWITCHED TO GITHUB BRANCH (10 Sep 2026)
+Pulled `recovery-implementation-2026-09-10` from `PhoenixRose888/aureve` directly via git fetch (repo reachable read-only from the workspace). It was a strict FAST-FORWARD of the previous workspace HEAD (`ab00445`) → `c1c81bc`, so nothing was overwritten or merged: 8 files changed (backend/server.py, dressme.tsx, stylist.tsx, wardrobe.tsx, item/[id].tsx, looks.tsx + 2 new docs). No `.env` files exist in the branch, so all protected environment values are untouched. Nothing was pushed; the GitHub branch and main are unmodified. Local checkout is now on branch `recovery-implementation-2026-09-10` (previous state remains reachable at `main` / `ab00445`).
+Branch adds: persistent `style_suggestions` history + hard candidate-pool exclusion for Dress Me rotation, `STYLE_ROTATION` diagnostics, dynamic reviewer demo visibility (real uploads stop demo resurrection), demo outfits/plans/wear-logs excluded server-side, removal of wardrobe money metrics, AI Stylist context question, frontend TS cleanup. See `docs/RECOVERY_IMPLEMENTATION_STATUS.md`.
+Verified after switch: backend syntax OK, backend boots (reviewer reconcile 16 canonical, pruned 0), API responds, Expo boots and the app renders. Two consecutive `/dressme` calls produced different looks with STYLE_ROTATION logging (`recent=0` then `recent=1`). NOTE: a single probe of `/stylist/chat` with "What should I wear tonight?" answered directly instead of asking for context — needs checking before that item can be called done.
+
+## ON BRANCH recovery-implementation-2026-09-10 — targeted changes (10 Sep 2026)
+1. AI Stylist vague-context: now BOTH layers. Frontend `needsOccasionContext(text, history)` widened (no longer requires a time word; covers "what do i wear/what to wear/style me/dress me/pick an outfit"), only asks once per conversation, question names the time word. Backend `needs_occasion_context()` + `occasion_question()` short-circuit `/stylist/chat` BEFORE `enforce_limit` (returns `needs_context: true`, no AI call, no allowance used); STYLIST_CHAT_SYSTEM also told to ask one question instead of guessing.
+2. Dress Me rotation: inspected, already correct on this branch — hard candidate-pool exclusion for `avoid_item_ids`, `recent_suggestions(source='dressme')` feeding the prompt, `record_style_suggestion` writing only to `style_suggestions` (never wear_count/last_worn), dressme.tsx sends the current look's ids on Create Another Look. No changes made.
+3. Photo cleanup on every ingestion path: new `POST /api/items/{id}/clean` (cleans the stored photo, keeps the pre-clean image in `orig_photo`, returns `cleaned:false` on failure, 404 for another scope). Bulk Add now runs a second "Preparing and cleaning your wardrobe photos…" phase (per-photo progress + bar, failures skipped, batch never fails); `ItemCreate.orig_photo` added and single Add sends it. Worn photos untouched everywhere.
+4-7. Hair & Makeup → **Hair**: `BEAUTY_SYSTEM` replaced by `HAIR_SYSTEM` (hairstyles only; explicitly forbids hair colour, makeup, skincare and clothing palettes), endpoint renamed internally to `hair_suggest` (route kept `/api/beauty/suggest`), now accepts occasion + neckline + hair_length + hair_type + weather and no longer requires a skin-tone profile. Response: summary / styles[{name,why,how}] / tip / occasion_note. `app/beauty.tsx` rebuilt as the Hair screen with those chip groups. Copy updated in profile.tsx, profile-edit.tsx, premium.tsx, legal.tsx and the premium message. No "makeup" string remains in the frontend or backend prompts.
+Verified: backend syntax + boot, vague/answered/specific stylist probes, hair suggestion output, `/items/{id}/clean` (photo replaced, orig retained, 404 guard), Expo boots, Hair screen renders. Nothing pushed, merged, published or deployed; still on branch `recovery-implementation-2026-09-10`.
+
+## LAUNCH POLISH BATCH (branch recovery-implementation-2026-09-10, 10 Sep 2026)
+1. Wardrobe scroll/filter memory: module-level `lastFilter/lastSub/lastOffset` in wardrobe.tsx + FlatList ref; returning from an item restores category, subfilter and offset.
+2. Duplicate detection rewritten (`find_similar_items`): same category + same colour family (containment/first-word) + >=2 matching descriptors (style/fabric/pattern) + >=2 shared name words, and returns a human `reason`. Verified: same garment re-shot IS flagged, unrelated garment is NOT.
+3. Create Outfit: real `loadingItems` state — picker shows a spinner instead of a false "no items" message.
+4. "Get AI Inspiration" → "Check My Outfit": new `POST /api/outfit/feedback` (verdict + feedback + at most ONE validated optional swap, ids checked against the wardrobe). The user's selection is never replaced; the swap is applied only if they tap "Try the swap".
+5. Compatibility: local pre-scoring shortlists to 12 for wardrobes >14 items, returns `total_compatible`/`shortlisted`; item detail header reads "TOP MATCHES FROM N COMPATIBLE PIECES".
+6. Dress Me: new `GET /api/dressme/context`; with no plan/calendar context the screen asks "What are you doing today?" with 9 quick options instead of guessing.
+7. Wardrobe Health: money tiles replaced with unworn/total piece counts; backend stats now include worn_count + category counts; nudges phrased as invitations; Profile teaser uses the real `unworn_count` from /insights instead of the 5-item sample.
+8. Google Calendar: audited, no code bug found beyond the https redirect fix that is IN THIS BRANCH BUT NEVER DEPLOYED. Remaining "access blocked" is a Google Cloud consent-screen state (Testing mode without the tester added, or unverified app with the sensitive calendar scope) — not fixable in code.
+9. Wear confirmation: `GET /api/wear/pending?date=LOCAL_YESTERDAY` + `POST /api/wear/confirm`; Home shows a one-tap check-in. Yes increments wear_count/last_worn dated to that local day; No records nothing; `wear_prompts` stops repeat asks. Suggestions still never touch wear history.
+10. Photo-quality warning: recognition returns `photo_quality`/`photo_quality_note`; single Add shows a soft card (Retake / Keep this one / Photo tips), Bulk Add shows a per-row note. Never blocks an upload.
+11. Category subfilters: Tops/Outerwear/Bottoms subfilter chips derived from existing name/style/fabric metadata (no schema change); Shoes untouched.
+12. Bulk Add copy now says processing continues in the background (true — the async loop keeps running after navigation).
+Verified: backend syntax + boot, duplicate strictness both ways, outfit feedback (incl. 400 guard), photo_quality output, wear pending/confirm (incl. bad-date guard and no-repeat), dressme context probe, Expo boot, wardrobe subfilters rendering. Still on branch recovery-implementation-2026-09-10; nothing pushed, merged, published or deployed.
+
+## Iteration 33 (branch recovery-implementation-2026-09-10)
+- Dress Me now uses the device LOCAL date: GET /api/dressme/context?date=YYYY-MM-DD and POST /api/dressme { local_date }. Yesterday/deleted plans no longer leak into the next local day; with no context the screen asks "What are you doing today?" (chips + Other free text).
+- Wardrobe displayCategory(): obvious tops (bodysuit, leotard, bustier, corset, bralette, halter, cami, singlet, tank, tube/crop, tee, blouse, button-up) can never be re-mapped to Outerwear, so knit bodysuits stay in Tops and show under the Bodysuits chip.
+- New Tops subfilter rules: "Halter / Crop tops", broader Blouses/Shirts and T-shirts, so halters no longer fall into Other. subOptions is de-duped (no duplicate T-shirts chip).
+- Check My Outfit (/api/outfit/feedback) prompt rewritten to be candid (names clashing colour / formality / season / weak pieces) while never criticising the user. Same-slot swap guard unchanged.
+- Internal planner moved from My Outfits ("View Calendar") to Home as "Plan Your Week" (testID home-plan-week) -> /planner. Google Calendar untouched.
+- Verified by testing agent iteration 33: 5/5 backend pytest (/app/backend/tests/test_iteration33_local_date_and_feedback.py) + frontend flows. No push/merge/publish/deploy.
+
+## Iteration 34 (branch recovery-implementation-2026-09-10)
+- Tops subfilters: labels/order now T-Shirts, Shirts, Blouses, Singlets, Camis, Crops, Halter, Long Sleeve, Bodysuits, Corsets, Other (SUB_ORDER for display, SUB_RULES most-specific-first for matching; one chip per item, empty chips hidden).
+- Classification text now reads name+style+fabric+pattern+description+fit_notes+normalised sleeve_length.
+- Bodysuit root cause: bodysuits were often STORED under Dresses/Outerwear, so they never reached the Tops chips. BODYSUIT_RE now hoists them to Tops for display (swimsuits excluded).
+- ANALYZE_SYSTEM tells the AI bodysuits/corsets/camis/singlets/halters/crops are Tops and to name the garment type.
+- Dress Me local midnight: _gcal_events(tz_offset) windows the users LOCAL day; /dressme/context?tz_offset= and POST /dressme {tz_offset}; screen drops yesterdays look/activity and re-probes when the device date changes.
+- OUTFIT_FEEDBACK_SYSTEM assesses colour, formality, proportion/silhouette, season/weather, footwear, texture/pattern competition, cohesion. Swap guard unchanged.
+- Verified by testing agent iteration 34 (8/8 backend + 5/5 frontend). No push/merge/publish/deploy.
+
+## Iteration 35 (branch recovery-implementation-2026-09-10)
+- Removed the top-level "All" wardrobe view; FILTERS = the 8 main categories, default Tops. Opening a category lists all of its pieces; subfilters are optional narrowing chips.
+- No user-facing "Other" chip anywhere (unplaced items keep an internal label and still show in the category view).
+- Final subfilter sets: Tops [T-Shirts, Shirts, Blouses, Polos, Singlets, Camis, Crops, Halter, Long Sleeve, Vests, Bodysuits, Corsets]; Bottoms [Jeans, Pants, Shorts, Skirts, Leggings]; Dresses none; Outerwear [Blazers, Jackets, Coats, Cardigans, Jumpers]; Shoes [Sneakers, Boots, Heels, Flats, Sandals, Dress Shoes]; Bags [Handbags, Backpacks, Clutches, Briefcases, Crossbody]; Accessories [Hats, Sunglasses, Scarves, Ties, Belts, Gloves]; Jewellery [Necklaces, Bracelets, Earrings, Rings, Watches].
+- Vests/waistcoats now live under Tops (removed from Outerwear); hoodies/sweatshirts -> Jumpers; bodysuits still hoisted to Tops.
+- ANALYZE_SYSTEM now asks for the specific garment word per category so NEW uploads land in the right subfilter.
+- Verified by testing agent iteration 35 (6/6 backend, 32/32 frontend assertions). No push/merge/publish/deploy.
+- Google Calendar prod failure (unchanged code): production backend runs a STALE GOOGLE_CALENDAR_CLIENT_ID (529785392979-9jdd...) while the workspace/intended client is 538895898254-0ns95m6...; redirect URI is correct. Fix = update production env var + redeploy.
+
+## Iteration 36 (branch recovery-implementation-2026-09-10)
+- Guest/demo flow removed: backend POST /api/auth/guest + seed_demo_wardrobe() deleted; AuthContext.guestLogin removed; "Explore as guest" button and Profile guest card/badges removed. New accounts start completely empty. Reviewer seeding/Premium untouched.
+- /welcome is now the account screen shown whenever there is no valid session: Welcome to Aureve + tagline + [Start Free] -> onboarding slides -> /login?mode=signup, and [Log In] -> /login. app/index.tsx: session -> /(tabs), else /welcome.
+- Registration sets storage flag aureve_tour_pending; Home pushes /tour once. /tour = 5-step first-run tour (Home, Add/Bulk Add, Wardrobe, Dress Me, Profile) with Next/Skip, clears the flag. Profile row "How Aureve Works" replays it.
+- Wardrobe empty state: "Your wardrobe is ready when you are" + Add Item / Bulk Add.
+- Sign out / switch account / delete account now return to /welcome or /login as appropriate.
+- Verified by testing agent iteration 36 (12/12 backend + frontend flows); two minor findings fixed afterwards (Profile switch-account login ref, onboarding pointerEvents deprecation).
+
+## Iteration 37 (branch recovery-implementation-2026-09-10)
+- Taxonomy moved to /app/frontend/src/utils/taxonomy.ts and shared by Wardrobe + item editor. Items now carry a user-chosen `subcategory` (backend ItemCreate/ItemUpdate; "" = back to automatic). primarySub honours it; displayCategory trusts the stored category when an override exists.
+- Add/Edit Item has a SUBCATEGORY chip row (testID sub-<Label>); changing category clears it; editing pre-selects the current one. Root cause of the stuck jumpsuit: subcategory was purely derived from text with no editable stored value.
+- Classification: specific type beats appearance. jumpsuit/playsuit/romper/dungaree -> Tops>Bodysuits; Sneakers matched before Boots (high-tops); Sandals before Heels (wedges); sweatshirt/hoodie -> Outerwear>Jumpers (fixed "swea-TSHIRT" substring bug); bags rebuilt on carry style (backpack/crossbody/handbag/clutch/briefcase). Regexes are Hermes-safe (no lookbehind).
+- Photo cleanup: prompt now removes hangers/hooks/clips/rails/mannequins/hands and forbids recolouring; ONE retry only if a pass errors/returns empty; single Add runs cleanup even when recognition fails (was skipped).
+- Wardrobe back nav: silent refresh (no spinner over a populated grid) + restore flag reset on focus, so category+subfilter+scroll survive opening an item. Card meta now shows the display category.
+- Premium copy: "Capsule wardrobes & occasion planning" -> "Occasion planning".
+- Calendar: no logic/redirect change. Callback now shows Googles error code, /api/calendar/config exposes last_callback_error + client_secret_fingerprint, env values stripped. Production failure is an env pairing issue (stale client id/secret) to fix in the deployed env vars.
+- Verified by testing agent iteration 37 (11/11 backend + 13/13 classification + editor flow). No push/merge/publish/deploy.
