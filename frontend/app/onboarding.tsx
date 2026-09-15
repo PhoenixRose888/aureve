@@ -96,7 +96,7 @@ export default function Onboarding() {
       </ScrollView>
 
       {/* Dots */}
-      <View style={[styles.dots, { top: insets.top + spacing.md }]} pointerEvents="none">
+      <View style={[styles.dots, { top: insets.top + spacing.md, pointerEvents: "none" }]}>
         {Array.from({ length: total }).map((_, i) => (
           <View key={i} style={[styles.dot, page === i && styles.dotActive]} />
         ))}

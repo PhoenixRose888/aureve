@@ -333,3 +333,13 @@ Verified: backend syntax + boot, duplicate strictness both ways, outfit feedback
 - Wardrobe empty state: "Your wardrobe is ready when you are" + Add Item / Bulk Add.
 - Sign out / switch account / delete account now return to /welcome or /login as appropriate.
 - Verified by testing agent iteration 36 (12/12 backend + frontend flows); two minor findings fixed afterwards (Profile switch-account login ref, onboarding pointerEvents deprecation).
+
+## Iteration 37 (branch recovery-implementation-2026-09-10)
+- Taxonomy moved to /app/frontend/src/utils/taxonomy.ts and shared by Wardrobe + item editor. Items now carry a user-chosen `subcategory` (backend ItemCreate/ItemUpdate; "" = back to automatic). primarySub honours it; displayCategory trusts the stored category when an override exists.
+- Add/Edit Item has a SUBCATEGORY chip row (testID sub-<Label>); changing category clears it; editing pre-selects the current one. Root cause of the stuck jumpsuit: subcategory was purely derived from text with no editable stored value.
+- Classification: specific type beats appearance. jumpsuit/playsuit/romper/dungaree -> Tops>Bodysuits; Sneakers matched before Boots (high-tops); Sandals before Heels (wedges); sweatshirt/hoodie -> Outerwear>Jumpers (fixed "swea-TSHIRT" substring bug); bags rebuilt on carry style (backpack/crossbody/handbag/clutch/briefcase). Regexes are Hermes-safe (no lookbehind).
+- Photo cleanup: prompt now removes hangers/hooks/clips/rails/mannequins/hands and forbids recolouring; ONE retry only if a pass errors/returns empty; single Add runs cleanup even when recognition fails (was skipped).
+- Wardrobe back nav: silent refresh (no spinner over a populated grid) + restore flag reset on focus, so category+subfilter+scroll survive opening an item. Card meta now shows the display category.
+- Premium copy: "Capsule wardrobes & occasion planning" -> "Occasion planning".
+- Calendar: no logic/redirect change. Callback now shows Googles error code, /api/calendar/config exposes last_callback_error + client_secret_fingerprint, env values stripped. Production failure is an env pairing issue (stale client id/secret) to fix in the deployed env vars.
+- Verified by testing agent iteration 37 (11/11 backend + 13/13 classification + editor flow). No push/merge/publish/deploy.

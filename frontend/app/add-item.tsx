@@ -14,6 +14,7 @@ import { diag } from "@/src/utils/diag";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
 import GarmentImage from "@/src/components/GarmentImage";
+import { SUB_ORDER, primarySub } from "@/src/utils/taxonomy";
 
 type Photos = { photo?: string; worn_photo?: string };
 
@@ -27,6 +28,7 @@ export default function AddItem() {
   const [origPhoto, setOrigPhoto] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Tops");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [colour, setColour] = useState("");
   const [fabric, setFabric] = useState("");
   const [pattern, setPattern] = useState("");
@@ -64,6 +66,8 @@ export default function AddItem() {
         setPhotos({ photo: it.photo, worn_photo: it.worn_photo });
         setName(it.name || "");
         setCategory(it.category || "Tops");
+        const derived = primarySub(it, it.category || "Tops");
+        setSubcategory(it.subcategory || (derived && derived !== "Other" ? derived : null));
         setColour(it.colour || "");
         setFabric(it.fabric || "");
         setPattern(it.pattern || "");
@@ -127,6 +131,8 @@ export default function AddItem() {
         }
       }
       setAnalyzing(false);
+      // Cleanup is independent of recognition: tidy the hanging photo either way.
+      if (!worn) runClean(base64);
       if (!res) return;
       const r = res.analysis || {};
       diag("analyze.done", { name: r.name, category: r.category, confidence: r.confidence });
@@ -136,7 +142,10 @@ export default function AddItem() {
         return;
       }
       if (r.name && !name) setName(r.name);
-      if (r.category && CATEGORIES.includes(r.category)) setCategory(r.category);
+      if (r.category && CATEGORIES.includes(r.category)) {
+        setCategory(r.category);
+        setSubcategory(null);
+      }
       // Real-world photos: if the AI is unsure, keep its best guess but ask the
       // user to confirm the category rather than silently trusting it.
       setLowConf(typeof r.confidence === "number" && r.confidence < 60);
@@ -154,9 +163,6 @@ export default function AddItem() {
       setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
       setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
       haptics.success();
-      // Tidy the hanging photo in the background once details are filled in.
-      // Worn photos are kept exactly as shot (they show the item on a person).
-      if (!worn) runClean(base64);
     },
     [name, runClean]
   );
@@ -190,6 +196,8 @@ export default function AddItem() {
     const body: any = {
       name: finalName,
       category,
+      // "" clears a previous correction so classification goes back to auto.
+      subcategory: subcategory || "",
       colour,
       fabric,
       pattern,
@@ -373,11 +381,34 @@ export default function AddItem() {
         ) : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
           {CATEGORIES.map((c) => (
-            <Pressable key={c} testID={`cat-${c}`} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)}>
+            <Pressable
+              key={c}
+              testID={`cat-${c}`}
+              style={[styles.chip, category === c && styles.chipActive]}
+              onPress={() => { if (c !== category) { setCategory(c); setSubcategory(null); } }}
+            >
               <Txt style={[styles.chipTxt, category === c && styles.chipTxtActive]}>{c}</Txt>
             </Pressable>
           ))}
         </ScrollView>
+
+        {SUB_ORDER[category] ? (
+          <>
+            <Txt style={styles.groupLabel}>SUBCATEGORY</Txt>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
+              {SUB_ORDER[category].map((sc) => (
+                <Pressable
+                  key={sc}
+                  testID={`sub-${sc}`}
+                  style={[styles.chip, subcategory === sc && styles.chipActive]}
+                  onPress={() => setSubcategory(subcategory === sc ? null : sc)}
+                >
+                  <Txt style={[styles.chipTxt, subcategory === sc && styles.chipTxtActive]}>{sc}</Txt>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
 
         <View style={styles.row2}>
           <Field label="Colour" value={colour} onChangeText={setColour} placeholder="Cream" flex testID="field-colour" />

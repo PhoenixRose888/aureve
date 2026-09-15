@@ -51,9 +51,13 @@ REVIEWER_EMAIL = (os.environ.get('REVIEWER_EMAIL', 'review@aureve.app') or '').s
 APPLE_AUDIENCES = [a.strip() for a in os.environ.get('APPLE_AUDIENCES', '').split(',') if a.strip()]
 _APPLE_JWK_CLIENT = None
 
-GCAL_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '')
-GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '')
-GCAL_REDIRECT_URI = os.environ.get('GOOGLE_CALENDAR_REDIRECT_URI', '')
+# .strip() so a stray space/newline in the deployed env can't break the token
+# exchange (Google returns invalid_client for a padded id/secret).
+GCAL_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip().strip('"').strip("'")
+GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip().strip('"').strip("'")
+GCAL_REDIRECT_URI = os.environ.get('GOOGLE_CALENDAR_REDIRECT_URI', '').strip()
+# Last callback failure (reason only, never a secret) for the read-only diagnostic.
+GCAL_LAST_ERROR: dict = {}
 GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
 
 # Premium membership — one-time payment grants a time-boxed entitlement (whole household).
@@ -1165,6 +1169,8 @@ async def update_profile(payload: ProfileUpdate, scope: dict = Depends(get_scope
 class ItemCreate(BaseModel):
     name: str
     category: str
+    # User-corrected subcategory (presentation filter). "" = classify automatically.
+    subcategory: Optional[str] = ""
     colour: Optional[str] = ""
     fabric: Optional[str] = ""
     season: Optional[str] = "All"
@@ -1195,6 +1201,7 @@ class ItemCreate(BaseModel):
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     colour: Optional[str] = None
     fabric: Optional[str] = None
     season: Optional[str] = None
@@ -1418,7 +1425,16 @@ ANALYZE_SYSTEM = (
     "Return a strict JSON object. Keys: name (short descriptive name, e.g. 'Purple oversized sunglasses'), "
     "category (ALWAYS your best guess from exactly: Tops, Bottoms, Dresses, Outerwear, Shoes, Bags, Accessories, Jewellery — "
     "sunglasses/hats/belts/scarves = Accessories; rings/necklaces/earrings/watches = Jewellery; never leave blank), "
-    "IMPORTANT for tops: bodysuits/leotards (a one-piece fitted top that fastens through the crotch), "
+    "Identify the SPECIFIC garment type and let it win over general appearance — never decide from sleeve "
+    "length, colour, height or silhouette alone. Jumpsuits, playsuits and rompers are one-piece garments: "
+    "call them a jumpsuit and file them under Tops (Aureve groups them with bodysuits). High-top sneakers "
+    "are sneakers, not boots. Wedge sandals are sandals, not heels. Sweatshirts and hoodies are jumpers "
+    "(Outerwear); a leather jacket is a jacket; a blazer is a blazer; a cardigan is a cardigan. "
+    "For bags, name the carry style from the construction, not from the presence of a strap: two shoulder "
+    "straps worn on the back = backpack; a single long strap on a small essentials bag = crossbody; a "
+    "structured bag carried by hand/arm/shoulder (it may have a shoulder strap) = handbag; a small bag held "
+    "in the hand for evening = clutch; a structured document/work bag = briefcase. "
+    "IMPORTANT for tops: bodysuits/leotards/jumpsuits (one-piece garments that fasten through the crotch), "
     "corsets/bustiers, camisoles, singlets, halter tops, cropped tops, polo shirts and "
     "vests/waistcoats are ALL category Tops — never "
     "Dresses or Outerwear. Always state the actual garment type in the name (e.g. 'Black long-sleeve "
@@ -1479,20 +1495,36 @@ async def _analyze_core(image_b64: str, category_hint: Optional[str], scope_id: 
 async def _clean_photo(image_b64: str) -> Optional[str]:
     """Background-removed, catalogue-style version of a garment photo (best-effort)."""
     instruction = (
-        "Isolate the single main clothing item in this photo and remove the background. Return the SAME "
-        "garment with its shape, colour, pattern, texture and details completely unchanged — do NOT restyle "
-        "or redesign it. Place it centred on a clean, seamless, light neutral (#F1EFEA) studio background, "
-        "flat product-catalogue style. Output only the image."
+        "Isolate the single main clothing item or accessory in this photo and remove EVERYTHING else. "
+        "Remove the coat hanger, hook, clip, peg, rail, rack, wardrobe door, mannequin, hands, furniture, "
+        "floor, wall and any other background clutter completely — no hanger hook or loop may remain. "
+        "Return the SAME item with its shape, colour, pattern, texture and details completely unchanged — "
+        "do NOT restyle, recolour or redesign it, and do not add or remove garment details. Place it centred "
+        "on a clean, seamless, light neutral (#F1EFEA) studio background, flat product-catalogue style. "
+        "Output only the image."
     )
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"clean-{uuid.uuid4().hex[:8]}",
-        system_message="You are a product-photo background remover for a clothing catalogue.",
-    ).with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
-    _text, images = await chat.send_message_multimodal_response(
-        UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
-    )
-    return compress_b64(images[0]["data"]) if images else None
+
+    async def _attempt():
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"clean-{uuid.uuid4().hex[:8]}",
+            system_message="You are a product-photo background remover for a clothing catalogue.",
+        ).with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+        _text, images = await chat.send_message_multimodal_response(
+            UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
+        )
+        return compress_b64(images[0]["data"]) if images else None
+
+    # One retry only when the first pass errors or comes back empty, so a
+    # transient failure can't leave an item permanently uncleaned.
+    try:
+        out = await _attempt()
+    except Exception as e:
+        logger.warning("clean pass 1 failed, retrying once: %s", e)
+        out = None
+    if not out:
+        out = await _attempt()
+    return out
 
 
 @api_router.post("/analyze-item")
@@ -2437,11 +2469,17 @@ async def calendar_config(request: Request):
         "client_id_length": len(cid),
         "client_secret_present": bool(GCAL_CLIENT_SECRET),
         "client_secret_length": len(GCAL_CLIENT_SECRET or ""),
+        # Non-reversible fingerprint so the deployed secret can be compared with
+        # the intended one without ever exposing it.
+        "client_secret_fingerprint": (
+            hashlib.sha256(GCAL_CLIENT_SECRET.encode()).hexdigest()[:10] if GCAL_CLIENT_SECRET else None
+        ),
         "env_redirect_uri_fallback": GCAL_REDIRECT_URI,
         "request_host": request.headers.get("host"),
         "forwarded_host": request.headers.get("x-forwarded-host"),
         "forwarded_proto": request.headers.get("x-forwarded-proto"),
         "scope": GCAL_SCOPE,
+        "last_callback_error": GCAL_LAST_ERROR or None,
     }
 
 
@@ -2500,8 +2538,25 @@ async def calendar_callback(request: Request, code: Optional[str] = None,
         })
     await db.calendar_oauth_states.delete_one({"state": state})
     if r.status_code != 200:
-        logger.error("gcal token exchange failed: %s", r.text[:200])
-        return _page("Couldn't connect calendar")
+        try:
+            err = r.json()
+        except Exception:
+            err = {"error": "unknown"}
+        reason = str(err.get("error") or "unknown")
+        detail = str(err.get("error_description") or "")
+        logger.error("gcal token exchange failed (%s): %s", r.status_code, r.text[:300])
+        GCAL_LAST_ERROR.clear()
+        GCAL_LAST_ERROR.update({
+            "at": now_utc().isoformat(),
+            "status": r.status_code,
+            "error": reason,
+            "error_description": detail,
+            "client_id_prefix": (GCAL_CLIENT_ID or "")[:20],
+            "redirect_uri": redirect_uri,
+        })
+        # Surface Google's own reason: invalid_client = the deployed client
+        # id/secret pair doesn't match the OAuth client that granted consent.
+        return _page(f"Couldn't connect calendar ({reason})")
     tok = r.json()
     expiry = (now_utc() + timedelta(seconds=tok.get("expires_in", 3600))).isoformat()
     update = {"account_id": account_id, "access_token": tok.get("access_token"), "expiry": expiry}

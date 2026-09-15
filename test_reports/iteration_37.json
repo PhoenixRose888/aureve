@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 37 verified end-to-end. Backend (11/11 pytest): POST /api/items accepts subcategory ('Bodysuits'), GET returns it, PUT with {category, subcategory} updates both fields, PUT with subcategory='' clears it, and the cross-category flow (Dresses -> Tops+Bodysuits) persists correctly; GET /api/calendar/config exposes client_secret_fingerprint (10-char) and last_callback_error (null baseline), and /api/calendar/callback returns 200 HTML 'Link expired' for an unknown state and a 'cancelled' page when error param present (no 500s). Frontend: reviewer login OK, /premium no longer mentions 'Capsule wardrobes' and still lists 'Occasion planning', wardrobe renders category+subfilter chip rows, the KEY editor flow works end-to-end (seeded Dresses jumpsuit -> edit -> switch CATEGORY=Tops -> SUBCATEGORY chips refresh to the 12 Tops labels including Bodysuits -> pick 'Bodysuits' -> Save -> item detail badge flips to TOPS -> item now appears under Wardrobe>Tops>Bodysuits and is no longer under Dresses; a follow-up PUT changing subcategory to 'Singlets' correctly persists). Frontend classification 13/13 PASS via UI seed+verify: jumpsuit->Tops>Bodysuits, high-top sneakers->Shoes>Sneakers, wedge sandals->Shoes>Sandals, sweatshirt & hoodie->Outerwear>Jumpers, leather jacket->Outerwear>Jackets, wool blazer->Blazers, cardigan->Cardigans, backpack->Bags>Backpacks (NOT Crossbody), shoulder bag->Handbags, crossbody bag->Crossbody, evening clutch->Clutches, briefcase->Briefcases. No 'Other · N' chip in ANY category. Back-nav preserves category+sub filter (Outerwear>Jumpers) after opening an item and pressing back (scroll page too short to force scroll-restore visibly, but URL/filter kept). Regression smoke: /add-item shows CATEGORY+SUBCATEGORY chip rows and Save button, /bulk-add opens, /dressme prompts for activity (Work/Day off/etc.), Home has Plan Your Week. Taxonomy regexes are Hermes-safe (no lookbehind). All 13 seeded reviewer items deleted after testing.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Wardrobe item cards",
+        "issues": [
+          "Item cards show the STORED category label under the name (e.g. 'Tops') even when displayCategory() has re-slotted them into another category chip (e.g. hoodie stored as 'Tops' but shown under Outerwear>Jumpers displays 'Tops' badge). Minor UX inconsistency — presentation label could follow displayCategory(). Not in iteration 37 scope."
+        ]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "onboarding.tsx (fadeCover Animated.View)",
+        "issue": "Runtime console warning still emitted on every load: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/onboarding.tsx (previously flagged in iter36, still present)."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration37_taxonomy_calendar.py",
+    "/app/test_reports/pytest/pytest_iteration37.xml"
+  ],
+  "action_items": [
+    "None functional for iteration 37 — all requested behaviours verified.",
+    "Optional: move pointerEvents from prop to style.pointerEvents on the onboarding Animated.View to silence the React Native deprecation warning (carried over from iter36).",
+    "Optional polish: make item-card sub-label follow displayCategory() rather than raw item.category so hoodies stored as 'Tops' but re-slotted to Outerwear read 'Outerwear' on the card."
+  ],
+  "critical_code_review_comments": [
+    "taxonomy.ts is clean, well-commented, uses no Hermes-unsafe lookbehinds and matches SUB_ORDER against SUB_RULES. Regex ordering in SUB_RULES is deliberately most-specific-first for Shoes (Sneakers before Boots, Sandals before Heels) and Bags (Backpacks/Briefcases/Clutches/Crossbody before the generic '\\bbag\\b' Handbags catch-all) — verified with 13 cases.",
+    "add-item.tsx correctly clears subcategory when category changes (line 388) and only renders the SUBCATEGORY chip row when SUB_ORDER[category] exists (line 395) — so Dresses/Jewellery don't show subs.",
+    "server.py ItemUpdate.subcategory is Optional[str]=None, but ItemCreate defaults it to '' — that's fine for the 'clear' semantics but two different defaults for the same field is a subtle inconsistency. Not user-visible.",
+    "calendar_callback correctly writes GCAL_LAST_ERROR on token exchange failures (surfaces Google's error code on the page); invalid-state and error-param paths never crash, just render an HTML page."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration37_taxonomy_calendar.py (new — 11 tests)"
+  ],
+  "success_rate": { "backend": "100% (11/11)", "frontend": "100% (login, premium copy, subcategory editor flow, 13/13 classification, no Other chip, back-nav filter preserved, Add/Bulk/DressMe smoke)" },
+  "seed_data_creation": "Seeded 14 reviewer items via API for classification + editor flow. All 14 deleted at end (verified 0 remaining TEST_iter37 items). No test accounts were created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter37 subcategory editing/persistence, classification corrections (jumpsuits/high-tops/wedges/sweatshirts/hoodies/jackets/blazers/cardigans/bag types), scroll+filter restoration on back, premium copy update and calendar diagnostics (client_secret_fingerprint + last_callback_error + 'Link expired' on invalid state) all verified. Backend test file /app/backend/tests/test_iteration37_taxonomy_calendar.py is a reusable regression pack (uses TINY_PNG_B64 to satisfy the POST /items photo requirement). Reviewer creds unchanged.",
+  "rca_of_issue": "N/A — no failing behaviours in scope."
+}

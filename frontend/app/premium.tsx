@@ -14,7 +14,7 @@ const FEATURES = [
   "Dress Me — one tap every morning",
   "Shopping Intelligence (skip duplicates)",
   "Occasion-aware hairstyle advice",
-  "Capsule wardrobes & occasion planning",
+  "Occasion planning",
   "Household — one plan for everyone",
 ];
 

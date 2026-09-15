@@ -12,7 +12,7 @@ export default function WelcomeDecor() {
   const h = 260;
   const W = 390; // viewBox width; scales to device width
   return (
-    <View style={[styles.wrap, { width, height: (h / W) * width }]} pointerEvents="none">
+    <View style={[styles.wrap, { width, height: (h / W) * width, pointerEvents: "none" }]}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${W} ${h}`} fill="none" preserveAspectRatio="none">
         {/* thin gold ribbons */}
         <Path d="M10 70 C 110 40, 280 40, 380 70" stroke={colors.creamDim} strokeWidth={2} fill="none" strokeLinecap="round" />
