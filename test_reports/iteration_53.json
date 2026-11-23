@@ -1,0 +1,59 @@
+{
+  "summary": "Weather fix check plus a broad pre-release regression. Backend: the iteration 52 suite passed 21/21 and the iteration 53 wardrobe_pool/hydrate suite passed 18/18, so every AI endpoint still returns items with byte-exact photos. The new suite (test_iteration54_weather_regression.py, 21 tests) passed 21/21 on its last run. Earlier full runs had 2 weather failures, both caused by intermittent upstream timeouts (details below). Frontend: when Open-Meteo responds, the weather fix works. Home shows '-1°C · Clear sky' about 1s after sign-in. The Dress Me and AI Stylist headers show the same chip. Returning to Home is instant with no dash, the value is saved under aureve.weather.v1, and it shows immediately after a page reload. The AI Stylist sends temperature and weather, and its replies are weather-aware. Without weather it neither asks for the city nor states a temperature. MAIN OPEN ISSUE: I reproduced the user's 'cloud + dash' symptom 3 times on cold starts. Between 04:21 and 04:26 the backend's httpx calls to Open-Meteo timed out on both attempts (8s + 8s, about 16s, then 502), and in one burst it even happened while curl from the same container answered in 0.1s. The frontend aborts at 12s and sets status='error', so Home shows '—' and nothing is saved to storage. The hook does not retry by itself, so the dash stays until another screen mounts the hook. This only shows up on a cold start or once the cache is over 3h old; inside the cache window the dash is correctly hidden. Regression checks passed: register/login/me/logout/delete; a new account gets 7-day complimentary Premium (premium_until/complimentary_expires_at +7d, Home banner 'Premium Access · 7 days remaining', Profile 'Complimentary Premium Access … 7 days remaining'); a Free account reports capacity full (100/100), POST /items returns 402, and the Wardrobe shows the 'Your Free wardrobe is full' card; Profile shows Free / Complimentary / Premium correctly; item CRUD plus summary/category filters; capture -> items bulk add; saved vs worn kept distinct, Mix It Up does not mark items worn, and the wear log carries today's date; shop-check duplicate returns Skip, outfits_added=0 and the 'already create similar looks' wording; Shopping Intelligence returns recommendations; packing returns 200 for Paris and for 'Zzzzqqq' (fallback, no invented weather); Dress Me works with and without weather, and in the UI generate / create another look (avoid_item_ids sent) / discard all work; Stylist chat, New Chat, journal and reopening a past conversation work; wardrobe browsing 6 categories -> subcategory -> items with images and back at every level; all 5 tabs load. No console errors and no red screens. Deprecated packages detected: none (no expo-av, expo-barcode-scanner or expo-background-fetch).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/weather", "issue": "Intermittent upstream timeouts: both 8s attempts time out, so the worst case is about 16.3s before a 502. That misses the 'well under 10s' target and is longer than the frontend's 12s timeoutMs, so the retry never reaches the client. Reproduced in a concurrent burst (16.27s 502, then the next round took 8.9s) and in backend.err.log at 04:21:20, 04:23:44, 04:24:15, 04:25:06 and 04:25:25 ('weather lookup failed (attempt N): ' with an EMPTY exception message, i.e. an httpx timeout). There is no server-side cache, so every cold client depends on a live upstream call. The ingress also replaces the 502 JSON body with an HTML page.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/packing/plan", "issue": "The fallback text 'Weather forecast unavailable — pack versatile layers.' only goes into the LLM prompt. The response has no deterministic forecast field: weather_note is paraphrased by the LLM ('Forecast is unavailable, so…' / 'with no forecast available…'). It returned 200 and invented no weather in 3 runs, but the wording is not guaranteed."},
+      {"endpoint": "POST /api/auth/login", "issue": "A wrong password returns 400 instead of 401."},
+      {"endpoint": "POST /api/stylist/chat", "issue": "With temperature=4 and weather='Light rain' the reply suggested an overcoat but never mentioned the rain or an umbrella, so it was only weakly weather-aware. With -0.7°C clear sky (from the UI) the reply did reference 'a clear day just below freezing'."},
+      {"endpoint": "logging", "issue": "logger.warning('weather lookup failed … %s', e) prints an empty string for httpx timeouts. Use repr(e) or type(e).__name__."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Home weather chip (cold start)", "issue": "When /api/weather takes more than 12s or returns 502, status becomes 'error' and the chip shows '—' with no automatic retry, which is the user's reported symptom. Reproduced 3 times. useWeather.ts:130-134 has no backoff retry. resolveCoords also has no timeout around requestForegroundPermissionsAsync (useWeather.ts:86). If a permission prompt is never answered (web, or a native user who leaves the dialog open), refresh() never settles, `inflight` stays set for the rest of the session and the dash never clears.", "testID": "home-weather", "priority": "HIGH"},
+      {"component": "AI Stylist composer", "issue": "The send button sits at x=348 with width 48, so its right edge is at 396px: 21px off-screen at a 375 viewport and 6px clipped at 390.", "testID": "stylist-send", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Bottom tab bar (all tabs)", "issues": ["Tab labels are clipped at the bottom: the label box is only 7px tall (645-652 in a 49px tab at 375x667), and the 'Home', 'Wardrobe', 'Dress Me' text is visibly cut off at both 375x667 and 390x844."]},
+      {"screen": "AI Stylist header", "issues": ["The stylist-back touch target is 26x28, below the 44x44 minimum."]},
+      {"screen": "Profile (Free)", "issues": ["The copy 'Your whole wardrobe, plus 5 Dress Me looks a month' reads oddly next to the 100-piece Free cap."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration54_weather_regression.py",
+    "/app/backend/tests/test_iteration52_orig_photo_projection.py",
+    "/app/backend/tests/test_iteration53_wardrobe_pool_hydration.py",
+    "/app/test_reports/pytest/pytest_iter54.xml"
+  ],
+  "action_items": [
+    "HIGH: backend /api/weather: add an in-process cache keyed by rounded coordinates (about 0.1°, 30-60 min) and serve the last good value when the upstream fails. Cap the total time well under the client timeout (for example 4s per attempt and about 9s overall) so the retry can actually finish.",
+    "HIGH: useWeather.ts: on error, schedule a retry (for example after 15s, 30s, 60s) while subscribers are mounted, instead of leaving '—' until a screen remounts.",
+    "HIGH: useWeather.ts:86: wrap requestForegroundPermissionsAsync (and getForegroundPermissionsAsync) in withTimeout so an unanswered prompt cannot hang refresh() and lock `inflight` forever.",
+    "Optional: on Home, show a neutral icon or empty text instead of the cloud + '—' when status==='error', so it does not look broken.",
+    "MEDIUM: fix the stylist composer layout so stylist-send stays inside the viewport at 375px (the input row is about 21px too wide).",
+    "MEDIUM: bottom tab bar: increase the tabBarStyle height/padding or the label lineHeight so labels are not clipped.",
+    "Minor: return a deterministic `forecast` field (the weather dict, or null with the fallback copy) from /packing/plan rather than relying on the LLM's weather_note.",
+    "Minor: login with a wrong password should return 401; log repr(e) on weather/geocode failures.",
+    "Data hygiene: leftover TEST_ data from EARLIER runs (not created by me) is still in the DB and pollutes AI results. It includes 2x 'TEST_orig_probe White cotton t-shirt' (item_9a03dedf2d94, item_a92ac4ee76a3) and TEST_bulk_0/1 (item_26eb1e01389c, item_a755d432328f) in the seeded profile prof_365ddfe52deb (both probes show up in shop-check similar_items), 83 TEST_cap_* items plus TEST_cap_slot_freed in prof_6e172a2e2444, and 3 TEST_guest_item. Delete them by id; make the iter52 test teardown robust."
+  ],
+  "critical_code_review_comments": [
+    "useWeather.ts: module-level cache, de-duplicated inflight, 3h usable window and storage persistence are correct. Storage double-encodes the value (setItem JSON.stringify of an already-stringified value) but hydrate parses it back fine.",
+    "useWeather.ts:86 requestForegroundPermissionsAsync has no timeout. Only getCurrentPositionAsync is wrapped.",
+    "api client sends 'Content-Type: application/json' on GETs, which triggers a CORS preflight on every /api/weather call (an extra round trip, visible as OPTIONS in the backend log).",
+    "server.py weather(): 2 attempts x timeout=8 with a fresh AsyncClient each time. Worst case is about 16s, longer than the client's 12s.",
+    "The backend runs uvicorn --reload and watches /app/backend including tests/, so every edit to a test file restarts the backend (preview only, but it can make concurrent tests flaky).",
+    "find_similar_items is deliberately strict. Re-capturing the exact photo of an existing Bottoms item produced no duplicates (by design, as long as the AI's colour/name differ)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration54_weather_regression.py"],
+  "success_rate": {"backend": "100% on final runs (iter52 21/21, iter53 18/18, iter54 21/21); /api/weather was flaky in earlier runs (2 failures from upstream timeouts)", "frontend": "~85% (all flows pass; weather dash reproduced under upstream flakiness; 2 layout issues)"},
+  "seed_data_creation": "Throwaway qa+<ts>@aureve.local accounts were created and deleted via DELETE /api/auth/account. One was turned into a Free account with 100 TEST_cap items for the cap test; deletion confirmed 0 items, profiles and user left. TEST_ items, outfits and wear logs on user_testaura01 were deleted by id, and wear_count/last_worn were restored. No reviewer-account data was changed: 'Wear this today' was NOT tapped in the UI, to avoid polluting the reviewer's worn history; the wear flow was verified via API on user_testaura01.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest in the FOREGROUND. Editing files under /app/backend/tests triggers a backend reload, so wait about 5s before running. Dress Me item photos are at resolved_items[].item.photo. Items' user_id is the PROFILE id (prof_*), not the account id. Packing weather_note is LLM text. Open-Meteo from the backend is intermittently slow: check backend.err.log for 'weather lookup failed'. The Playwright web preview resolves location via ipapi (Council Bluffs coordinates) when geolocation is not granted.",
+  "rca_of_issue": "User symptom 'cloud + dash on Home': the backend /api/weather upstream (Open-Meteo via httpx, 8s timeout x 2) intermittently times out, giving a 502 after about 16s. The client aborts at 12s, the hook sets status='error', Home renders '—' and nothing is persisted. With no auto-retry and no server-side last-good cache, the dash stays for the session on a cold start. Reproduced 3/6 cold logins between 04:21 and 04:26, and seen again in a concurrent burst against localhost:8001. Mitigation: a server-side last-good cache plus a shorter total deadline, and a client retry with backoff plus a timeout on the permission request."
+}

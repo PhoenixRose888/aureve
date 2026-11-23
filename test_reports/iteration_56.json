@@ -1,0 +1,60 @@
+{
+  "summary": "Pre-release gate testing (backend + Expo web UI at 375x667). UPLOADS OK: we drove the real UI with Playwright file chooser (expo-image-picker web fallback). Single add went Wardrobe -> + -> library -> AI analysis filled name/colour -> saved, piece shown in grid. Bulk Add with 4 photos showed progress, per-photo results and '4 pieces added'. Retry of failures (forced 500 on /capture) went from 0 added + 'Retry failed items' to 2 added. Grid images rendered (base64, naturalWidth 320). Item detail, edit and delete all work, and Shop-check photo upload works. GATED: /packing, /capsule, /tryon, /planner, /looks (also /looks?tab=history, /planner/, history.pushState) all redirect to Home. A MutationObserver saw no flash of feature content, the app made no gated API calls and there were no console errors. No in-app link to these screens exists (static grep plus UI walk). All 10 gated endpoints return 404 {detail:'Not Found'} with and without auth, the same as an unknown path, with no data or stack leak. Minor fingerprinting is possible through 422 (malformed JSON) and 405 (wrong method). RELEASED: Home + weather, all 6 wardrobe categories down to item level, Create Outfit + Check My Outfit, Dress Me (generate, create another look, discard, wear this today), AI Stylist (reply, New Chat, reopen thread), Collections -> Saved/Worn, Outfits tab + detail, Wardrobe Health, Shopping Intelligence, Profile (membership row, privacy, terms) and back navigation all work. Free 100-cap behaves in the UI: wardrobe-full card, add-item full screen and bulk 'Free wardrobe is full'; API returns 402 with count staying 100. A new signup gets complimentary 7-day Premium. Issues found: unreleased Planner is still ADVERTISED in onboarding and paywall copy, a pre-existing premium-hydration race, and reviewer demo-wardrobe behaviour. No deprecated Expo packages were found (no expo-av, expo-barcode-scanner or expo-background-fetch).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/packing/plan, /capsule/build, /tryon, /plans, /stylist/suggest", "issue": "With a malformed JSON body these return 422 json_invalid instead of 404, because FastAPI parses the body before the route-level unreleased() dependency runs. An unknown path would return 404, so this shows the route exists. No data leaks."},
+      {"endpoint": "GET /api/packing/plan, GET /api/capsule/build, GET /api/stylist/suggest, PUT /api/plans/{id}, PATCH /api/tryon/photo", "issue": "These return 405 Method Not Allowed instead of 404, which also shows the gated routes exist. The routes are still listed in the internal /openapi.json. The public /api/openapi.json and /api/docs return 404, which is good. Suggested fix: do not register the gated routes at all (wrap the decorators in `if feature not in UNRELEASED_FEATURES`), or add a path-prefix middleware that returns 404 before routing."},
+      {"endpoint": "GET /api/dressme/context, POST /api/dressme, POST /api/wear/confirm", "issue": "These still read db.plans (server.py:2567, 2592, 3594). Plans created before the gate (2 in this DB, 0 in the future) can still set the Dress Me occasion, and the user has no UI to see or delete them. Low impact."},
+      {"endpoint": "DELETE /api/wear/{id}", "issue": "Pre-existing: this endpoint does not exist (405), so 'Wear this today' cannot be undone through the API or UI. FYI only."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Premium-gated taps on cold load", "issue": "Pre-existing, not from this change. Right after a page load, tapping 'Wardrobe Health' (profile.tsx:177) or the Shop upload (shop.tsx:34) sends a PREMIUM user (review@aureve.app) to /premium. After about 5 seconds the same tap works. RCA: usePremiumAccess() returns premium=false until user/profile hydrate, and the onPress handlers route to the paywall instead of waiting for hydration.", "testID": "open-health-report, shop-upload-button", "priority": "medium"}
+    ],
+    "integration_issues": [
+      {"flow": "Unauthenticated deep link to a gated route", "issue": "The gate uses <Redirect href=\"/(tabs)\" />, which skips app/index.tsx's auth check. A signed-out user opening /packing lands on a signed-out Home with 401 console errors instead of Welcome. The same gap already exists for /wardrobe (no auth guard in (tabs)/_layout). Suggest Redirect href=\"/\" so index.tsx decides between welcome and tabs.", "affected_testIDs": ["home-action-wardrobe"]}
+    ],
+    "design_issues": [
+      {"screen": "Onboarding / Premium paywall (Play misrepresentation risk)", "issues": [
+        "app/onboarding.tsx:26-27: slide 'Plan Your Week with Confidence' / 'Create outfits in advance' describes the unreleased Planner.",
+        "app/premium.tsx:17: FEATURES bullet 'Occasion planning' is sold as a Premium benefit, but Planner is unreachable. Remove or reword both before the Play submission."
+      ]},
+      {"screen": "Reviewer account (review@aureve.app)", "issues": [
+        "Pre-existing: when the reviewer adds any real piece, show_demo flips to false (server.py:209-215) and all 16 demo items disappear. On the next backend restart, seed_reviewer_account() deletes them for good (server.py:4291-4305). A Play reviewer who tests upload will see the wardrobe empty out. Confirmed during this run: the item was deleted straight away and all 16 demo items came back, with no restart in between."
+      ]}
+    ],
+    "react_native_issues": [
+      {"component": "Android merged manifest", "issue": "This cannot be checked from web. The expo-image-picker config plugin is not listed in app.json plugins, and blockedPermissions only covers READ_MEDIA_IMAGES and READ_MEDIA_VIDEO. After the next build, check the final AAB permissions (aapt dump permissions or the Play Console) to confirm that no other library adds READ_MEDIA_* or READ_EXTERNAL_STORAGE without maxSdkVersion. Reference: /app/frontend/app.json:30-38"},
+      {"component": "Expo SDK patch versions", "issue": "The Metro log warns that expo@54.0.35 (expected ~54.0.37), expo-constants@18.0.13 (~18.0.14) and expo-file-system@19.0.23 (~19.0.24) are behind. Align them before the release build."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration56_release_gate_regression.py",
+    "/app/test_reports/pytest/iteration56.xml",
+    "/app/test_reports/pytest/iteration56_regression.xml"
+  ],
+  "action_items": [
+    "Remove or reword the unreleased-Planner copy: onboarding.tsx slide 3 ('Plan Your Week... Create outfits in advance') and premium.tsx:17 'Occasion planning'.",
+    "Change the gate redirects in packing/capsule/tryon/planner/looks.tsx from href=\"/(tabs)\" to href=\"/\" so signed-out deep links reach Welcome/Login.",
+    "Optional hardening: register gated FastAPI routes only when the feature is released, or 404 them in middleware, so malformed bodies and wrong methods also return 404 instead of 422/405.",
+    "Pre-existing: make Premium-gated onPress handlers (profile open-health-report/open-shopping-intelligence, shop upload/analyse) wait for user/profile hydration before routing to /premium.",
+    "Pre-existing: consider stopping reviewer demo items from vanishing or being purged after the reviewer adds one real piece.",
+    "After the next Android build, check the merged AAB permission list."
+  ],
+  "critical_code_review_comments": [
+    "The gate pattern (early return of <Redirect> in a wrapper, then the original body in a second component) keeps hook order valid. No Rules-of-Hooks violation.",
+    "No released screen calls a gated endpoint (grep across app/ and src/).",
+    "image.ts: the Android branch returns 'granted' with no permission call. The camera path still requests CAMERA as before. iOS and web paths are unchanged and verified on web.",
+    "server.py is 4375 lines, well over the 700-line guideline (pre-existing)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration56_release_gate_regression.py"],
+  "success_rate": {"backend": "100% of core checks (46 passed + 1 xfail documenting the 422 fingerprint; regression suites 55/51/50: 41/41, 1 network-timeout flake passed on retry)", "frontend": "100% of requested released flows passed; 3 copy/UX issues reported"},
+  "seed_data_creation": "Two throwaway accounts (qa+<ts>@aureve.local and qa+full<ts>@aureve.local; the second had 100 TEST_cap items inserted and premium_until unset). Both were deleted with DELETE /api/auth/account. On the reviewer account, these were created and then removed by id: TEST_UI_single_tee item (deleted, 16 demo items restored), wear log wear_f8dde0b639a4 (deleted by id in Mongo), stylist thread sthread_276bef161e0f (archived). On user_testaura01: TEST_upload_tee item and TEST_wear log were deleted by id. 4 stylist threads created today were archived (archive keeps them). Some of those were probably created by earlier runs, not this one: a small change to test-account data.",
+  "flaky_tests": ["test_iteration51_capacity.py::TestServerSideCapIntact::test_post_items_402_at_100_three_times_no_orphans: connect timeout once, passed on retry"],
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Web image upload can be driven with page.expect_file_chooser() after clicking pick-library-button (single) or bulk-choose-photos (multiple). Generated garment JPEGs: run PIL as in the test file. Do not add items to review@aureve.app unless you delete them before any backend restart: one real item hides the demo wardrobe, and a restart purges it. Use throwaway accounts for mutations. Dress Me needs dressme-shortcut-* and then dressme-request-go. There is no DELETE /api/wear/{id}, so remove wear logs by id in Mongo.",
+  "rca_of_issue": "Premium race: usePremiumAccess() reads user.premium and active profile from context; on cold start, before /auth/me and profiles resolve, premium is false, so the onPress handlers push /premium. Gate fingerprint: FastAPI parses the JSON body (json_invalid -> 422) and method matching (405) before route dependencies run, so a dependency-based 404 cannot cover these cases."
+}

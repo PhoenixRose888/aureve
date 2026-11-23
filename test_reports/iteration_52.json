@@ -1,0 +1,47 @@
+{
+  "summary": "Backend-only regression of the wardrobe_pool() (metadata-only load) + hydrate_photos() (re-attach imagery for response items) optimisation. 41/41 pytest pass across 3 suites + a direct unit check of the helpers. All 11 AI endpoints that now use wardrobe_pool were called live (no mocks). Every returned item object (118 in the main suite) had photo/thumb/worn_photo compared BYTE-FOR-BYTE with its Mongo document, so a photo that is missing, null or swapped with another item would fail. No missing or null photo was found on any JSON path. Try On works and returns a generated image. The previous iteration's suite (test_iteration52_orig_photo_projection.py) still passes 21/21, including /items/{id}/clean using orig_photo and the Free 100-item cap returning 402.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/items/{item_id}/compatibility", "issue": "Not caused by this change: `focus` is still loaded with projection {'_id':0} (server.py:3135), so it returns orig_photo when the item has one. It is a single document, so the memory cost is small, but it makes the response bigger for no reason. Optional fix: add 'orig_photo': 0."},
+      {"endpoint": "POST /api/capture", "issue": "find_similar_items builds a slim duplicate dict (id/name/category/colour/photo/reason). hydrate_photos now also adds `thumb` and `worn_photo` keys to these entries, which they did not have before. This is harmless extra data in the response, not a bug."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration53_wardrobe_pool_hydration.py",
+    "/app/backend/tests/test_iteration53_guest_scope.py",
+    "/app/backend/tests/test_iteration52_orig_photo_projection.py",
+    "/app/test_reports/pytest/iter53_pool_hydration.xml",
+    "/app/test_reports/pytest/iter53_reviewer_scope.xml",
+    "/app/test_reports/pytest/iter53_regress52.xml"
+  ],
+  "verified": [
+    "Dress Me: resolved_items[].item carry the exact DB photo and thumb. 'Create another look' (avoid_item_ids) gave a completely different look with 0 items overlapping. /api/stylist/suggest and Mix It Up (/api/outfits/mix with base item_ids) work and return photos. GET /dressme/context returns its keys.",
+    "AI Stylist chat: replies and returns an outfit whose items[] all have photos. Asking about an attached item (item_ids) works. The thread is persisted: GET /stylist/threads lists it, and the stored assistant message's outfit_item_ids equals outfit.item_ids. NOTE: the thread stores outfit IDS only, not item objects, so there are no stored photos to check (the review request assumed there were).",
+    "Check My Outfit: returns verdict and feedback. A swap was produced and both swap.out_item and swap.in_item photos match the DB, with the same category on both sides. The cross-category-to-addition branch was checked by code review only (server.py:3256-3265: text fields only, swap set to None); the AI did not produce that case in testing.",
+    "Try On: returns 200 with a generated image (no 'don't have photos' error).",
+    "Shopping Intelligence: returns summary plus 3-4 recommendations, and every pairs_with entry is an exact owned item name.",
+    "Shop Check: similar_items[] and matches_with[] are full items with photos. When I used an owned garment's photo, it was flagged as similar; fills_gap was false, outfits_added was forced to 0, and already_covered was present.",
+    "Compatibility: focus has its photo, resolved_matches[].item photos match the DB, the focus item never appears in its own matches, and match_count/total_compatible/shortlisted are ints.",
+    "Capture duplicates: after aligning a TEST_ probe with the AI's analysis, the probe was flagged. Its photo, thumb AND a distinct worn_photo were all re-attached exactly.",
+    "Packing and Capsule: capsule_items[] and resolved_outfits[].items[] all have photos. In 2 runs each, the AI produced no outfit item outside capsule_items; that path is covered by the union passed to hydrate_photos (code review).",
+    "missing-piece returns its keys. health-report stats.total_items equals the real DB count.",
+    "Unchanged paths still work: GET /items (grid serves the thumbnail as photo, as before), ?summary=1, ?category=, /items/{id}, /laundry, /wear/pending?date=, /outfits, /collections, /plans, /wear (embedded items have photos), /items/capacity.",
+    "Reviewer account (show_demo scope, demo items): Dress Me and Stylist chat return demo items with full photos.",
+    "Direct unit check (/tmp/unit_hydrate.py): wardrobe_pool returns no imagery keys. hydrate_photos fills only the requested ids, adds no photo key for unknown ids, tolerates None and id-less entries, handles duplicate references, and does not leak photos across users or scopes."
+  ],
+  "action_items": [
+    "None blocking. Optional: add 'orig_photo': 0 to the compatibility focus find_one (server.py:3135)."
+  ],
+  "critical_code_review_comments": [
+    "The diff is minimal and correct. Each AI response path calls hydrate_photos on exactly the item dicts it returns. Because it mutates in place, dicts shared between keys (shop-check similar/matches, packing capsule/outfits) are covered.",
+    "The compatibility in-Python filter (it.get('id') != item_id) is equivalent to the old Mongo $ne filter. Verified live: the focus item never appears in its matches."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration53_wardrobe_pool_hydration.py", "/app/backend/tests/test_iteration53_guest_scope.py"],
+  "success_rate": {"backend": "100% (41/41: 18 new + 2 reviewer-scope + 21 iteration-52 regression)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "Created one TEST_probe item (with photo, thumb and a distinct worn_photo) and a few stylist threads; all were deleted by id in teardown. Verified 0 leftovers; user_testaura01 still has 18 items. premium_until for user_testaura01 was already 2099 and was not changed. Dress Me and Stylist calls on the reviewer account wrote style-suggestion/usage records (normal app side effects, not deleted); the reviewer's threads were deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: pytest backend/tests/test_iteration53_wardrobe_pool_hydration.py backend/tests/test_iteration53_guest_scope.py backend/tests/test_iteration52_orig_photo_projection.py (~3.5 min, live AI). GET /items serves the thumb as `photo` on purpose, so don't compare it to the full photo. GET /items/{id} returns the full doc including orig_photo (unchanged). /wear/pending requires ?date=YYYY-MM-DD. Guest mode (/api/auth/guest) no longer exists (404); use the reviewer login for the demo scope and never delete that account."
+}

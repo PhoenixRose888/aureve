@@ -1,0 +1,344 @@
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { Platform, AppState } from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { api, setToken, clearToken, getToken } from "@/src/api/client";
+import { storage } from "@/src/utils/storage";
+import {
+  initPurchases,
+  refreshCustomerInfo,
+  entitlementState,
+  addCustomerInfoListener,
+} from "@/src/services/purchases";
+
+WebBrowser.maybeCompleteAuthSession();
+
+type User = {
+  user_id: string;
+  email: string;
+  name?: string;
+  picture?: string;
+  premium?: boolean;
+  premium_until?: string;
+  premium_source?: string;
+  trial_used?: boolean;
+  trial_eligible?: boolean;
+  complimentary_active?: boolean;
+  complimentary_days_left?: number;
+  complimentary_expires_at?: string;
+  premium_plan?: string | null;
+  is_guest?: boolean;
+} | null;
+
+type AuthCtx = {
+  user: User;
+  isGuest: boolean;
+  loading: boolean;
+  signingIn: boolean;
+  login: () => Promise<void>;
+  loginApple: () => Promise<void>;
+  loginEmail: (email: string, password: string) => Promise<void>;
+  registerEmail: (email: string, password: string, name?: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  syncEntitlement: (info?: any) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+};
+
+const Ctx = createContext<AuthCtx>({} as AuthCtx);
+export const useAuth = () => useContext(Ctx);
+
+const AUTH_URL = "https://auth.emergentagent.com/";
+// Token stashed when a guest starts Google sign-in so the backend can migrate
+// their wardrobe into the new account (survives the web redirect reload).
+const GUEST_MIGRATE_KEY = "aura_guest_migrate_token";
+// Last known user, so a cold start on a flaky connection opens signed-in
+// instead of bouncing a valid session out to the login screen.
+const CACHED_USER_KEY = "aureve_cached_user";
+
+async function cacheUser(u: User) {
+  if (u) await storage.setItem(CACHED_USER_KEY, JSON.stringify(u));
+  else await storage.removeItem(CACHED_USER_KEY);
+}
+
+async function readCachedUser(): Promise<User> {
+  const raw = await storage.getItem<string>(CACHED_USER_KEY, "");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    return null;
+  }
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUserState] = useState<User>(null);
+  const [loading, setLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
+
+  const setUser = useCallback((u: User) => {
+    setUserState(u);
+    cacheUser(u);
+  }, []);
+
+  const processSessionId = useCallback(async (sessionId: string) => {
+    const guestToken = await storage.secureGet<string>(GUEST_MIGRATE_KEY, "");
+    const data = await api<{ session_token: string; user: User }>("/auth/session", {
+      method: "POST",
+      auth: false,
+      body: { session_token: sessionId, guest_token: guestToken || undefined },
+    });
+    await setToken(data.session_token);
+    if (guestToken) await storage.secureRemove(GUEST_MIGRATE_KEY);
+    // Hydrate from /auth/me so computed fields (e.g. premium) are present.
+    setUser(await api<User>("/auth/me"));
+  }, [setUser]);
+
+  const checkExisting = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return false;
+    try {
+      const me = await api<User>("/auth/me", { timeoutMs: 20000 });
+      setUser(me);
+      return true;
+    } catch (e: any) {
+      // ONLY a definitive rejection ends the session. A timeout or network
+      // hiccup on a cold start must never sign a returning user out.
+      if (e?.status === 401 || e?.status === 403) {
+        await clearToken();
+        await cacheUser(null);
+        return false;
+      }
+      const cached = await readCachedUser();
+      if (cached) {
+        setUserState(cached);
+        // Revalidate quietly once the connection recovers.
+        api<User>("/auth/me")
+          .then((me) => setUser(me))
+          .catch(() => {});
+        return true;
+      }
+      return false;
+    }
+  }, [setUser]);
+
+  // On mount: web -> parse session_id from URL first; then check existing token.
+  useEffect(() => {
+    (async () => {
+      try {
+        if (Platform.OS === "web") {
+          const hash = window.location.hash || "";
+          const search = window.location.search || "";
+          const match =
+            hash.match(/session_id=([^&]+)/) || search.match(/session_id=([^&]+)/);
+          if (match) {
+            await processSessionId(decodeURIComponent(match[1]));
+            window.history.replaceState(null, "", window.location.pathname);
+            setLoading(false);
+            return;
+          }
+        } else {
+          const initial = await Linking.getInitialURL();
+          if (initial) {
+            const m = initial.match(/session_id=([^&]+)/);
+            if (m) {
+              await processSessionId(decodeURIComponent(m[1]));
+              setLoading(false);
+              return;
+            }
+          }
+        }
+        await checkExisting();
+      } catch {
+        // ignore — checkExisting keeps a valid session on transient failures
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [processSessionId, checkExisting]);
+
+  // Stash the current guest token so it can be migrated after Google sign-in.
+  const stashGuestToken = useCallback(async () => {
+    if (!user?.is_guest) return;
+    const token = await getToken();
+    if (token) await storage.secureSet(GUEST_MIGRATE_KEY, token);
+  }, [user]);
+
+  const login = useCallback(async () => {
+    setSigningIn(true);
+    try {
+      await stashGuestToken();
+      if (Platform.OS === "web") {
+        const redirectUrl = window.location.origin + "/";
+        window.location.href = `${AUTH_URL}?redirect=${encodeURIComponent(redirectUrl)}`;
+        return;
+      }
+      const redirectUrl = Linking.createURL("");
+      const authUrl = `${AUTH_URL}?redirect=${encodeURIComponent(redirectUrl)}`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+      if (result.type === "success" && result.url) {
+        const m = result.url.match(/session_id=([^&]+)/);
+        if (m) {
+          await processSessionId(decodeURIComponent(m[1]));
+        }
+      }
+    } finally {
+      setSigningIn(false);
+    }
+  }, [processSessionId, stashGuestToken]);
+
+  const loginApple = useCallback(async () => {
+    setSigningIn(true);
+    try {
+      await stashGuestToken();
+      const cred = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!cred.identityToken) throw new Error("Apple sign-in did not return a token.");
+      const fullName = cred.fullName
+        ? [cred.fullName.givenName, cred.fullName.familyName].filter(Boolean).join(" ").trim()
+        : undefined;
+      let guest_token: string | undefined;
+      if (user?.is_guest) {
+        const t = await getToken();
+        if (t) guest_token = t;
+      }
+      const data = await api<{ session_token: string; user: User }>("/auth/apple", {
+        method: "POST",
+        auth: false,
+        body: {
+          identity_token: cred.identityToken,
+          name: fullName || undefined,
+          email: cred.email || undefined,
+          guest_token,
+        },
+      });
+      await setToken(data.session_token);
+      await storage.secureRemove(GUEST_MIGRATE_KEY);
+      // Hydrate from /auth/me so computed fields (e.g. premium) are present.
+      setUser(await api<User>("/auth/me"));
+    } catch (e: any) {
+      // User tapped Cancel on the native sheet — not an error worth surfacing.
+      if (e?.code === "ERR_REQUEST_CANCELED") return;
+      throw e;
+    } finally {
+      setSigningIn(false);
+    }
+  }, [user, stashGuestToken, setUser]);
+
+  const logout = useCallback(async () => {
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } catch {}
+    await clearToken();
+    await storage.secureRemove(GUEST_MIGRATE_KEY);
+    setUser(null);
+  }, [setUser]);
+
+  const emailAuth = useCallback(async (mode: "login" | "register", email: string, password: string, name?: string) => {
+    setSigningIn(true);
+    try {
+      let guest_token: string | undefined;
+      if (user?.is_guest) {
+        const t = await getToken();
+        if (t) guest_token = t;
+      }
+      const data = await api<{ session_token: string; user: User }>(
+        mode === "register" ? "/auth/register" : "/auth/login",
+        { method: "POST", auth: false, body: { email, password, name, guest_token } }
+      );
+      await setToken(data.session_token);
+      // Hydrate from /auth/me so computed fields (e.g. premium) are present.
+      setUser(await api<User>("/auth/me"));
+    } finally {
+      setSigningIn(false);
+    }
+  }, [user, setUser]);
+
+  const loginEmail = useCallback((email: string, password: string) => emailAuth("login", email, password), [emailAuth]);
+  const registerEmail = useCallback((email: string, password: string, name?: string) => emailAuth("register", email, password, name), [emailAuth]);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await api<User>("/auth/me"));
+    } catch {}
+  }, [setUser]);
+
+  // Premium follows the ACTIVE ENTITLEMENT in RevenueCat CustomerInfo — not a
+  // product or subscription type — so lifetime / promotional / "unlimited
+  // duration" entitlements unlock the app too.
+  const syncEntitlement = useCallback(async (info?: any) => {
+    const customerInfo = info ?? (await refreshCustomerInfo());
+    if (!customerInfo) return;
+    const state = entitlementState(customerInfo);
+    if (!state.active) return;
+    try {
+      await api("/membership/entitlement", { method: "POST", body: state });
+      await refreshUser();
+    } catch {}
+  }, [refreshUser]);
+
+  // Configure RevenueCat with the signed-in user id (native only; no-op on web / Expo Go),
+  // then read CustomerInfo fresh so entitlements are correct from launch.
+  const syncedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.user_id || user?.is_guest) {
+      syncedFor.current = null;
+      return;
+    }
+    const uid = user.user_id;
+    if (syncedFor.current === uid) return;
+    syncedFor.current = uid;
+    initPurchases(uid)
+      .then(() => syncEntitlement())
+      .catch(() => {});
+  }, [user?.user_id, user?.is_guest, syncEntitlement]);
+
+  // Reactive updates (purchase, renewal, restore, dashboard grant) + a fresh
+  // read whenever the app comes back to the foreground.
+  useEffect(() => {
+    if (!user?.user_id || user?.is_guest) return;
+    const off = addCustomerInfoListener((info) => { syncEntitlement(info); });
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") syncEntitlement();
+    });
+    return () => {
+      off();
+      sub.remove();
+    };
+  }, [user?.user_id, user?.is_guest, syncEntitlement]);
+
+  const deleteAccount = useCallback(async () => {
+    try {
+      await api("/auth/account", { method: "DELETE" });
+    } catch {}
+    await clearToken();
+    await storage.secureRemove(GUEST_MIGRATE_KEY);
+    setUser(null);
+  }, [setUser]);
+
+  return (
+    <Ctx.Provider
+      value={{
+        user,
+        isGuest: !!user?.is_guest,
+        loading,
+        signingIn,
+        login,
+        loginApple,
+        loginEmail,
+        registerEmail,
+        deleteAccount,
+        logout,
+        refreshUser,
+        syncEntitlement,
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
+}

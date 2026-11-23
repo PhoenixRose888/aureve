@@ -1,0 +1,96 @@
+// Aureve design tokens — calm, timeless, inclusive. Apple × COS × Aesop.
+// Charcoal + soft ivory, muted-emerald accent. Elegance through restraint.
+export const colors = {
+  surface: "#FAF9F6",
+  onSurface: "#232323",
+  surfaceSecondary: "#F1EFEA",
+  onSurfaceSecondary: "#54524D",
+  surfaceTertiary: "#E7E4DE",
+  onSurfaceTertiary: "#8A8781",
+  surfaceInverse: "#232323",
+  onSurfaceInverse: "#FAF9F6",
+  brand: "#3F6B5B",
+  brandPrimary: "#232323",
+  onBrandPrimary: "#FAF9F6",
+  brandSecondary: "#3F6B5B",
+  onBrandSecondary: "#FAF9F6",
+  brandTertiary: "#DCE5DF",
+  onBrandTertiary: "#2E4E42",
+  sage: "#97AC87",
+  sagePressed: "#8AA079",
+  sageDeep: "#6E8264",
+  onSage: "#FFFFFF",
+  success: "#7A9E7E",
+  warning: "#C9A25A",
+  error: "#C46A5C",
+  info: "#4B6587",
+  border: "#E5E2DB",
+  borderStrong: "#232323",
+  divider: "#EAE7E0",
+  // Aureve brand mark — gold on ink (splash / logo lockups)
+  ink: "#1C1C1C",
+  inkSoft: "#3A3A3A",
+  gold: "#D4AF37",
+  goldDeep: "#B88A3C",
+  goldSoft: "#E9C87A",
+  cream: "#F5F1E8",
+  creamDim: "#E9E2D6",
+  // Soft dashboard family — one warm, muted palette so cards differ in tone
+  // without breaking the Aureve identity.
+  champagne: "#F3E9D8",
+  eucalyptus: "#E4EDE5",
+  taupe: "#EAE3D9",
+  plum: "#E8DEE5",
+};
+
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  "2xl": 32,
+  "3xl": 48,
+};
+
+export const radius = {
+  sm: 4,
+  md: 8,
+  lg: 12,
+  pill: 999,
+};
+
+export const fonts = {
+  // Editorial UI type — Inter. Clean, modern, premium (Apple / Linear / COS feel).
+  display: "Inter-SemiBold",       // section headings — 600
+  displayBold: "Inter-Bold",       // primary CTAs — 700
+  displayMedium: "Inter-Medium",   // nav / medium emphasis — 500
+  displayRegular: "Inter-Regular", // 400
+  body: "Inter-Regular",           // body text — 400
+  // Elegant serif — used only for the Aureve wordmark / brand lockups.
+  serif: "CormorantGaramond-SemiBold",
+  serifMedium: "CormorantGaramond-Medium",
+  serifRegular: "CormorantGaramond-Regular",
+  serifBold: "CormorantGaramond-Bold",
+};
+
+export const type = {
+  sm: 12,
+  base: 14,
+  lg: 16,
+  xl: 20,
+  "2xl": 24,
+};
+
+export const CATEGORIES = [
+  "Tops",
+  "Bottoms",
+  "Dresses",
+  "Outerwear",
+  "Shoes",
+  "Bags",
+  "Accessories",
+  "Jewellery",
+];
+
+export const SEASONS = ["All", "Spring", "Summer", "Autumn", "Winter"];

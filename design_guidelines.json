@@ -1,0 +1,174 @@
+{
+  "app_name": "Aura",
+  "personality": "3 Editorial Mobile LIGHT",
+  "personality_one_liner": "A high-fashion magazine in your pocket—refined, highly visual, and spacious, letting the clothing photography be the absolute hero.",
+  "color": {
+    "surface": "#FAFAFA",
+    "onSurface": "#1A1A1A",
+    "surfaceSecondary": "#F2F2F2",
+    "onSurfaceSecondary": "#4A4A4A",
+    "surfaceTertiary": "#EAEAEA",
+    "onSurfaceTertiary": "#6B6B6B",
+    "surfaceInverse": "#1A1A1A",
+    "onSurfaceInverse": "#FAFAFA",
+    "brand": "#9A6A55",
+    "brandPrimary": "#1A1A1A",
+    "onBrandPrimary": "#FAFAFA",
+    "brandSecondary": "#9A6A55",
+    "onBrandSecondary": "#FAFAFA",
+    "brandTertiary": "#E8DFD8",
+    "onBrandTertiary": "#5C3D31",
+    "success": "#3C5A45",
+    "onSuccess": "#FFFFFF",
+    "warning": "#C48E4B",
+    "onWarning": "#FFFFFF",
+    "error": "#8E3B3B",
+    "onError": "#FFFFFF",
+    "info": "#4A5D75",
+    "onInfo": "#FFFFFF",
+    "border": "#E3E3E3",
+    "borderStrong": "#1A1A1A",
+    "divider": "#EAEAEA"
+  },
+  "typography": {
+    "displayFontFamily": "Cormorant Garamond",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room. Treat sections like magazine spreads. Avoid dense dashboards.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 4,
+    "md": 8,
+    "lg": 12,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [
+      "Avoid glassmorphism for this editorial aesthetic. Use solid color backgrounds or subtle dividers to maintain a crisp, print-inspired layout."
+    ],
+    "dont's": [
+      "Do not use blur or frosted glass over images, it clashes with the raw editorial vibe."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "A daily fashion dashboard presenting today's weather alongside a hero AI-suggested outfit, plus a quick action to check a new shopping find.",
+      "states": {
+        "loading": "Centered minimalist spinner with a 'Curating today's look...' serif message.",
+        "empty": "N/A",
+        "error": "Clean text 'Unable to load today's curation.' with a thin-bordered retry button."
+      },
+      "layout": "Headline-first layout. Large edge-to-edge hero image of the suggested outfit (occupying upper 50%) with a subtle bottom gradient scrim (vertical, transparent to surfaceInverse at 70%) containing the weather and occasion metadata in crisp serif typography. Below, a clean horizontal list of individual owned items making up the look, plus a prominent solid dark button to 'Scan a new item'."
+    },
+    {
+      "name": "Wardrobe Catalogue",
+      "purpose": "A visually stunning archive of owned clothing items organized by category.",
+      "states": {
+        "loading": "Subtle pulsing rectangles masking the grid.",
+        "empty": "An elegant illustration or high-quality image of a clean clothing rack, text 'Your wardrobe is a blank canvas', and a CTA to 'Add first piece'.",
+        "error": "Error message with a retry CTA."
+      },
+      "layout": "Pinterest-style grid (2-column masonry or strict 12-column grid mapping). Use 4pt to 8pt gutters. Top of the screen features sticky, minimalist pill filters (All, Tops, Bottoms, Outerwear) using thin borders, no heavy pills. Images must be prominent, bordered lightly, with only essential metadata (brand, category) beneath each."
+    },
+    {
+      "name": "Item Detail",
+      "purpose": "A deep dive into a single clothing piece, detailing stats, flattering ratings, and worn photos.",
+      "states": {
+        "loading": "Spinner in the center of a blank white screen.",
+        "empty": "N/A",
+        "error": "Error text with a reload button."
+      },
+      "layout": "Product detail page (PDP) inspired layout. Top 50% is a pristine, swipeable gallery of the item (hanging + worn). Generous white space below. Use high-contrast hierarchy for stats (Cost per wear, Times worn) grouped elegantly with subtle dividers. Flattery and comfort ratings shown as thin minimalist progress bars or discrete stars."
+    },
+    {
+      "name": "Stylist (AI Outfit Builder)",
+      "purpose": "Generates a cohesive outfit collage based on occasion and weather from the user's owned items.",
+      "states": {
+        "loading": "Elegant fading transitions of clothing icons, 'Styling your look...'",
+        "empty": "Prompt to 'Tell Aura what you're dressing for today'.",
+        "error": "Clean error block, retry action."
+      },
+      "layout": "Input area at the top with a refined form (Occasion dropdown, Weather auto-fetch). The result is a beautifully composed visual collage of the pieces laid out (like a flat lay). Below the collage, provide rating sliders (Flattering, Comfort, Confidence) using ultra-thin tracks to capture feedback for the AI."
+    },
+    {
+      "name": "Shop Check",
+      "purpose": "Analyzes a potential new purchase to see if it fills a wardrobe gap or duplicates existing items.",
+      "states": {
+        "loading": "Scanning animation over the uploaded image.",
+        "empty": "Upload dropzone reading 'Paste a link or upload a photo of the item you're eyeing.'",
+        "error": "Analysis failed, try another image."
+      },
+      "layout": "Focus entirely on the uploaded image in the center. Once analyzed, screen splits into a bold 'Buy' or 'Skip' verdict in large Serif text. Below, a horizontal scrolling list of 'Similar items you own' and 'Outfits this adds', structured cleanly with thin dividers."
+    },
+    {
+      "name": "Profile / Insights",
+      "purpose": "Displays style insights, learned preferences, and wardrobe stats.",
+      "states": {
+        "loading": "Spinner over blank canvas.",
+        "empty": "Requires more wear data to generate insights.",
+        "error": "Error fetching stats."
+      },
+      "layout": "Editorial-style report. Large metric numbers (e.g., '142 Items', '$4.20 Avg CPW'). Use simple, monochrome bar charts or purely typographic data representation. Lists of 'Most Worn' and 'Least Worn' presented as elegant thumbnails with ranking numbers."
+    }
+  ],
+  "images": {
+    "hero_outfit_suggestion": {
+      "url": "https://images.unsplash.com/photo-1578102718171-ec1f91680562?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxjaGljJTIwc3RyZWV0JTIwc3R5bGUlMjBvdXRmaXR8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Woman wearing white coat carrying crossbody bag in a chic street style outfit"
+    },
+    "wardrobe_rack_empty": {
+      "url": "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd2FyZHJvYmUlMjBjbG90aGluZyUyMHJhY2t8ZW58MHx8fHwxNzg0MDQ2MTUwfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Minimalist clothing rack with neutral tones"
+    },
+    "stylist_hero_background": {
+      "url": "https://images.unsplash.com/photo-1664076458686-3449062080ac?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA4Mzl8MHwxfHNlYXJjaHwxfHxmYXNoaW9uJTIwZWRpdG9yaWFsJTIwbW9kZWwlMjBwb3J0cmFpdHxlbnwwfHx8fDE3ODQwNDYxNTB8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Fashion editorial model in silver dress"
+    },
+    "flat_lay_clothing": {
+      "url": "https://images.unsplash.com/photo-1567113463300-102a7eb3cb26?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwxfHxjbGVhbiUyMGZsYXQlMjBsYXklMjBjbG90aGluZ3xlbnwwfHx8fDE3ODQwNDYxNTB8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Clean flat lay of folded clothing"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the '3 Editorial Mobile LIGHT' personality. Treat the UI like a high-end fashion magazine (e.g., Vogue, Net-a-Porter).",
+    "Do NOT use heavy shadows, rounded playful components, or dense dashboard layouts.",
+    "Use 'Cormorant Garamond' for display headings and 'Geist' for all body, metadata, and transactional UI.",
+    "The primary brand color is a muted rust/clay (#9A6A55), but the core primary CTA must be dark charcoal (#1A1A1A) to maintain the monochrome editorial luxury feel.",
+    "Banned hues: Blue, purple, indigo, teal. Use near-black/dark-gray for primary contrast.",
+    "Images are the hero. Use generous whitespace to separate sections, thin borders (0.5pt to 1pt) for structure, and omit glassmorphism effects completely to keep the layout raw and print-inspired.",
+    "When rendering images with text overlays (like the Home screen hero outfit), a vertical gradient scrim (transparent to surfaceInverse at ≥70%) is MANDATORY to guarantee contrast.",
+    "Keep forms (like the Shop Checker and Item Add) ultra-minimal with thin underlines or borders instead of heavily filled input boxes."
+  ]
+}

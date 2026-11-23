@@ -1,0 +1,22 @@
+{
+  "summary": "Regression test of the {\"orig_photo\": 0} projection added to 14 db.items.find() loads in server.py (backend only, live AI, no mocks). git diff confirms only projection lines changed. A TEST_ probe item WITH a populated orig_photo was created so every changed endpoint really loaded a document that has the heavy field. 21/21 pytest tests passed (83s), plus the 10 existing iteration-51 capacity tests. Every image-bearing response still includes a non-empty photo, and orig_photo no longer appears in any changed response: GET /items (full, summary=1, category), /items/{id}, /laundry, /capture duplicates, /dressme resolved_items, /wear/pending, /outfit/feedback, /stylist/chat outfit.items, /items/{id}/compatibility (focus + resolved_matches), /shop-check, /packing/plan, /capsule/build, /insights/missing-piece, shopping-intelligence, health-report (stats.total_items == DB count) and /tryon (200, image returned, no 'don't have photos' 400). POST /items/{id}/clean, the only consumer of orig_photo, still works: with photo blanked it cleaned from orig_photo, returned the cleaned photo, kept orig_photo unchanged and regenerated the thumb. POST /items stores orig_photo exactly as sent, and PUT keeps it. The Free 100-item cap still returns 402 with capacity {count:100,cap:100,remaining:0,full:true,premium:false}. No regressions found. The frontend never reads orig_photo from responses (it is only sent in add-item.tsx), so dropping the key from these responses has no client impact.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/capture", "issue": "Not a regression; this behaviour existed before the change. Duplicate matching is strict: re-photographing the seeded 'White Crew T-Shirt' (style 'Minimal', pattern '') returned duplicates=[] because the AI described it as style 't-shirt', pattern 'solid'. The result was identical with and without the projection when tested offline with find_similar_items. Once the item's descriptors matched the AI's, the duplicate was flagged and carried its photo."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iteration52_orig_photo_projection.py", "/app/test_reports/pytest/pytest_iter52.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Only the 14 projection lines changed. No code path saves a loaded item back with replace_one or a full $set, so orig_photo cannot be wiped by the projection.",
+    "Optional follow-up (out of scope, not applied): these responses still return the full uncompressed orig_photo: GET /items/{id}, PUT /items/{id} and POST /items. POST /items also stores orig_photo without compress_b64. Neither affects this change."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration52_orig_photo_projection.py"],
+  "success_rate": {"backend": "100% (21/21 new + 10/10 iteration51 capacity)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "None kept. The TEST_orig_probe item, the stylist thread and the throwaway qa+iter52 account with its 100 filler items were all deleted by id. user_testaura01 still has 18 items and its premium_until/premium_source are unchanged. Side effects left on the test account: AI usage and style_suggestion records from the dressme, stylist and other AI calls.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "user_testaura01 is already Premium (premium_until 2099, source revenuecat), so no premium toggle is needed; its default profile is prof_365ddfe52deb. The iteration 52 test file creates its own probe item with orig_photo and cleans up after itself. Capture dedup needs category + colour + 2 matching descriptors, so the test aligns the probe's metadata to the AI analysis before checking duplicates."
+}

@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 40 (deterministic necessity + calendar authorize guard) is FULLY VERIFIED end-to-end. BACKEND: created /app/backend/tests/test_iteration40_necessity_calendar.py with 6 tests, all PASS (32.4s) — POST /api/dressme called 4 times across (26C Clear, 9C Light rain, 18C Windy, 20C Sunny): every Tops/Bottoms/Shoes/Dresses entry is 'core', every Bags/Jewellery/Accessories entry is NEVER 'core' (came back 'recommended' or absent), and Outerwear is 'core' only when temp<=15 or weather matches rain/drizzle/shower/snow/storm/wind — the 9C+Light rain call returned Outerwear=core, and no outerwear appeared on the warmer clear/sunny calls. GET /api/calendar/config returns 200 with client_secret_length=35 in preview; GET /api/calendar/authorize returns 200 with a valid https://accounts.google.com/o/oauth2/v2/auth?... URL. FRONTEND: reviewer login on mobile viewport (390x844) → Dress Me tab → 'Lunch / casual outing' → outfit rendered with dressme-core (3 items: Top, Bottom, Shoes) and separate dressme-extras row (1 belt) under label 'RECOMMENDED · OPTIONAL EXTRAS'. Piece list shows CORE OUTFIT + RECOMMENDED headings (no OPTIONAL because there were no optional items). Core swap regression: tapped dressme-item-0, picked another shirt, ONLY the TOP row changed (2 diffs = kicker+name for the same slot); Bottom + Shoes untouched. Extra swap: tapped dressme-item-3 — swap sheet opened but reviewer wardrobe only has 1 belt so the only option WAS the current item (0 diffs, expected); extras row remained visible after tapping. Save to My Outfits worked (button flipped to 'Saved to My Outfits'). Create Another Look regenerated a fresh 3-core-item look. No regressions observed.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration40_necessity_calendar.py",
+    "/app/test_reports/pytest/pytest_iteration40.xml",
+    "/app/test_reports/iteration_40.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:2010-2026 necessity_for() is correctly deterministic — Tops/Bottoms/Dresses/Shoes always return 'core'; Outerwear returns 'core' only when temperature<=15 OR weather matches /rain|drizzle|shower|snow|storm|wind/i, otherwise it falls through to 'recommended' when the AI said core|recommended, else 'optional'; Bags/Jewellery/Accessories can only ever be 'recommended' (when AI explicitly said so) or 'optional', never 'core'. The AI's raw value is normalised to lowercase and clamped to a valid enum before use — safe.",
+    "server.py:2087-2098 the enrichment loop passes the AI's raw string into necessity_for() and stores only the deterministic output on resolved_items, so the client never sees the AI's original label. Good.",
+    "server.py:2559-2564 calendar/authorize now short-circuits with a clear 500 when GCAL_CLIENT_SECRET is shorter than 20 chars, BEFORE the user is bounced to Google — preview's 35-char secret still returns a valid URL. This prevents the production 'invalid_client after consent' flow.",
+    "dressme.tsx:131-139 the core/extras split reuses ONE mapped index array, so a swap on either flatlay maps back to result.resolved_items[originalIndex] via swapItem() at :184-195 — verified live that a CORE swap only mutates that one index and the extras row stays intact.",
+    "dressme.tsx:328-348 renders CORE OUTFIT / RECOMMENDED / OPTIONAL headings but skips empty groups (`if (!rows.length) return null`), so a plain 3-piece look shows only 'CORE OUTFIT' and never a lonely 'OPTIONAL' heading with no rows. Verified in the live run (recommended present, optional hidden).",
+    "dressme.tsx:308 label logic — 'RECOMMENDED · OPTIONAL EXTRAS' when at least one extra is 'recommended', else plain 'OPTIONAL EXTRAS' — verified live."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (6/6 pytest cases pass)",
+    "frontend": "100% (dressme-core + dressme-extras render, labels correct, group headings correct, CORE swap only mutates its own piece, EXTRA swap keeps extras row visible, Save + Create Another Look both work)"
+  },
+  "seed_data_creation": "None — no items, outfits or profiles seeded. One outfit was saved to reviewer's own account via the Save to My Outfits button (name 'Dress Me · <date>'); it can be removed via DELETE /api/outfits/{id} if the reviewer wants a clean slate but it is otherwise consistent with normal reviewer usage.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reviewer wardrobe has 16 items including exactly 1 belt (Brown Leather Belt). If you need to exercise a real EXTRA swap that actually changes the extra, POST a second belt (or a bag/jewellery) first, then trigger a look that includes it, then swap — otherwise the extras swap sheet will contain only the current item and swapping is a no-op (as observed this iteration). Both launch fixes are working — no code changes required from the main agent.",
+  "rca_of_issue": "N/A — this was a verification pass, not a bug fix. The deterministic necessity logic and calendar authorize guard both behave exactly as the spec describes on the preview environment."
+}

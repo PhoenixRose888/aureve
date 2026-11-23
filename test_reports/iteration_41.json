@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 41 (slim embedded items in /outfits, /plans, /collections/{id} + GarmentImage recyclingKey/retry fix) is FULLY VERIFIED end-to-end. BACKEND: created /app/backend/tests/test_iteration41_slim_outfit_items.py (6 tests, ALL PASS in 3.25s). GET /api/outfits payload = 29,472 bytes / 28.8 KB (matches the ~29 KB spec target, down from ~160 KB); the reviewer's outfit embeds 4 items and every embedded item has (a) non-empty `photo`, (b) NO `orig_photo` key, (c) NO leaked `thumb` key. Cross-check on revdemo-0: embedded photo = 3,648 B vs GET /api/items/revdemo-0 photo = 18,280 B (0.20x — materially smaller, confirms thumbnail is served in the list and full-res still comes from the item detail endpoint). GET /api/plans returns 200 (reviewer has 0 plans, payload=2B). GET /api/collections returns 200 (0 collections initially); test created a throwaway TEST_iter41_slim collection, attached the reviewer's outfit, GET /api/collections/{id} returned 200 with embedded outfit items all satisfying the same slim-and-non-empty-photo invariants; collection cleaned up. Regression: GET /api/items still ships thumbs (no orig_photo leak) and GET /api/items/{id} still ships full-resolution photos (>8KB). FRONTEND: reviewer login on mobile viewport (390×844) → My Outfits tab renders the existing card with 4 REAL garment images (white tee, tan chinos, brown boots, brown belt) and 0 SVG placeholder icons on the page — every <img> is a data:image/jpeg URI at 320×320 natural resolution. Opening the outfit detail (outfit_8a766101788b) rendered 8 real data-URI images (hero collage + list rows). Dress Me → 'Lunch / casual outing' → generated a new look (Light Blue Oxford Shirt + Beige Chino Trousers + Tan Ankle Boots CORE + Brown Leather Belt as RECOMMENDED extra); Save to My Outfits flipped to 'Saved to My Outfits' and the new outfit appeared on the Outfits tab (outfit_2dc7649a6fa4) with its OWN real garment thumbnails, not the placeholder. Wardrobe grid renders real item photos on entry. Cleanup: the test-created outfit_2dc7649a6fa4 was DELETED via DELETE /api/outfits so the reviewer account is back to its seeded state (1 demo outfit + 16 items).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/weather", "issue": "Returns 502 on preview for both requested coordinates (Omaha & London). Pre-existing preview-only Open-Meteo egress issue, NOT introduced by iteration 41 and not blocking any tested flow — /api/outfits, /api/plans, /api/collections all served correctly, and the app renders Dress Me even when weather 502s."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration41_slim_outfit_items.py",
+    "/app/test_reports/pytest/pytest_iteration41.xml",
+    "/app/test_reports/iteration_41.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:2861-2879 slim_items_by_id() is correct: strips both `orig_photo` and `thumb` from the emitted dict, then re-attaches the thumb as `photo` and blanks `worn_photo`. The 20-per-call backfill is bounded (`backfilled < 20`) so a legacy wardrobe never blocks a single list response on Pillow work. Applied consistently at /outfits (2888), collections-with-outfits (2926), /plans (3039) and /wear (3155) — all four call sites use the same items_scope() and {\"_id\":0,\"orig_photo\":0} projection, so no orig_photo ever leaves Mongo for list responses.",
+    "server.py:2934 collection COVER path pulls `photo` from the already-slimmed dict, so the cover collage on /api/collections is thumbnails too — not the full-res photo. Good.",
+    "GarmentImage.tsx:51-54 candidates are memoised on [photo, fallbackPhoto], and :59-62 resets idx+failures whenever either source changes — an edited item re-renders cleanly instead of staying stuck on a failed decode. Correct.",
+    "GarmentImage.tsx:85 recyclingKey now derives from `${current.slice(0,24)}-${failures}` — unique per source per attempt, so recycled cells in the outfits grid / collages can no longer reuse a neighbour's slot and render blank (this was the LAUNCH BLOCKER, verified visually across the collage + detail rows).",
+    "GarmentImage.tsx:86-95 onError retries the SAME source up to 2 times before advancing, and only falls through to the fallback when `idx < candidates.length - 1`. Combined with the placeholder guard at :64-74, a truly-missing photo still renders the category-appropriate glyph rather than a broken image."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration41_slim_outfit_items.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 pytest cases pass — /outfits slim + smaller-than-detail, /plans slim, /collections list, /collections/{id} outfits slim, /items regression, /items/{id} full-res)",
+    "frontend": "100% (My Outfits card + New saved outfit + Outfit detail all render real garment imagery; 0 placeholder icons on outfits screen; Home + Wardrobe regressions pass; Dress Me still splits CORE / RECOMMENDED)"
+  },
+  "seed_data_creation": "None persisting. During testing I (a) created a throwaway collection 'TEST_iter41_slim' — deleted at end of test, (b) saved one Dress Me look outfit_2dc7649a6fa4 to reviewer's account — deleted via DELETE /api/outfits after verification. Reviewer's original demo outfit (outfit_8a766101788b) and 16 demo items are untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reviewer state restored: exactly 1 outfit (outfit_8a766101788b) + 16 demo items + 1 profile (Aureve · MAIN) + 0 collections + 0 plans. /api/outfits payload for that reviewer is 28.8 KB with 4 slim embedded items. If future iterations need to stress the slimmer, POST several more items and a bigger outfit; the 20-per-call backfill cap means the first list request after a bulk legacy migration may need to be repeated to backfill all thumbs (this is by design). /api/weather 502s in preview are unrelated to this iteration.",
+  "rca_of_issue": "N/A — verification pass. The reported launch-blocker (My Outfits cards showing placeholders instead of real garments) is not reproducible on this build: (i) the backend now serves ~3.6KB thumbnails as `photo` in /outfits list responses instead of full-resolution 1024px photos + orig_photo + worn_photo, keeping the collage payload tiny and decode-friendly on device; (ii) GarmentImage's recyclingKey now varies per source, so the outfits collage no longer swaps a neighbour's rendered bitmap into an empty slot. Both fixes are working; the reviewer's demo card AND a freshly saved Dress Me card both render real imagery."
+}

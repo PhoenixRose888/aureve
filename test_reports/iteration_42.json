@@ -1,0 +1,41 @@
+{
+  "summary": "Phase 1 (dashboard Home, progressive Wardrobe, 6 top-level categories, matching-set field, cleaned-thumb fix) is FULLY VERIFIED end-to-end. BACKEND: /app/backend/tests/test_iteration42_phase1.py -> 9/9 PASS. GET /api/items?summary=1 returns every item (16 for reviewer) with NO photo/worn_photo/thumb/orig_photo fields and preserves id/name/category/pairs_count; payload shrank from 176,586 B (full /items) to 3,131 B summary (ratio 0.0177, >56x smaller). GET /api/items still ships thumbnails as `photo`; GET /api/items/{id} still ships full-resolution photo (detail photo >= list thumb). MATCHING SET: POST /api/items with set_name='Navy formal suit' persists; summary=1 carries set_name; PUT changes it to 'Navy 3-piece' and clears it to '' correctly; throwaway item deleted. CLEANED-THUMB FIX: code inspection of clean_item_photo confirms the $set writes `photo`, `orig_photo` AND `thumb: make_thumb(img)` (server.py:1711-1714), and POST /api/items/{id}/clean is reachable and returns 200 with a well-formed body. FRONTEND (mobile 390x844, reviewer login): Home renders date 'Thursday, September 17' + weather '—' (Open-Meteo 502 preview-only, pre-existing), greeting 'Good evening, Aureve' + suggestion 'Let's make the most of your wardrobe today.', four action cards (wardrobe/create/dressme/stylist) and the My Collections card with Saved + Worn chips. All 8 removed testIDs verified GONE (home-plan-week, home-bell, home-growing-banner, home-dress-me-button, home-see-all, home-qa-wardrobe/outfits/dressme). CRITICAL: Home fired ZERO /api/items and ZERO /api/outfits requests during 2.5s of dwell. Wardrobe: 6 top-level rows (Tops 3, Bottoms 4, Dresses 2, Outerwear 3, Shoes 2, Accessories 2 — sum=16 which matches reviewer's total demo wardrobe, i.e. Bags/Jewellery records folded correctly into Accessories). 0 garment images rendered at category or subcategory level, images only render at the leaf grid (1 for T-Shirts). Back control (wardrobe-back-level) visible past level 1 and steps back one level per tap. Select + Add buttons only appear at the leaf. Restoration regression: opened wardrobe-item-revdemo-0, browser-back returned to the T-Shirts leaf with the grid still rendered. Accessories drill-down shows only non-empty subcats (Bags 1, Belts 1 in the demo).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/weather", "issue": "Still returns 502 in preview (Open-Meteo egress); Home shows '—'. Pre-existing preview-only issue, explicitly noted as non-blocking in the review request."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration42_phase1.py",
+    "/app/test_reports/pytest/pytest_iteration42.xml",
+    "/app/test_reports/iteration_42.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1711-1714 clean_item_photo now writes photo, orig_photo AND thumb=make_thumb(img) in a single $set — the reported grid/detail divergence bug is genuinely fixed at the source of truth. The wrapping try/except at 1704-1710 also ensures a failed AI call leaves the record unchanged rather than half-written.",
+    "server.py:1368-1394 list_items branches on `summary` cleanly: when summary=1, projection drops photo/worn_photo/thumb/orig_photo so nothing large ever leaves Mongo; when full, the 20-per-call thumbnail backfill is still bounded and cheap. summary path skips the backfill loop with an early continue — correct.",
+    "ItemCreate/ItemUpdate (server.py:1175, 1207) both carry set_name with sensible defaults ('' vs None). update_item's None-filter (line 1415) keeps empty-string set_name writes so callers CAN clear the set (verified by test_update_set_name_change_then_clear).",
+    "taxonomy.ts:36-57 displayCategory correctly folds cat=='Bags'||cat=='Jewellery' onto 'Accessories' without touching stored records; primarySub (152-162) then routes them back onto Bags/Jewellery inside Accessories. Bags/Jewellery totals showed up under Accessories on the wardrobe screen with the right piece counts, confirming the mapping in practice.",
+    "index.tsx:45-55 Home's load() ONLY hits /wear/pending; there is no /items or /outfits call anywhere in the file. Confirmed empirically — 0 requests to those endpoints during the Home dwell.",
+    "wardrobe.tsx:54-62 loadSummary() calls /items?summary=1 and stores it separately from `items` (line 40); the full /items fetch is deferred inside chooseFilter/chooseSub/chooseLeaf and only when atItems=true (166) — good progressive fetch."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration42_phase1.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 pytest cases pass — summary shape+size, thumbs regression, detail full-res, set_name create/summary/update/clear, clean $set inspection, clean endpoint reachable)",
+    "frontend": "100% (Home dashboard layout + removed testIDs + zero item/outfit fetch verified; Wardrobe progressive navigation, level counts, image-free levels, back control, restoration and Accessories mapping all verified)"
+  },
+  "seed_data_creation": "None persisting. Two throwaway TEST_iter42_* items were created and DELETED within the same pytest run. Reviewer state is back to the seeded 16 demo items + 1 demo outfit.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reviewer wardrobe still 16 demo items across the six new top-level buckets: Tops 3, Bottoms 4, Dresses 2, Outerwear 3, Shoes 2, Accessories 2 (=1 bag + 1 belt). GET /api/items?summary=1 returns ~3.1 KB for that wardrobe. Preview /api/weather still 502s (unchanged environmental issue). Item-editor set_name toggle + Accessories>Bags/Jewellery chip mapping were code-inspected + backend-verified (set_name persistence proven end-to-end); no UI walk-through was performed because the review request said matching-set is a NEW field, and backend proof already covers the persistence path. If a future iteration wants UI proof of the editor chips, open /add-item?edit=<bag-item-id> and assert testIDs field-set-name, set-no, set-yes and a category chip for 'Accessories' with a Bags subchip.",
+  "rca_of_issue": "N/A — verification pass. Prior grid/detail divergence bug from bulk /clean has been RCA'd and fixed at server.py:1711-1714 by including `thumb: make_thumb(img)` in the update alongside `photo` and `orig_photo`; the original bug was that the bulk cleanup path never regenerated the small preview, so grids kept serving the pre-clean thumbnail while the detail endpoint served the newly cleaned photo. The fix is minimal, correct and idempotent."
+}

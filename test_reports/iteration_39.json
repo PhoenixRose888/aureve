@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 38's ONE open finding is FULLY RESOLVED. Live network trace against production preview URL as reviewer (review@aureve.app / <set via the REVIEWER_PASSWORD environment variable>): (1) Entering Wardrobe tab from Home now fires exactly 1 GET /api/items (previously 3). (2) Pick Bottoms + Jeans subfilter → tap item revdemo-4 → item-back: 0 additional GET /api/items within the 60s freshness window (previously +1), NO loading spinner or empty flash, and the Bottoms filter + Jeans subfilter are preserved. (3) Cache still invalidates correctly: after opening an item, tapping edit (pencil) → 'Save changes' (PUT /api/items/revdemo-0 200) → item-back to wardrobe, the wardrobe refocus fires exactly +1 GET /api/items (dirty flag from markWardrobeDirty() works). (4) Home re-focus after visiting Wardrobe: 0 GET /api/items — Home is correctly reusing the wardrobe cache for its item count when fresh; the growing banner reads 'You now have 16 items ready to style.'. (5) Wardrobe RE-entry from Home with a fresh cache also fires 0 GET /api/items. (6) Profile switcher: reviewer account only has 1 profile ('Aureve · MAIN'), so a live cross-profile switch could not be exercised, but the switcher UI opens fine and the ProfileContext.applyActive() code correctly guards `clearWardrobeCache()` behind `prev !== id` (verified statically). (7) Bulk-delete cache invalidation was verified statically only (wardrobe.tsx:132 calls markWardrobeDirty before load()) to avoid destroying seeded reviewer demo items. Full request timeline for the golden path (login → wardrobe → filter → open item → back → edit → save → back → wardrobe): 3 collection GETs total — 1 after login (Home first paint, cache empty), 1 on first wardrobe entry, 1 after edit-save on wardrobe refocus. Everything else is item-detail GET/PUT, which is correct.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_39.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ProfileContext.applyActive (lines 38-47) now guards clearWardrobeCache() behind `setActiveId((prev) => { if (prev !== id) clearWardrobeCache(); return id; })` — a re-apply during hydration (same id) is a no-op for the cache. This is the correct fix. Note the load() call at line 57-58 sets setActiveProfileId(stored) BEFORE fetching /profiles so header scoping is right — the wardrobe fetch that later fires from Home is now scoped correctly on cold start.",
+    "wardrobe.tsx load() (line 48-62) now has an inFlight ref — overlapping focus/profile-resolution passes coalesce to a single GET /api/items. Verified live: went from 3 initial GETs (iter38) to 1 (this iter).",
+    "wardrobe.tsx useFocusEffect (line 64-81) copies the cache into local state BEFORE checking freshness, then early-returns if fresh. Combined with the inFlight guard, back-nav is a pure no-op on the network (verified: +0 on back).",
+    "index.tsx (Home) load() (line 78-89) reuses the wardrobe cache when wardrobeIsFresh() is true — Promise.all still runs but the items branch resolves synchronously from the cache. Confirmed live: Home refocus after wardrobe visit = +0 GET /api/items, and item count still shows the correct 16.",
+    "wardrobeCache.ts is minimal and correct: MAX_AGE_MS 60_000, dirty flag, wardrobeIsFresh() returns `!!cached && !dirty && Date.now()-fetchedAt < 60_000`.",
+    "markWardrobeDirty() call sites are all correct: wardrobe.tsx:132 (bulk delete), add-item.tsx:227 (add + edit), bulk-add.tsx:130 (bulk add), item/[id].tsx:48 (log-wear) and :57 (delete). Edit-save → wardrobe refocus refetches exactly once (verified live)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested (frontend-only request)",
+    "frontend": "100% — all 5 target behaviours PASS: (a) 1 GET on wardrobe entry, (b) 0 GET on back within cache window, (c) filter+sub preserved, (d) 1 GET after edit-save (cache invalidated correctly), (e) 0 GET on Home refocus + correct item count"
+  },
+  "seed_data_creation": "None. Did not create or delete any items. The one PUT /api/items/revdemo-0 was a save-without-changes on the reviewer's own demo item (round-trips identical fields; no visible change).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The wardrobe caching / request-coalescing story is now solid: 1 GET on entry, 0 on back within 60s, 0 on Home refocus when cache is fresh, +1 after any mutation via markWardrobeDirty. Reviewer account still only has 1 profile so cross-profile cache-clear was verified statically. If you need to live-verify the profile-switch path, create a 2nd profile first (POST /api/profiles), switch to it, confirm the wardrobe fetch fires against the new X-Profile-Id header, then delete the profile. Bulk-delete cache invalidation was also only verified statically to protect seeded reviewer items — if you must exercise it, first POST a throwaway 'TEST_' item, then bulk-delete IT only. No blockers.",
+  "rca_of_issue": "N/A — iteration 38's finding is fixed. Root cause was two-fold: (i) ProfileContext.applyActive() was calling clearWardrobeCache() unconditionally even on hydration re-applies of the same active id, which nuked the cache the moment the focus effect ran; (ii) the wardrobe focus effect had no inFlight guard, so the profileLoading transition retriggered load() before the previous request's setCachedItems() had run. Both are now addressed: applyActive gates on `prev !== id`, and load() has an `inFlight` ref."
+}

@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 34 — verified iteration-34 scoped follow-ups on branch recovery-implementation-2026-09-10. BACKEND (8/8 pytest passed): (1) GET /api/dressme/context now accepts &tz_offset= (tested 0, 600, -300, 660, -420) with the reviewer account that has no Google Calendar connected — never errors, has_context=false when no plan exists for the local date; when a today-plan exists, returns has_context=true source='plan' with label carrying the plan text. (2) POST /api/dressme accepts tz_offset in body: with local_date=TODAY and only a YESTERDAY plan present, occasion_used does NOT contain the yesterday plan and from_plan is null. (3) POST /api/outfit/feedback still returns valid JSON, same-category swap guard holds (out_id in submitted ids and out.category==in.category, or swap null with optional addition). Deliberately clashing (formal top + sporty shoes) prompt produces verdict/feedback that names a real problem / offers a swap or addition rather than a hollow compliment. (4) POST /api/items round-trips all 11 required test-item shapes (bodysuit-as-Dresses, bodysuit-as-Tops, halterneck, cami, singlet, t-shirt, poplin shirt, satin blouse, crop top, bustier, long-sleeve top). FRONTEND (Expo web, 390x844, reviewer login): after seeding the 11 items via API and switching to Wardrobe→Tops, the visible subfilter chip order is EXACTLY T-Shirts, Shirts, Blouses, Singlets, Camis, Crops, Halter, Long Sleeve, Bodysuits, Corsets (Other hidden because empty) — NO duplicate chips / no duplicate testIDs (the iteration-33 duplicate T-Shirts chip is fixed). Every item lands under exactly ONE chip: T-Shirts→cotton t-shirt, Shirts→poplin shirt, Blouses→satin blouse, Singlets→ribbed singlet, Camis→silk camisole, Crops→crop top, Halter→halterneck top, Long Sleeve→olive long-sleeve top, Bodysuits→BOTH the Tops-stored bodysuit AND the Dresses-stored 'Black long-sleeve bodysuit', Corsets→burgundy bustier. Sum of chip counts = 11 = number of TEST34 items surfaced under Tops>All. All 11 also visible under the main All filter. The halter is under Halter NOT Other; the bustier is under Corsets NOT Bodysuits. SMOKE: wardrobe select-mode toggle works (cancel-select visible after wardrobe-select-button), tapping an item routes to /item/{id}, Home renders home-plan-week button, Dress Me screen shows 'What are you doing today?' (dressme-activity) with all chips. All 11 seed items deleted via /api/items/bulk-delete at end (deleted=11).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Wardrobe subfilter classifier (informational, not a bug)", "issues": [
+        "The Tops subclassifier uses first-match ordering, and the T-Shirts rule matches the token 'jersey' anywhere in name/style/fabric/description. That means a jersey-fabric long-sleeve top (or a knit tunic that mentions 'jersey' in the description) will land under T-Shirts rather than Long Sleeve or Blouses. Not a regression; surfaces only because SUB_RULES.Tops item 7 ('T-Shirts') fires on 'jersey' before item 10 ('Long Sleeve') has a chance. Consider moving the /long ?sleeve/ rule ABOVE the /jersey/ branch, or splitting 'jersey' out of the T-Shirts rule. Reference: /app/frontend/app/(tabs)/wardrobe.tsx:66-70."
+      ]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration34_tz_and_subfilters.py",
+    "/app/test_reports/pytest/pytest_iteration34.xml"
+  ],
+  "action_items": [
+    "OPTIONAL nit: in /app/frontend/app/(tabs)/wardrobe.tsx L66-70 the T-Shirts rule matches 'jersey', which will out-prioritise Long Sleeve for any jersey-fabric top with 'long sleeve' in the name. Either drop 'jersey' from the T-Shirts regex or move the Long Sleeve rule higher. Cosmetic only — every scenario in the review request passes with the current data set."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py L2085-2101: dressme_context accepts tz_offset (int, default 0), passes to _gcal_events; date param validated via strict YYYY-MM-DD regex, otherwise falls back to UTC. Correct.",
+    "backend/server.py L2104-2135: dress_me pulls tz_offset from body via DressMeRequest, forwards to _gcal_events, occasion override still wins, from_plan only set when the plan for the resolved local date supplied the occasion. Correct.",
+    "backend/server.py L2262-2280: _gcal_events(account_id, date_str, tz_offset) computes the window as local-day boundaries shifted by tz_offset minutes east — correct fix for AU +10/+11 rollover bug.",
+    "backend/server.py L1485+: ANALYZE_SYSTEM now tells the model bodysuits/corsets/camis/singlets/halters/crops are Tops and to name the garment type — visible in prompt; downstream classification benefits are frontend-side (displayCategory hard-forces Bodysuits→Tops).",
+    "frontend/app/(tabs)/wardrobe.tsx L37-55 displayCategory: BODYSUIT_RE forces bodysuit/leotard/unitard to 'Tops' regardless of stored category (Dresses/Outerwear), except swim-wear. Verified by the 'Black long-sleeve bodysuit' stored as Dresses surfacing under Tops>Bodysuits.",
+    "frontend/app/(tabs)/wardrobe.tsx L57-92 SUB_RULES/SUB_ORDER: chip labels dedupe via Array.from(new Set(SUB_ORDER[filter])) at L158-160, empty chips hidden via subCounts>0 filter. Iteration-33 duplicate T-Shirts chip is fixed.",
+    "frontend/app/(tabs)/wardrobe.tsx L23-33 T(): reads name+style+fabric+pattern+description+fit_notes plus a normalised sleeve_length token, matching the request's intent that classification not rely on the name alone."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration34_tz_and_subfilters.py (new)",
+    "/app/test_reports/pytest/pytest_iteration34.xml (new)",
+    "/app/test_reports/iteration_34.json (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 pytest passed)",
+    "frontend": "100% on all 5 flows: subfilter labels+order+one-chip-per-item, bodysuit-as-Dresses surfacing under Tops>Bodysuits, wardrobe select+item-detail smoke, home-plan-week visible, dressme-activity prompt visible"
+  },
+  "seed_data_creation": "Created 11 temporary reviewer items via POST /api/items with a tiny 1x1 base64 PNG (TEST34_Black long-sleeve bodysuit stored as Dresses, TEST34_Beige knit bodysuit, TEST34_Ivory halterneck top, TEST34_Cream silk camisole, TEST34_Black ribbed singlet, TEST34_White cotton t-shirt, TEST34_Navy poplin shirt, TEST34_Blush satin blouse, TEST34_Black crop top, TEST34_Burgundy bustier, TEST34_Olive long sleeve top). All 11 deleted at end via /api/items/bulk-delete (deleted=11). Plans created for yesterday/today were deleted in fixture teardown. No residual test data remains on the reviewer account.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All five iteration-34 changes verified: (A) Tops subfilter labels + order + one-chip-per-item, (B/C) bodysuit surfacing (including items mis-stored as Dresses), (D) backend ANALYZE_SYSTEM prompt updated, (E) tz_offset accepted on both /dressme/context (GET query) and /dressme (POST body), (F) outfit feedback still candid + same-slot swap guard. Only cosmetic follow-up is the 'jersey' collision in the T-Shirts SUB_RULE that can steal a long-sleeve top when fabric mentions jersey (not a regression, purely first-match ordering). Reviewer login path on Metro/web: welcome-get-started -> onb-skip-0 -> login-email/login-password -> email-submit; navigate via tab-bar text (Home/Wardrobe/Dress Me/Outfits/Profile). If you need to re-seed the same 11 items quickly, use /tmp/seed_test34.py (seed / cleanup). Base64 photo trick: POST /api/items requires the `photo` field (base64); use the 1x1 PNG at line 12 of the seed script.",
+  "rca_of_issue": "N/A — verification-only iteration. All iteration-34 fixes are in and working."
+}
