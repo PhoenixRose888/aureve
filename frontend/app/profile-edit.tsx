@@ -141,10 +141,6 @@ export default function ProfileEdit() {
   };
 
   const goBeauty = async () => {
-    if (!skinTone && !undertone) {
-      setGuide("skin");
-      return;
-    }
     setGoingBeauty(true);
     try {
       await persist();

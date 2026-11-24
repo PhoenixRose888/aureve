@@ -108,6 +108,7 @@ export default function BulkAdd() {
           body: {
             name,
             category,
+            brand: a.brand || "",
             colour: a.colour || "",
             fabric: a.fabric || "",
             pattern: a.pattern || "",

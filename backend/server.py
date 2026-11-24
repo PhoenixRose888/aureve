@@ -1684,6 +1684,9 @@ ANALYZE_SYSTEM = (
     "confidence (integer 0-100 = how sure you are of the item identity AND category; be honest — "
     "use a low number when the photo is ambiguous or the object is partly hidden), "
     "colour (primary colour word), fabric (best guess, e.g. cotton/denim/wool/linen/leather/silk/metal/plastic), "
+    "brand (brand name only when clearly readable on a label or logo in this image, otherwise empty string). "
+    "Include that readable brand and distinctive visible prints, charms, stones or embellishments in the short name. "
+    "Do not infer unseen brands or authenticity. "
     "pattern (e.g. solid, striped, floral, checked), style (e.g. blazer, trench, bomber, pencil skirt, sunglasses, tote), "
     "sleeve_length (e.g. sleeveless, short, three-quarter, long, n/a), "
     "formality (one of: Casual, Smart Casual, Business, Formal), "
@@ -2033,7 +2036,7 @@ async def wardrobe_pool(user: dict, limit: int = 2000) -> List[dict]:
 
 async def hydrate_photos(user: dict, items: List[dict], keys=("photo", "thumb", "worn_photo")) -> List[dict]:
     """Re-attach display imagery to pieces loaded by wardrobe_pool. Mutates in
-    place, so item dicts shared across several response keys are all covered."""
+    place and returns only items still present in the active wardrobe."""
     ids = list({it["id"] for it in items if isinstance(it, dict) and it.get("id")})
     if not ids:
         return items
@@ -2049,7 +2052,7 @@ async def hydrate_photos(user: dict, items: List[dict], keys=("photo", "thumb", 
         for key in keys:
             if key in d:
                 it[key] = d[key]
-    return items
+    return [item for item in items if isinstance(item, dict) and item.get("id") in by_id]
 
 
 
@@ -2101,7 +2104,7 @@ STYLIST_SYSTEM = (
     "You are Aureve, an expert personal stylist who thinks about balance, proportion, layering, contrast, colour "
     "theory, texture and silhouette — not just colour matching. You build outfits using ONLY the items in the "
     "user's wardrobe (referenced by their exact id). Never invent items that are not in the list. "
-    "Build the CORE outfit first: a top + bottom, OR a dress/bodysuit/jumpsuit, plus shoes, plus outerwear ONLY "
+    "Build the CORE outfit first: a top (including a bodysuit) + bottom, OR a dress/jumpsuit, plus shoes, plus outerwear ONLY "
     "when the weather, occasion or styling genuinely calls for it. Extras are then OPTIONAL: add a bag, jewellery, "
     "belt, scarf or sunglasses ONLY when it genuinely improves or completes the look. Never fill one item from every "
     "category: most everyday looks need NO bag and NO jewellery, so only add an extra when you can give a "
@@ -2159,6 +2162,8 @@ STYLIST_CHAT_SYSTEM = (
     "Never force a question when the request is already clear. "
     "KEEP IT READABLE ON A PHONE: lead with the recommendation, then a short reason, then the actual "
     "pieces, then at most one extra note. Aim for under ~120 words unless they ask for detail, and "
+    "use short paragraphs and a separate bullet for each piece when listing several choices, rather than "
+    "a long comma-separated catalogue. "
     "never repeat their question back to them. Warm and conversational, never a wall of text. "
     "When (and only when) you are recommending a specific complete outfit to wear, append at the very END of your "
     "message a fenced JSON block exactly like ```json{\"outfit\": {\"name\": \"<short name>\", \"item_ids\": [\"<id>\", \"<id>\"]}}``` "
@@ -2449,6 +2454,18 @@ def necessity_for(item: dict, ai_value: str, temperature: Optional[float],
     return "recommended" if ai_value == "recommended" else "optional"
 
 
+def complete_outfit(items: List[dict]) -> bool:
+    """Check stored garment roles, independent of model-assigned slot labels."""
+    categories = {item.get("category") for item in items}
+    one_piece = "Dresses" in categories or any(
+        item.get("category") == "Tops" and re.search(
+            r"\b(jumpsuit|playsuit|romper|unitard|boiler suit|overalls|dungarees)\b",
+            f"{item.get('name', '')} {item.get('style', '')}", re.I
+        ) for item in items
+    )
+    return "Shoes" in categories and (one_piece or {"Tops", "Bottoms"}.issubset(categories))
+
+
 async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
                         weather: Optional[str], notes: Optional[str],
                         avoid_item_ids: Optional[List[str]] = None,
@@ -2457,7 +2474,7 @@ async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
     items = await wardrobe_pool(user, 1000)
     items = available_items(items)
     if len(items) < 2:
-        raise HTTPException(status_code=400, detail="Not enough ready-to-wear items. Add more, or mark laundry as clean.")
+        raise HTTPException(status_code=400, detail="Add more clothing to your wardrobe so Aureve can put together a complete look.")
 
     explicit_avoid = {i for i in (avoid_item_ids or []) if i}
     # Create Another Look is a hard instruction, not a polite hint. When the
@@ -2536,7 +2553,14 @@ async def _build_outfit(user: dict, occasion: str, temperature: Optional[float],
                 "reason": slot.get("reason", ""),
                 "item": it,
             })
-    await hydrate_photos(user, [x["item"] for x in enriched])
+    if not complete_outfit([row["item"] for row in enriched]):
+        raise HTTPException(status_code=502, detail="That suggestion didn't form a complete outfit. Please try another look.")
+    live_items = await hydrate_photos(user, [x["item"] for x in enriched])
+    live_ids = {item["id"] for item in live_items}
+    enriched = [row for row in enriched if row["item"]["id"] in live_ids]
+    if not complete_outfit(live_items):
+        raise HTTPException(status_code=409, detail="Your wardrobe changed while styling. Please try another look.")
+    result["items"] = [slot for slot in result["items"] if slot.get("item_id") in live_ids]
     result["resolved_items"] = enriched
     selected_ids = [x["item"]["id"] for x in enriched if x.get("item")]
     if explicit_avoid and any(i in explicit_avoid for i in selected_ids):
@@ -3149,6 +3173,27 @@ COMPAT_SYSTEM = (
 )
 
 
+def pairing_shortlist(focus: dict, items: List[dict], limit: int = 12) -> List[dict]:
+    """Balance eligible categories without repeatedly taking alphabetical leaders."""
+    buckets = {}
+    for item in items:
+        if _items_pair(focus, item):
+            buckets.setdefault(item.get("category"), []).append(item)
+    for bucket in buckets.values():
+        bucket.sort(key=lambda item: hashlib.sha256(
+            f"{focus['id']}:{item['id']}".encode()
+        ).digest())
+    selected = []
+    while buckets and len(selected) < limit:
+        for category in list(buckets):
+            selected.append(buckets[category].pop(0))
+            if not buckets[category]:
+                del buckets[category]
+            if len(selected) == limit:
+                break
+    return selected
+
+
 @api_router.post("/items/{item_id}/compatibility")
 async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     if not EMERGENT_LLM_KEY:
@@ -3161,14 +3206,13 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
     others = available_items(others)
     if len(others) < 1:
         raise HTTPException(status_code=400, detail="Add more items to see what pairs together")
-    # Big wardrobes: score locally first and only ask the AI to rate the
-    # strongest shortlist, so the request stays fast and never times out.
+    # Keep the model request bounded while considering different candidates
+    # for different focus pieces, across eligible garment categories.
     total_compatible = sum(1 for it in others if _items_pair(focus, it))
     if len(others) > 14:
-        pairable = [it for it in others if _items_pair(focus, it)]
-        pool = pairable or others
-        pool = sorted(pool, key=lambda it: ((it.get("wear_count", 0) or 0), it.get("name") or ""))
-        others = pool[:12]
+        others = pairing_shortlist(focus, others)
+    if not others:
+        raise HTTPException(status_code=400, detail="No suitable pairing candidates are available yet. Add more pieces to your wardrobe.")
     focus_desc = (
         f"id:{focus['id']} | {focus.get('category','')} | {focus.get('name','')} | "
         f"colour:{focus.get('colour','')} | tone:{focus.get('tone','')} | "
@@ -3194,8 +3238,11 @@ async def item_compatibility(item_id: str, user: dict = Depends(get_scope)):
         it = by_id.get(m.get("item_id"))
         if it:
             resolved.append({"item": it, "stars": m.get("stars", 3), "reason": m.get("reason", "")})
+    live_items = await hydrate_photos(user, [m["item"] for m in resolved])
+    live_ids = {item["id"] for item in live_items}
+    resolved = [match for match in resolved if match["item"]["id"] in live_ids]
     result["resolved_matches"] = resolved
-    await hydrate_photos(user, [m["item"] for m in resolved])
+    result["matches"] = [match for match in result["matches"] if match.get("item_id") in live_ids]
     result["match_count"] = len([m for m in resolved if m["stars"] >= 3])
     result["total_compatible"] = total_compatible
     result["shortlisted"] = len(others)

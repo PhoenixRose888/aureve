@@ -1,3 +1,4 @@
+import { shortItemName, shortItemReferences } from "@/src/utils/itemLabel";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, Modal } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -10,6 +11,8 @@ import { api } from "@/src/api/client";
 import { useWeather } from "@/src/hooks/useWeather";
 import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import GarmentImage from "@/src/components/GarmentImage";
+import StylistMessage from "@/src/components/StylistMessage";
+import AIGuidance from "@/src/components/AIGuidance";
 import * as haptics from "@/src/utils/haptics";
 
 type Msg = { role: "user" | "assistant"; content: string; outfit?: any; saved?: boolean };
@@ -195,6 +198,7 @@ export default function Stylist() {
           onContentSizeChange={scrollDown}
           keyboardShouldPersistTaps="handled"
         >
+          <AIGuidance />
           {messages.length === 0 ? (
             <View style={styles.welcome}>
               <View style={styles.titleBlock}>
@@ -231,7 +235,7 @@ export default function Stylist() {
                   <View style={styles.avatarSm}><Feather name="star" size={13} color={colors.onBrandTertiary} /></View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.bubbleAssistant}>
-                      <Txt style={styles.bubbleTxt}>{m.content}</Txt>
+                      <StylistMessage content={shortItemReferences(m.content, wardrobe)} style={styles.bubbleTxt} />
                     </View>
                     {m.outfit ? (
                       <View style={styles.outfitCard} testID={`stylist-outfit-${i}`}>
@@ -240,7 +244,7 @@ export default function Stylist() {
                           {(m.outfit.items || []).map((it: any) => (
                             <View key={it.id} style={styles.thumbWrap}>
                               <GarmentImage photo={it.photo} category={it.category} style={styles.thumb} iconSize={16} />
-                              <Txt style={styles.thumbName} numberOfLines={1}>{it.name}</Txt>
+                              <Txt style={styles.thumbName} numberOfLines={1}>{shortItemName(it.name)}</Txt>
                             </View>
                           ))}
                         </View>
@@ -271,7 +275,7 @@ export default function Stylist() {
             {attached.map((a) => (
               <Pressable key={a.id} style={styles.attachedChip} onPress={() => setAttached((prev) => prev.filter((x) => x.id !== a.id))} testID={`stylist-attached-${a.id}`}>
                 <GarmentImage photo={a.photo} category={a.category} style={styles.attachedImg} iconSize={12} />
-                <Txt style={styles.attachedTxt} numberOfLines={1}>{a.name}</Txt>
+                <Txt style={styles.attachedTxt} numberOfLines={1}>{shortItemName(a.name)}</Txt>
                 <Feather name="x" size={13} color={colors.onSurfaceTertiary} />
               </Pressable>
             ))}
@@ -369,7 +373,7 @@ export default function Stylist() {
                       }}
                     >
                       <GarmentImage photo={it.photo} category={it.category} style={styles.pickerImg} iconSize={22} />
-                      <Txt style={styles.pickerName} numberOfLines={1}>{it.name}</Txt>
+                      <Txt style={styles.pickerName} numberOfLines={1}>{shortItemName(it.name)}</Txt>
                     </Pressable>
                   ))}
               </View>
