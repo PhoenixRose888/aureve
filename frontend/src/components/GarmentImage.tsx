@@ -42,7 +42,7 @@ export default function GarmentImage({
   category,
   style,
   mime = "jpeg",
-  contentFit = "cover",
+  contentFit = "contain",
   transition = 200,
   iconSize = 26,
   testID,

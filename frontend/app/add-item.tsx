@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, StyleSheet, Pressable, ActivityIndicator, TextInput, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
@@ -31,6 +31,7 @@ export default function AddItem() {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Tops");
   const [subcategory, setSubcategory] = useState<string | null>(null);
+  const [jewelleryType, setJewelleryType] = useState<string | null>(null);
   const [inSet, setInSet] = useState(false);
   const [matchingSet, setMatchingSet] = useState("");
   const [colour, setColour] = useState("");
@@ -56,6 +57,13 @@ export default function AddItem() {
   const [error, setError] = useState("");
   const [lastPhoto, setLastPhoto] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<any[]>([]);
+  const analysisRequest = useRef(0);
+  const cleaningRequest = useRef(0);
+
+  useEffect(() => () => {
+    analysisRequest.current += 1;
+    cleaningRequest.current += 1;
+  }, []);
 
   const analyzeMsg = useRotatingMessage(analyzing, [
     "Reading the piece…",
@@ -73,7 +81,9 @@ export default function AddItem() {
         const main = displayCategory(it) || "Tops";
         setCategory(main);
         const derived = primarySub(it, main);
-        setSubcategory(it.subcategory || (derived && derived !== "Other" ? derived : null));
+        setSubcategory(derived && derived !== "Other" ? derived : null);
+        const type = primarySub(it, "Jewellery");
+        setJewelleryType(derived === "Jewellery" && type !== "Other" ? type : null);
         setInSet(!!it.set_name);
         setMatchingSet(it.set_name || "");
         setColour(it.colour || "");
@@ -93,6 +103,7 @@ export default function AddItem() {
 
   /** Background removal: fired AFTER recognition, never blocking the user. */
   const runClean = useCallback(async (base64: string) => {
+    const request = ++cleaningRequest.current;
     setCleaning(true);
     diag("clean.start");
     try {
@@ -101,6 +112,7 @@ export default function AddItem() {
         body: { image: base64 },
         timeoutMs: 90000,
       });
+      if (request !== cleaningRequest.current) return;
       if (res.clean_image) {
         setOrigPhoto(base64);
         setPhotos((p) => (p.photo === base64 ? { ...p, photo: res.clean_image } : p));
@@ -109,6 +121,7 @@ export default function AddItem() {
         diag("clean.empty");
       }
     } catch (e: any) {
+      if (request !== cleaningRequest.current) return;
       // Cosmetic only — the original photo stays.
       diag("clean.failed", { error: String(e?.message || e), status: e?.status });
     }
@@ -117,6 +130,9 @@ export default function AddItem() {
 
   const runAnalyze = useCallback(
     async (base64: string, worn = false) => {
+      const request = ++analysisRequest.current;
+      cleaningRequest.current += 1;
+      setCleaning(false);
       setLastPhoto(base64);
       setAnalyzing(true);
       setError("");
@@ -131,12 +147,14 @@ export default function AddItem() {
             timeoutMs: 60000,
           });
         } catch (e: any) {
+          if (request !== analysisRequest.current) return;
           diag("analyze.error", { attempt, status: e?.status, timeout: !!e?.timeout, error: String(e?.message || e) });
           if (attempt === 2) {
             setError("Couldn't auto-detect this one. Add the details below, or try again.");
             haptics.warn();
           }
         }
+        if (request !== analysisRequest.current) return;
       }
       setAnalyzing(false);
       // Cleanup is independent of recognition: tidy the hanging photo either way.
@@ -154,7 +172,10 @@ export default function AddItem() {
         const main = displayCategory({ category: r.category, name: r.name });
         if (MAIN_CATEGORIES.includes(main)) {
           setCategory(main);
-          setSubcategory(null);
+          const sub = primarySub(r, main);
+          setSubcategory(sub !== "Other" ? sub : null);
+          const type = primarySub(r, "Jewellery");
+          setJewelleryType(sub === "Jewellery" && type !== "Other" ? type : null);
         }
       }
       // Real-world photos: if the AI is unsure, keep its best guess but ask the
@@ -215,7 +236,7 @@ export default function AddItem() {
     let storedSub = subcategory || "";
     if (category === "Accessories" && (storedSub === "Bags" || storedSub === "Jewellery")) {
       storedCategory = storedSub;
-      storedSub = "";
+      storedSub = storedCategory === "Jewellery" ? jewelleryType || "" : "";
     }
 
     const body: any = {
@@ -306,7 +327,7 @@ export default function AddItem() {
         <View style={styles.photoRow}>
           <Pressable style={styles.photoBox} testID="add-photo-hanging" onPress={() => setPickerTarget("photo")}>
             {photos.photo ? (
-              <Image source={{ uri: `data:image/jpeg;base64,${photos.photo}` }} style={styles.photoImg} contentFit="cover" />
+              <Image source={{ uri: `data:image/jpeg;base64,${photos.photo}` }} style={styles.photoImg} contentFit="contain" />
             ) : (
               <View style={styles.photoEmpty}>
                 <Feather name="camera" size={22} color={colors.onSurfaceTertiary} />
@@ -341,7 +362,7 @@ export default function AddItem() {
           </Pressable>
           <Pressable style={styles.photoBox} testID="add-photo-worn" onPress={() => setPickerTarget("worn_photo")}>
             {photos.worn_photo ? (
-              <Image source={{ uri: `data:image/jpeg;base64,${photos.worn_photo}` }} style={styles.photoImg} contentFit="cover" />
+              <Image source={{ uri: `data:image/jpeg;base64,${photos.worn_photo}` }} style={styles.photoImg} contentFit="contain" />
             ) : (
               <View style={styles.photoEmpty}>
                 <Feather name="user" size={22} color={colors.onSurfaceTertiary} />
@@ -434,7 +455,7 @@ export default function AddItem() {
               key={c}
               testID={`cat-${c}`}
               style={[styles.chip, category === c && styles.chipActive]}
-              onPress={() => { if (c !== category) { setCategory(c); setSubcategory(null); } }}
+              onPress={() => { if (c !== category) { setCategory(c); setSubcategory(null); setJewelleryType(null); } }}
             >
               <Txt style={[styles.chipTxt, category === c && styles.chipTxtActive]}>{c}</Txt>
             </Pressable>
@@ -450,9 +471,27 @@ export default function AddItem() {
                   key={sc}
                   testID={`sub-${sc}`}
                   style={[styles.chip, subcategory === sc && styles.chipActive]}
-                  onPress={() => setSubcategory(subcategory === sc ? null : sc)}
+                  onPress={() => { setSubcategory(subcategory === sc ? null : sc); setJewelleryType(null); }}
                 >
                   <Txt style={[styles.chipTxt, subcategory === sc && styles.chipTxtActive]}>{sc}</Txt>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
+
+        {category === "Accessories" && subcategory === "Jewellery" ? (
+          <>
+            <Txt style={styles.groupLabel}>JEWELLERY TYPE</Txt>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContent}>
+              {SUB_ORDER.Jewellery.map((type) => (
+                <Pressable
+                  key={type}
+                  testID={`jewellery-${type}`}
+                  style={[styles.chip, jewelleryType === type && styles.chipActive]}
+                  onPress={() => setJewelleryType(jewelleryType === type ? null : type)}
+                >
+                  <Txt style={[styles.chipTxt, jewelleryType === type && styles.chipTxtActive]}>{type}</Txt>
                 </Pressable>
               ))}
             </ScrollView>
