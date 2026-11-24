@@ -119,11 +119,15 @@ export const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
   ],
   // Third level under Accessories > Jewellery.
   Jewellery: [
-    { label: "Necklaces", match: /(necklace|pendant|\bchain\b|choker|locket)/ },
-    { label: "Bracelets", match: /(bracelet|bangle|\bcuff\b|anklet)/ },
+    // Specific placement beats generic chain/pendant construction.
+    { label: "Body jewellery", match: /(body (jewellery|jewelry|chain)|thigh (chain|jewellery|jewelry)|waist chain|belly chain|harness)/ },
+    { label: "Anklets", match: /(anklet|ankle (chain|bracelet))/ },
+    { label: "Chokers", match: /choker/ },
+    { label: "Bracelets", match: /(bracelet|bangle|\bcuff\b)/ },
     { label: "Earrings", match: /(earring|ear ?stud|\bhoops?\b)/ },
     { label: "Watches", match: /(watch)/ },
     { label: "Rings", match: /(\bring\b|\brings\b|signet)/ },
+    { label: "Necklaces", match: /(necklace|pendant|\bchain\b|locket)/ },
   ],
 };
 
@@ -138,7 +142,7 @@ export const SUB_ORDER: Record<string, string[]> = {
   Bags: ["Handbags", "Clutches"],
   Accessories: ["Bags", "Belts", "Hats", "Sunglasses", "Scarves", "Gloves", "Jewellery"],
   // Third level only, reached via Accessories > Jewellery.
-  Jewellery: ["Earrings", "Necklaces", "Bracelets", "Rings", "Watches"],
+  Jewellery: ["Necklaces", "Chokers", "Bracelets", "Rings", "Earrings", "Watches", "Anklets", "Body jewellery"],
 };
 
 /** Levels that hold another level of subcategories rather than garments. */
@@ -156,6 +160,7 @@ export function primarySub(item: any, category: string): string {
   if (category === "Accessories") {
     if (item.category === "Bags") return "Bags";
     if (item.category === "Jewellery") return "Jewellery";
+    if (SUB_ORDER.Jewellery.includes(item.subcategory)) return "Jewellery";
   }
   const t = T(item);
   for (const r of SUB_RULES[category] || []) if (r.match.test(t)) return r.label;
