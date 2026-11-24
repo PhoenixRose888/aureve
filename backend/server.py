@@ -4274,12 +4274,22 @@ async def seed_reviewer_account():
         pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
         if existing:
             user_id = existing["user_id"]
+            # A rotated password must not leave old bearer tokens working, so
+            # detect a genuine change and drop that account's sessions. Checking
+            # first means an ordinary restart does not sign the reviewer out.
+            try:
+                rotated = not bcrypt.checkpw(password.encode(), (existing.get("password_hash") or "").encode())
+            except ValueError:
+                rotated = True
             # Keep the known password valid and Premium active for the reviewer.
             await db.users.update_one(
                 {"user_id": user_id},
                 {"$set": {"password_hash": pw_hash, "premium_until": premium_until,
                           "premium_source": "reviewer", "provider": "email"}},
             )
+            if rotated:
+                dropped = await db.user_sessions.delete_many({"user_id": user_id})
+                logger.warning("Reviewer password rotated — invalidated %s active session(s)", dropped.deleted_count)
         else:
             user_id = new_id("user")
             await db.users.insert_one({
