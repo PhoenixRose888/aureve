@@ -113,16 +113,19 @@ export const SUB_RULES: Record<string, { label: string; match: RegExp }[]> = {
     { label: "Scarves", match: /(scarf|scarves|shawl|pashmina|snood|wrap\b)/ },
     { label: "Belts", match: /(\bbelt\b|\bbelts\b)/ },
     { label: "Gloves", match: /(glove|mitten)/ },
-    { label: "Jewellery", match: /(necklace|pendant|\bchain\b|choker|locket|bracelet|bangle|anklet|earring|\bhoops?\b|\bring\b|\brings\b|signet|\bwatch\b|jewel)/ },
+    { label: "Ties", match: /(\bties?\b|necktie|bowtie)/ },
+    { label: "Jewellery", match: /(necklace|pendant|\bchain\b|choker|locket|bracelet|bangle|anklet|earring|\bhoops?\b|\bring\b|\brings\b|signet|\bwatch\b|cufflinks?|cuff links?|jewel)/ },
     // Every bag type lives together — no bag subtypes.
     { label: "Bags", match: /(\bbag\b|\bbags\b|handbag|\btote\b|clutch|backpack|rucksack|cross ?body|\bpurse\b|satchel|briefcase|\bhobo\b|shopper|wristlet|\bpouch\b)/ },
   ],
   // Third level under Accessories > Jewellery.
   Jewellery: [
     // Specific placement beats generic chain/pendant construction.
-    { label: "Body jewellery", match: /(body (jewellery|jewelry|chain)|thigh (chain|jewellery|jewelry)|waist chain|belly chain|harness)/ },
+    { label: "Thigh chains", match: /thigh (chain|jewellery|jewelry)/ },
+    { label: "Body jewellery", match: /(body (jewellery|jewelry|chain)|waist chain|belly chain|harness)/ },
     { label: "Anklets", match: /(anklet|ankle (chain|bracelet))/ },
     { label: "Chokers", match: /choker/ },
+    { label: "Cufflinks", match: /cuff ?links?/ },
     { label: "Bracelets", match: /(bracelet|bangle|\bcuff\b)/ },
     { label: "Earrings", match: /(earring|ear ?stud|\bhoops?\b)/ },
     { label: "Watches", match: /(watch)/ },
@@ -140,9 +143,9 @@ export const SUB_ORDER: Record<string, string[]> = {
   Outerwear: ["Blazers", "Jackets", "Coats", "Cardigans", "Jumpers"],
   Shoes: ["Sneakers", "Boots", "Heels", "Flats", "Dress Shoes"],
   Bags: ["Handbags", "Clutches"],
-  Accessories: ["Bags", "Belts", "Hats", "Sunglasses", "Scarves", "Gloves", "Jewellery"],
+  Accessories: ["Bags", "Belts", "Hats", "Sunglasses", "Scarves", "Gloves", "Ties", "Jewellery"],
   // Third level only, reached via Accessories > Jewellery.
-  Jewellery: ["Necklaces", "Chokers", "Bracelets", "Rings", "Earrings", "Watches", "Anklets", "Body jewellery"],
+  Jewellery: ["Necklaces", "Chokers", "Bracelets", "Rings", "Earrings", "Watches", "Anklets", "Body jewellery", "Thigh chains", "Cufflinks"],
 };
 
 /** Levels that hold another level of subcategories rather than garments. */

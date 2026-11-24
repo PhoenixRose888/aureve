@@ -16,10 +16,14 @@ const examples = [
   ['Silver pendant necklace', 'Necklaces'],
   ['Black velvet choker necklace', 'Chokers'],
   ['Gold ankle chain bracelet', 'Anklets'],
-  ['Gold thigh chain', 'Body jewellery'],
+  ['Gold thigh chain', 'Thigh chains'],
+  ['Gold waist chain', 'Body jewellery'],
   ['Silver hoop earrings', 'Earrings'],
   ['Silver signet ring', 'Rings'],
   ['Gold chain watch', 'Watches'],
+  ['Silver cufflinks', 'Cufflinks'],
+  ['Gold cuff links', 'Cufflinks'],
+  ['Silver neck chain', 'Necklaces'],
 ];
 
 for (const [name, expected] of examples) {
@@ -54,4 +58,11 @@ test('legacy Jewellery record without a correction is inferred', () => {
 test('clothing and bag corrections remain effective', () => {
   assert.equal(taxonomy.primarySub({ category: 'Tops', subcategory: 'Singlets', name: 'Logo t-shirt' }, 'Tops'), 'Singlets');
   assert.equal(taxonomy.primarySub({ category: 'Bags', name: 'Gold chain handbag' }, 'Accessories'), 'Bags');
+});
+
+test('ties and cufflinks file under their own accessory sections', () => {
+  for (const name of ['Navy silk tie', 'Black bow tie', 'Blue necktie']) {
+    assert.equal(taxonomy.primarySub({ category: 'Accessories', name }, 'Accessories'), 'Ties');
+  }
+  assert.equal(taxonomy.primarySub({ category: 'Accessories', name: 'Silver cuff links' }, 'Accessories'), 'Jewellery');
 });
