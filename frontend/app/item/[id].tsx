@@ -1,3 +1,4 @@
+import { shortItemName } from "@/src/utils/itemLabel";
 import React, { useCallback, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Modal } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
@@ -132,7 +133,7 @@ export default function ItemDetail() {
 
         <View style={styles.body} onLayout={(e) => { bodyY.current = e.nativeEvent.layout.y; }}>
           <Txt style={styles.category}>{item.category?.toUpperCase()}</Txt>
-          <Display weight="medium" style={styles.name}>{item.name}</Display>
+          <Display weight="medium" style={styles.name}>{shortItemName(item.name)}</Display>
 
           {/* Stats */}
           <View style={styles.statRow}>
@@ -199,7 +200,7 @@ export default function ItemDetail() {
                     <GarmentImage photo={m.item.photo} category={m.item.category} style={styles.pairImg} iconSize={16} />
                     <View style={{ flex: 1 }}>
                       <View style={styles.pairTop}>
-                        <Txt style={styles.pairName} numberOfLines={1}>{m.item.name}</Txt>
+                        <Txt style={styles.pairName} numberOfLines={1}>{shortItemName(m.item.name)}</Txt>
                         <Stars n={m.stars} />
                       </View>
                       {m.reason ? <Txt style={styles.pairReason} numberOfLines={2}>{m.reason}</Txt> : null}

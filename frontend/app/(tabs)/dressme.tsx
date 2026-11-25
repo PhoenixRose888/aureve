@@ -12,6 +12,7 @@ import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import * as haptics from "@/src/utils/haptics";
 import GarmentImage from "@/src/components/GarmentImage";
 import FlatlayItem from "@/src/components/FlatlayItem";
+import AIGuidance from "@/src/components/AIGuidance";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -322,10 +323,12 @@ export default function DressMe() {
           <Display weight="semibold" style={styles.pageTitle}>{showResult ? "Here's your look" : "Dress Me"}</Display>
           <Txt style={styles.pageSub}>
             {showResult
-              ? "Styled from your wardrobe, tuned to today\u2019s weather."
+              ? "Styled from your wardrobe using the latest available conditions."
               : "One considered outfit \u2014 styled from what you already own."}
           </Txt>
         </View>
+
+        <AIGuidance />
 
         {phase === "calendar" && !loading ? (
           <View style={styles.askCard} testID="dressme-calendar">
@@ -436,7 +439,7 @@ export default function DressMe() {
             <View style={styles.weatherChip}>
               <Feather name={weatherIcon(weather?.code) as any} size={14} color={colors.onSurfaceSecondary} />
               <Txt style={styles.weatherChipTxt}>
-                {status === "done" && weather ? `${Math.round(weather.temperature)}°C · ${weather.description}` : "Your wardrobe, styled"}
+                {status === "done" && weather ? `Latest conditions · ${Math.round(weather.temperature)}°C · ${weather.description}` : "Weather unavailable"}
               </Txt>
             </View>
             {result.occasion_used ? (

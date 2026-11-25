@@ -192,6 +192,7 @@ export default function AddItem() {
       if (r.pattern) setPattern(r.pattern);
       if (r.season && SEASONS.includes(r.season)) setSeason(r.season);
       if (r.condition) setCondition(r.condition);
+      if (r.brand) setBrand(r.brand);
       setAi({ style: r.style, sleeve_length: r.sleeve_length, formality: r.formality, tone: r.tone });
       setDuplicates(Array.isArray(res.duplicates) ? res.duplicates : []);
       haptics.success();

@@ -27,6 +27,7 @@ export default function PhotoTips() {
       {open ? (
         <View style={styles.body} testID="photo-tips-body">
           <Txt style={styles.intro}>These are tips, not requirements — Aureve still reads normal everyday phone photos.</Txt>
+          <Txt style={styles.intro}>Lighting, backgrounds and photo quality can affect colours and identification. Check the results and correct any details in Edit.</Txt>
           {TIPS.map((t) => (
             <View key={t} style={styles.row}>
               <Txt style={styles.dot}>·</Txt>

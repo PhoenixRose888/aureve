@@ -30,6 +30,23 @@ export default function Profile() {
   const [refreshing, setRefreshing] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [calConnected, setCalConnected] = useState(false);
+  const [confirmCalendarDisconnect, setConfirmCalendarDisconnect] = useState(false);
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
+
+  const disconnectCalendar = async () => {
+    setCalendarBusy(true);
+    setCalendarError("");
+    try {
+      await api("/calendar/disconnect", { method: "DELETE" });
+      setCalConnected(false);
+      setConfirmCalendarDisconnect(false);
+    } catch {
+      setCalendarError("Couldn't disconnect your calendar. Please try again.");
+    } finally {
+      setCalendarBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -149,27 +166,51 @@ export default function Profile() {
           <Pressable
             style={styles.premiumActiveCta}
             testID="profile-calendar-cta"
+            disabled={calendarBusy}
             onPress={async () => {
+              setCalendarError("");
               if (calConnected) {
-                await api("/calendar/disconnect", { method: "DELETE" }).catch(() => {});
-                setCalConnected(false);
+                setConfirmCalendarDisconnect(true);
               } else {
+                setCalendarBusy(true);
                 try {
                   const { url } = await api<any>("/calendar/authorize");
                   await WebBrowser.openBrowserAsync(url);
                   const s = await api<any>("/calendar/status");
                   setCalConnected(!!s.connected);
-                } catch {}
+                } catch {
+                  setCalendarError("Couldn't connect your calendar. Please try again.");
+                } finally {
+                  setCalendarBusy(false);
+                }
               }
             }}
           >
             <Feather name="calendar" size={18} color={colors.brand} />
             <View style={{ flex: 1 }}>
               <Txt style={styles.spTitle}>Google Calendar</Txt>
-              <Txt style={styles.spSub}>{calConnected ? "Connected — Dress Me uses your schedule. Tap to disconnect." : "Connect so Dress Me styles for your day"}</Txt>
+              <Txt style={styles.spSub}>{calConnected ? "Connected — Dress Me uses your schedule. Tap to manage." : "Connect so Dress Me styles for your day"}</Txt>
             </View>
             <Feather name={calConnected ? "check" : "chevron-right"} size={20} color={colors.onSurfaceTertiary} />
           </Pressable>
+
+          {calendarError && !confirmCalendarDisconnect ? <Txt accessibilityRole="alert" style={styles.calendarError}>{calendarError}</Txt> : null}
+
+          <Modal visible={confirmCalendarDisconnect} transparent animationType="fade" onRequestClose={() => { if (!calendarBusy) setConfirmCalendarDisconnect(false); }}>
+            <View style={styles.confirmBackdrop}>
+              <View style={styles.confirmCard}>
+                <Display weight="semibold" style={styles.confirmTitle}>Google Calendar</Display>
+                <Txt style={styles.confirmBody}>Your calendar is connected. Disconnecting stops Aureve using your schedule for outfit suggestions. You can reconnect later.</Txt>
+                {calendarError ? <Txt accessibilityRole="alert" style={styles.calendarError}>{calendarError}</Txt> : null}
+                <Pressable style={styles.confirmDeleteBtn} testID="confirm-calendar-disconnect" disabled={calendarBusy} onPress={disconnectCalendar}>
+                  {calendarBusy ? <ActivityIndicator color={colors.onSurfaceInverse} /> : <Txt style={styles.confirmDeleteTxt}>Disconnect calendar</Txt>}
+                </Pressable>
+                <Pressable style={styles.confirmCancelBtn} testID="cancel-calendar-disconnect" disabled={calendarBusy} onPress={() => setConfirmCalendarDisconnect(false)}>
+                  <Txt style={styles.confirmCancelTxt}>Keep connected</Txt>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
 
           {/* Premium features */}
           <View style={styles.section}>
@@ -436,5 +477,6 @@ const styles = StyleSheet.create({
   confirmDeleteTxt: { color: colors.onSurfaceInverse, fontSize: 15, fontFamily: fonts.displayBold },
   confirmCancelBtn: { height: 50, alignItems: "center", justifyContent: "center", marginTop: spacing.sm },
   confirmCancelTxt: { color: colors.onSurface, fontSize: 15, fontFamily: fonts.displayMedium },
+  calendarError: { color: colors.error, fontSize: 13, lineHeight: 19, marginBottom: spacing.md },
   emptyTxt: { fontSize: 14, color: colors.onSurfaceTertiary, textAlign: "center" },
 });

@@ -11,6 +11,13 @@ const CONTACT = "houseoffmr@gmail.com";
 
 type Section = { h: string; b: string };
 
+const HELP: Section[] = [
+  { h: "A little help from AI", b: "Aureve’s styling suggestions are a starting point. AI can make mistakes, so check item details and choose what feels right for you and the occasion. You can correct item details in Edit." },
+  { h: "Your photos", b: "Lighting, backgrounds and photo quality can affect how pieces are recognised and displayed. Check colours, names and categories after uploading." },
+  { h: "Get in touch", b: `Aureve is new, and I’m learning as its founder too. If something goes wrong, please contact ${CONTACT}. I’d appreciate the chance to understand it and help resolve it as soon as I can.` },
+  { h: "Share your experience", b: "Honest reviews help Aureve grow. If it’s helped you, a review or sharing it with a friend would mean a lot." },
+];
+
 const PRIVACY: Section[] = [
   { h: "Overview", b: `Aureve ("we", "us") helps you catalogue your wardrobe and generate outfit and styling suggestions. This policy explains what we collect and how we use it. Effective ${EFFECTIVE}.` },
   { h: "What we collect", b: "• Account details you provide (email, name, or a Google sign-in identifier).\n• Wardrobe content you add (clothing photos, item details).\n• Style profile data you choose to enter (measurements, body shape, skin tone/undertone, sizes, preferences).\n• Usage data needed to run features (e.g. outfits generated, items saved).\n• Approximate location or coarse weather data, only to tailor weather-appropriate suggestions." },
@@ -41,8 +48,8 @@ export default function Legal() {
   const insets = useSafeAreaInsets();
   const { doc } = useLocalSearchParams<{ doc?: string }>();
   const isTerms = doc === "terms";
-  const title = isTerms ? "Terms of Service" : "Privacy Policy";
-  const sections = isTerms ? TERMS : PRIVACY;
+  const title = doc === "help" ? "Help & feedback" : isTerms ? "Terms of Service" : "Privacy Policy";
+  const sections = doc === "help" ? HELP : isTerms ? TERMS : PRIVACY;
 
   return (
     <View style={styles.container}>

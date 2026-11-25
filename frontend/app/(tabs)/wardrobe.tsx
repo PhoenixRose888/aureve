@@ -1,3 +1,4 @@
+import { shortItemName } from "@/src/utils/itemLabel";
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, FlatList, Pressable, ScrollView, ActivityIndicator, useWindowDimensions, Modal } from "react-native";
 import { Image } from "expo-image";
@@ -236,7 +237,7 @@ export default function Wardrobe() {
           </Txt>
         </View>
       )}
-      <Txt style={styles.cardName} numberOfLines={1}>{item.name}</Txt>
+      <Txt style={styles.cardName} numberOfLines={1}>{shortItemName(item.name)}</Txt>
       <Txt style={styles.cardMeta} numberOfLines={1}>
         {item.brand ? `${item.brand} · ` : ""}{displayCategory(item)}
       </Txt>

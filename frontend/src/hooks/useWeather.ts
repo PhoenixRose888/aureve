@@ -17,13 +17,9 @@ export type WeatherStatus = "idle" | "loading" | "denied" | "error" | "done";
 // It is cached at MODULE level (not per screen) so moving between those screens
 // never re-runs the location lookup or shows a dash while it reloads, and so a
 // stylist message sent seconds after launch still carries today's conditions.
-const CACHE_KEY = "aureve.weather.v1";
+const CACHE_KEY = "aureve.weather.v2";
 const FRESH_MS = 30 * 60 * 1000;       // reuse as-is
 const USABLE_MS = 3 * 60 * 60 * 1000;  // still shown/sent while a refresh runs; older is dropped
-
-// Sensible default so the experience never dead-ends when location is
-// unavailable (web preview, denied permission, timeouts).
-const DEFAULT = { latitude: 51.5074, longitude: -0.1278, city: "London" };
 
 type Coords = { latitude: number; longitude: number; city?: string };
 
@@ -109,9 +105,9 @@ async function resolveCoords(): Promise<Coords> {
     return coords;
   }
 
-  // 3) Last resort — deliberately NOT remembered, so the next load can still
-  //    find the real location once permission or the network recovers.
-  return DEFAULT;
+  // A location failure must not substitute another city's weather.
+  // refresh() retains a usable previous reading or reports weather unavailable.
+  throw new Error("Location unavailable");
 }
 
 async function refresh() {
