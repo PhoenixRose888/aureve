@@ -256,6 +256,12 @@ export default function DressMe() {
     haptics.tap();
     setResult(null);
     setOutcome("");
+    setRequest("");
+    setFollowupQ("");
+    setFollowupA("");
+    setCalendarLabel("");
+    setSwapIndex(null);
+    setSearch("");
     setError("");
     setPhase("ask");
   };
@@ -534,8 +540,9 @@ export default function DressMe() {
                   <Txt style={styles.secondaryTxt}>Create another look</Txt>
                 </Pressable>
                 <Pressable style={styles.textBtn} onPress={discard} disabled={busy} testID="dressme-discard">
-                  <Txt style={styles.textBtnTxt}>Discard</Txt>
+                  <Txt style={styles.textBtnTxt}>Discard this suggestion</Txt>
                 </Pressable>
+                <Txt style={styles.pageSub}>Clears this suggestion and request. Your wardrobe and saved outfits stay saved.</Txt>
               </View>
             )}
           </>

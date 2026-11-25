@@ -78,8 +78,8 @@ export default function WardrobeSwitcher({
           <Display weight="medium" style={styles.title}>Wardrobes</Display>
           <Txt style={styles.sub}>
             {accountPremium
-              ? "Your subscription runs on your main wardrobe. Family wardrobes are managed profiles under your account — full wardrobe management, kept completely separate, and not separate Premium seats."
-              : "Family wardrobes come with Premium. Premium features stay on your own main wardrobe."}
+              ? "Create and manage separate wardrobes for family members. Premium AI styling tools are available in your main wardrobe only."
+              : "Upgrade to Premium to create separate wardrobes for family members. Premium AI styling tools are available in your main wardrobe only."}
           </Txt>
 
           {profiles.map((p) => (

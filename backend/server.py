@@ -65,11 +65,10 @@ PREMIUM_PLANS = {
     "monthly": {"amount": 9.99, "days": 30, "label": "Premium Monthly"},
     "annual": {"amount": 79.99, "days": 365, "label": "Premium Annual"},
 }
-# Free tier: unlimited wardrobe + a taste of AI. Metered features:
+# Free tier: a 100-piece wardrobe and limited Dress Me / hair requests.
 FREE_LIMITS = {
     # Free is genuinely useful: a monthly allowance of the AI features plus a
     # 100-piece active wardrobe. Premium removes every cap.
-    "stylist": {"period": "month", "max": 5},
     "beauty": {"period": "month", "max": 1},
     "dressme": {"period": "month", "max": 5},
 }
@@ -324,7 +323,7 @@ def complimentary_state(account: dict) -> dict:
 
 
 PREMIUM_MESSAGES = {
-    "stylist": "You've used your 5 free AI stylist sessions this month. Go Premium for unlimited styling.",
+    "stylist": "AI Stylist is included with Premium and your active 7-day complimentary access. Choose Premium to continue styling.",
     "beauty": "Hair styling is 1/month on Free. Go Premium for unlimited hair recommendations.",
     "packing": "The Packing Assistant is a Premium feature.",
     "capsule": "Capsule wardrobes are a Premium feature.",
@@ -2290,6 +2289,8 @@ async def earlier_threads_line(user_id: str, current_id: Optional[str], limit: i
 
 @api_router.post("/stylist/chat")
 async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_scope)):
+    # Gate even clarification-only replies before they persist a conversation.
+    await enforce_limit(user, "stylist")
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="AI key not configured")
     # A vague "what should I wear tonight?" gets one short question instead of a
@@ -2299,7 +2300,6 @@ async def stylist_chat(payload: StylistChatRequest, user: dict = Depends(get_sco
         question = occasion_question(latest_user)
         tid = await persist_stylist_turn(user, payload.thread_id, latest_user, question, None)
         return {"reply": question, "outfit": None, "needs_context": True, "thread_id": tid}
-    await enforce_limit(user, "stylist")
     all_items = await wardrobe_pool(user, 1000)
     items = available_items(all_items)
     wardrobe = summarize_items_for_ai(items) if items else "No items yet."
