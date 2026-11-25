@@ -122,7 +122,7 @@ export default function OutfitBuilder() {
         <Pressable onPress={() => router.back()} hitSlop={10} testID="builder-close"><Feather name="x" size={24} color={colors.onSurface} /></Pressable>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing["3xl"] }}>
+      <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing["3xl"] }}>
         {SLOTS.map((slot) => {
           const it = selected[slot.key];
           return (
@@ -262,6 +262,7 @@ export default function OutfitBuilder() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
+  contentScroll: { flex: 1, minHeight: 0 },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   topTitle: { fontSize: 20 },
   slot: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 96, borderRadius: radius.md, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.border, padding: spacing.md, marginBottom: spacing.md },
@@ -274,9 +275,9 @@ const styles = StyleSheet.create({
   slotHint: { fontSize: 12, color: colors.onSurfaceTertiary },
   feedback: { backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.sm },
   feedbackHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm },
-  feedbackTitle: { fontSize: 15, color: colors.onBrandTertiary, fontFamily: fonts.displayMedium },
+  feedbackTitle: { flex: 1, fontSize: 15, color: colors.onBrandTertiary, fontFamily: fonts.displayMedium },
   feedbackTxt: { fontSize: 14, color: colors.onBrandTertiary, lineHeight: 21 },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border, gap: spacing.md, backgroundColor: colors.surface },
+  footer: { flexShrink: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: 0.5, borderTopColor: colors.border, gap: spacing.md, backgroundColor: colors.surface },
   saveBtn: { backgroundColor: colors.sage, height: 52, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   saveTxt: { color: colors.onSage, fontSize: 16, fontFamily: fonts.displayBold },
   aiBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.sage, height: 52, borderRadius: radius.md },
