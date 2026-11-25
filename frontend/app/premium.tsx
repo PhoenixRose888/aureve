@@ -15,7 +15,7 @@ const FEATURES = [
   "Shopping Intelligence (skip duplicates)",
   "Occasion-aware hairstyle advice",
   "Monthly Wardrobe Health report",
-  "Household — one plan for everyone",
+  "Separate family wardrobes; AI tools in your main wardrobe",
 ];
 
 export default function Premium() {
@@ -119,7 +119,7 @@ export default function Premium() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Display weight="medium" style={styles.title}>Your personal{"\n"}AI stylist.</Display>
         <Txt style={styles.sub}>
-          Keep your whole wardrobe free forever. Premium unlocks the AI that dresses you every day.
+          Store up to 100 pieces on Free. Premium includes AI Stylist and unlimited Dress Me looks in your main wardrobe.
         </Txt>
 
         <View style={styles.featureList}>

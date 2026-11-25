@@ -277,7 +277,7 @@ export default function Profile() {
             ) : (
               <View style={styles.memberCard} testID="free-membership-row">
                 <Txt style={styles.memberTitle}>Free Membership</Txt>
-                <Txt style={styles.memberLine}>Your whole wardrobe, plus 5 Dress Me looks a month.</Txt>
+                <Txt style={styles.memberLine}>Store up to 100 pieces, plus 5 Dress Me looks a month.</Txt>
                 <Pressable style={styles.memberBtn} testID="go-premium" onPress={() => router.push("/premium")}>
                   <Feather name="award" size={15} color={colors.onSurface} />
                   <Txt style={styles.memberBtnTxt}>Go Premium</Txt>

@@ -13,6 +13,7 @@ import { useRotatingMessage } from "@/src/hooks/useRotatingMessage";
 import GarmentImage from "@/src/components/GarmentImage";
 import StylistMessage from "@/src/components/StylistMessage";
 import AIGuidance from "@/src/components/AIGuidance";
+import { usePremiumAccess } from "@/src/hooks/usePremiumAccess";
 import * as haptics from "@/src/utils/haptics";
 
 type Msg = { role: "user" | "assistant"; content: string; outfit?: any; saved?: boolean };
@@ -51,6 +52,7 @@ function occasionQuestion(text: string) {
 export default function Stylist() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { premium, ready: premiumReady } = usePremiumAccess();
   const { weather, status } = useWeather();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -123,6 +125,8 @@ export default function Stylist() {
   const scrollDown = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
 
   const send = useCallback(async (text: string) => {
+    if (!premiumReady) return;
+    if (!premium) { router.push("/premium"); return; }
     const content = text.trim();
     if (!content || sending) return;
     haptics.tap();
@@ -157,7 +161,7 @@ export default function Stylist() {
     }
     setSending(false);
     scrollDown();
-  }, [messages, sending, weather, status, router, attached, threadId]);
+  }, [messages, sending, weather, status, router, attached, threadId, premium, premiumReady]);
 
   const saveOutfit = async (idx: number) => {
     const m = messages[idx];
@@ -169,6 +173,24 @@ export default function Stylist() {
       haptics.success();
     } catch {}
   };
+
+  if (!premiumReady || !premium) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + spacing.xl }]}>
+        <View style={styles.welcome}>
+          <Display weight="medium">Your AI Stylist</Display>
+          <Txt>{premiumReady
+            ? "AI Stylist is included with Premium and during your active 7-day complimentary access."
+            : "Checking your membership…"}</Txt>
+          {premiumReady ? (
+            <Pressable onPress={() => router.push("/premium")} testID="stylist-premium-access" style={{ paddingVertical: spacing.lg }}>
+              <Txt>View Premium plans →</Txt>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, TextInput } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, TextInput, Platform } from "react-native";
 import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -256,6 +256,12 @@ export default function DressMe() {
     haptics.tap();
     setResult(null);
     setOutcome("");
+    setRequest("");
+    setFollowupQ("");
+    setFollowupA("");
+    setCalendarLabel("");
+    setSwapIndex(null);
+    setSearch("");
     setError("");
     setPhase("ask");
   };
@@ -317,7 +323,14 @@ export default function DressMe() {
         <View style={{ width: 26 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.titleBlock}>
           <Txt style={styles.kicker}>YOUR DAILY EDIT</Txt>
           <Display weight="semibold" style={styles.pageTitle}>{showResult ? "Here's your look" : "Dress Me"}</Display>
@@ -534,8 +547,9 @@ export default function DressMe() {
                   <Txt style={styles.secondaryTxt}>Create another look</Txt>
                 </Pressable>
                 <Pressable style={styles.textBtn} onPress={discard} disabled={busy} testID="dressme-discard">
-                  <Txt style={styles.textBtnTxt}>Discard</Txt>
+                  <Txt style={styles.textBtnTxt}>Discard this suggestion</Txt>
                 </Pressable>
+                <Txt style={styles.pageSub}>Clears this suggestion and request. Your wardrobe and saved outfits stay saved.</Txt>
               </View>
             )}
           </>
